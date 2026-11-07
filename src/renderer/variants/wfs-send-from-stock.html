@@ -12,7 +12,8 @@
   warning and ask you to convert it to WFS. After converting it, you will then
   be able to create a shipment to WFS." + "I want to be able to see ... a
   button to see the most recent shipments".
-    A  a WFS key in the row tray opens a popover anchored to it:
+    A  a WFS key in the row tray (quiet like DS; ?tray=icon for a box icon
+       instead, owner 2026-11-07 "make it more discreet") opens a popover:
        pick the Walmart listing (always, even with one) → not WFS? warn →
        convert in place → shipment (units / per box / arrive by) →
        Create shipment (opens the WFS shipment, variants/wfs-api-flow.html)
@@ -114,10 +115,11 @@
   .bi.today::after { content:''; position:absolute; top:3px; right:3px; width:5px; height:5px; border-radius:50%; background:var(--accent); }
   .tray-ds { font-family:var(--mono); font-size:10px; font-weight:700; color:var(--muted); border:none; background:none; border-radius:6px; padding:3px 7px; cursor:pointer; }
   .tray-ds:hover { background:var(--accent-soft); color:var(--accent-soft-text); }
-  /* NEW: the WFS key — Walmart blue so it reads as "Walmart", not as DS */
-  .tray-wfs { display:inline-flex; align-items:center; gap:3px; font-family:var(--mono); font-size:10px; font-weight:700; color:var(--blue); background:var(--blue-bg); border:none; border-radius:6px; padding:3px 7px; cursor:pointer; }
-  .tray-wfs svg { width:10px; height:10px; }
-  .tray-wfs:hover, .tray-wfs.on { background:var(--wm); color:#fff; }
+  /* NEW: the WFS key, as quiet as its neighbours (owner 2026-11-07: the
+     blue pill "looks weird"). Text option = DS's twin; icon option = a .bi.
+     Tinted only on hover or while its popup is open */
+  .tray-wfs { font-family:var(--mono); font-size:10px; font-weight:700; color:var(--muted); border:none; background:none; border-radius:6px; padding:3px 7px; cursor:pointer; }
+  .tray-wfs:hover, .tray-wfs.on, .bi.tray-wfs-i.on { background:var(--accent-soft); color:var(--accent-soft-text); }
 
   /* ---------- popover (anchored to the WFS key) ---------- */
   .pop { position:absolute; z-index:5; width:410px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-modal); box-shadow:0 18px 50px rgba(47,52,55,0.18), 0 2px 6px rgba(47,52,55,0.06); }
@@ -270,7 +272,9 @@ const LISTINGS = {
   ],
 };
 
-const S = { pop: null, row: 'X133-64GB-GRAY', pick: 'X133-64GB-GRAY-WFS', converting: false, converted: false, menu: false, x: 'oct28', draftAdded: false };
+// ?tray=icon swaps the WFS key's text for a box icon
+const TRAY = new URLSearchParams(location.search).get('tray') === 'icon' ? 'icon' : 'text';
+const S = { hover: null, pop: null, row: 'X133-64GB-GRAY', pick: 'X133-64GB-GRAY-WFS', converting: false, converted: false, menu: false, x: 'oct28', draftAdded: false };
 const STEPS = [
   { g: 'A · Row popup' },
   { k: 'pick', n: 1, t: 'Pick the listing' },
@@ -282,7 +286,7 @@ const STEPS = [
   { k: 'menu', n: 6, t: 'WFS shipments button' },
 ];
 const WHY = {
-  pick: `<b>Every row's tray gets a blue WFS key</b>, next to the chart, history, DS, rename and delete icons. It opens this popup on the row. It always asks <b>which Walmart listing</b> the stock is for, using the Walmart listings linked to this SKU in Linnworks. Each one shows whether it's set up for WFS and how it's selling.`,
+  pick: `<b>Every row's tray gets a WFS key</b>, styled like its neighbours, next to the chart, history, DS, rename and delete icons. It opens this popup on the row. It always asks <b>which Walmart listing</b> the stock is for, using the Walmart listings linked to this SKU in Linnworks. Each one shows whether it's set up for WFS and how it's selling.`,
   warn: `<b>Picked a listing that isn't on WFS:</b> the popup warns you before anything else happens. Walmart won't take stock for a listing until it's converted. You can convert it right here, or go back and pick the WFS listing.`,
   convert: `<b>Convert without leaving the page.</b> The size, weight and battery fields fill in from the item's other WFS listing (same tablet), so it's usually just a check and <b>Send to Walmart</b>. Walmart reviews it. Once approved, the app reminds you to tick <b>Ignore</b> on that listing's Linnworks link, as you do today for WFS listings.`,
   ship: `<b>Then the shipment.</b> Units, units per box and an arrive-by date; the number of boxes works itself out. <b>Create shipment</b> opens the WFS shipment with this line already in it, where you can add other SKUs and send it to Walmart (the flow from the first mockup). <b>Add to draft</b> collects lines from several rows into one shipment you send later from the WFS shipments button.`,
@@ -336,7 +340,9 @@ function trayHtml(r) {
   return `<span class="tray">
     <button class="bi" title="Sales history">${IC.chart}</button>
     <button class="bi${r.today ? ' today' : ''}" title="Stock history">${IC.clock}</button>
-    <button class="tray-wfs${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">${IC.box}WFS</button>
+    ${TRAY === 'icon'
+      ? `<button class="bi tray-wfs-i${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">${IC.box}</button>`
+      : `<button class="tray-wfs${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">WFS</button>`}
     <button class="tray-ds" title="Add to the dropship program">DS</button>
     <button class="bi" title="Rename">${IC.pencil}</button>
     <button class="bi danger" title="Delete">${IC.trash}</button>
@@ -345,7 +351,7 @@ function trayHtml(r) {
 function tableHtml() {
   return `<div class="sheet"><table>
     <thead><tr><th class="g">#</th><th style="width:58px"></th><th>SKU</th><th class="num">At WFS ▾</th><th class="num">At warehouse</th></tr></thead>
-    <tbody>${ROWS.map((r, i) => `<tr class="${S.pop && S.row === r.sku ? 'open' : ''}">
+    <tbody>${ROWS.map((r, i) => `<tr class="${(S.pop && S.row === r.sku) || S.hover === r.sku ? 'open' : ''}">
       <td class="g">${i + 1}</td>
       <td class="img"><div class="thumb ${r.th}"></div></td>
       <td class="sku">${r.sku}${r.d ? `<span class="delta${r.d === '0%' ? ' z' : ''}">${r.d}</span>` : ''}${trayHtml(r)}</td>
@@ -487,7 +493,7 @@ function render() {
   $('stage').style.marginBottom = '0px';
   const stage = $('stage').getBoundingClientRect();
   if (S.pop) {
-    const key = document.querySelector(`.tray-wfs[data-wfs="${S.row}"]`).getBoundingClientRect();
+    const key = document.querySelector(`[data-wfs="${S.row}"]`).getBoundingClientRect();
     const p = $('pop'); const w = p.offsetWidth;
     let left = key.left + key.width / 2 - stage.left - w + 34;
     left = Math.max(8, Math.min(left, stage.width - w - 8));
@@ -511,6 +517,7 @@ function render() {
   if (q.get('draft')) S.draftAdded = true;
   set(q.get('s') || 'pick');
   if (q.get('pick')) { S.pick = q.get('pick'); render(); }
+  if (q.get('hover')) { S.pop = null; S.hover = q.get('hover'); render(); }
 })();
 </script>
 </body>
