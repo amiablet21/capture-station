@@ -17,10 +17,12 @@
        pick the Walmart listing (always, even with one) → not WFS? warn →
        convert in place → shipment (units / per box / arrive by) →
        Create shipment (opens the WFS shipment, variants/wfs-api-flow.html)
-    The spark opens on that SKU's WFS shipments (owner 2026-11-07: "the same
-    button, you will have a popup of all inbound shipments"): conversions in
-    progress, then every shipment with received / sent and Walmart's status;
-    Send to WFS starts the flow above. The toolbar dropdown and the draft
+    One wide popup (owner 2026-11-07: "make the pop up larger ... a longer
+    one. Left side, whats in stock, previous shipments. Right side is the
+    which walmart listing and such"): left = the item, warehouse / at WFS /
+    inbound / sold at WFS tiles, a conversion in progress, then every
+    shipment with received / sent and Walmart's status; right = the flow
+    above, starting on "Which Walmart listing?". The toolbar dropdown and the draft
     were dropped ("i dont really want this"); the full log stays in
     Stock › Actions › WFS Shipments. A full-window version was tried and
     dropped (owner 2026-11-07: "i liked the pop up better"); this popover is
@@ -38,7 +40,7 @@
     --accent:#1E3A66; --accent-hover:#152B4E; --accent-soft:#E4EAF4; --accent-soft-text:#1E3A66;
     --pos-bg:#EDF3EC; --pos-text:#346538; --neg-bg:#FDEBEC; --neg-text:#9F2F2D;
     --blue-bg:#E1F3FE; --blue:#1F6C9F; --yellow-bg:#FBF3DB; --yellow:#956400;
-    --wm:#2E86D9; --sheet:#1f9d5b;
+    --wm:#2E86D9; --sheet:#1f9d5b; --spark:#FFC220;
     --r-card:8px; --r-ctl:6px; --r-modal:12px;
     --font:'Geist','Segoe UI Variable','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace;
     --ease:cubic-bezier(0.16,1,0.3,1); }
@@ -273,6 +275,32 @@
   .lnk svg { width:11px; height:11px; vertical-align:-1px; margin-left:2px; }
   .pb.pend { border-top:1px solid var(--border-soft); padding-top:14px; }
   .pb.home { padding-top:4px; }
+  /* the wide popup (owner 2026-11-07: "make the pop up larger ... a longer
+     one. Left side, whats in stock, previous shipments. Right side is the
+     which walmart listing and such") */
+  .pop.wide { width:920px; }
+  .pw { display:grid; grid-template-columns:minmax(0,1fr) 400px; }
+  .pw-l { padding:18px 20px 20px; background:#FBFBFA; border-right:1px solid var(--border); border-radius:14px 0 0 14px; min-width:0; }
+  .pw-r { display:flex; flex-direction:column; min-width:0; }
+  .pw-r .pb { flex:1; }
+  .lh { display:grid; grid-template-columns:44px 1fr; gap:12px; align-items:center; }
+  .lh .ph-img { background:#fff; }
+  .tiles4 { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:16px 0 18px; }
+  .t4 { background:#fff; border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
+  .t4 span { display:block; font-size:10.5px; color:var(--faint); white-space:nowrap; }
+  .t4 b { font-family:var(--mono); font-size:17px; font-weight:600; letter-spacing:-0.01em; }
+  .t4.in b { color:var(--blue); }
+  .ls-h { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
+  .ls-h b { font-size:12.5px; font-weight:600; }
+  .ls-h span { font-size:11px; color:var(--faint); }
+  .pw-l .hl-h { background:none; }
+  .pw-l .hr { background:none; }
+  .pw-l .hr:hover { background:#F3F2EE; }
+  .pw-l .empty { background:#fff; border:1px dashed var(--border); border-radius:10px; }
+  .conv-row.on { box-shadow:0 0 0 1.5px #E0A526; }
+  .rh { display:flex; align-items:center; gap:7px; padding:16px 14px 12px 18px; font-size:14px; font-weight:600; }
+  .rh svg { width:15px; height:15px; color:var(--spark); }
+  .rh .px { margin-left:auto; align-self:center; }
   .conv-row { display:flex; align-items:center; gap:8px; padding:9px 12px; margin-bottom:12px; border-radius:10px; background:#FFF8E6; border:1px solid #F3E3B5; font-size:12px; font-weight:600; color:#5e4100; cursor:pointer; }
   .conv-row .mono { color:var(--blue); }
   .conv-row .chip { margin-left:auto; }
@@ -350,7 +378,7 @@
 <body>
 
 <div class="pg-h">Send to WFS from the Stock page</div>
-<p class="pg-sub">Mockup. The Walmart spark in each row's hover tray opens that SKU's WFS shipments. <b>Send to WFS</b> in it picks the listing, converts it if needed, and starts the shipment. Click through the steps below, or inside the page. Sample data only.</p>
+<p class="pg-sub">Mockup. The Walmart spark in each row's hover tray opens one wide popup. Left: what's in stock and the SKU's previous WFS shipments. Right: <b>Send to WFS</b>, which Walmart listing, convert if needed, then the shipment. Click through the steps below, or inside the page. Sample data only.</p>
 
 <div class="steps" id="steps"></div>
 <div class="stage" id="stage"></div>
@@ -371,10 +399,10 @@ const IC = {
 };
 
 const ROWS = [
-  { sku: 'X133-64GB-GRAY', d: 'new', wfs: 260, home: 1090, th: '', today: true, inb: 50, title: 'Galaxy Tab A9 64GB Gray' },
-  { sku: 'X610-128GB-BLACK', d: '0%', wfs: 190, home: 30, th: 'w', inb: 30, title: 'Galaxy Tab S10 FE 128GB Black' },
+  { sku: 'X133-64GB-GRAY', d: 'new', wfs: 260, home: 1090, th: '', today: true, inb: 50, sold: 84, title: 'Galaxy Tab A9 64GB Gray' },
+  { sku: 'X610-128GB-BLACK', d: '0%', wfs: 190, home: 30, th: 'w', inb: 30, sold: 52, title: 'Galaxy Tab S10 FE 128GB Black' },
   { sku: 'X133-64GB-SILVER', d: 'new', wfs: 169, home: 427, th: 's', inb: 5, title: 'Galaxy Tab A9 64GB Silver' },
-  { sku: 'X400-128GB-GRAY', wfs: 128, home: 315, th: 'p', title: 'X400 128GB Gray' },
+  { sku: 'X400-128GB-GRAY', wfs: 128, home: 315, th: 'p', sold: 31, title: 'X400 128GB Gray' },
   { sku: 'X135-64GB-GRAY', wfs: 117, home: 191, th: '', inb: 9, title: 'Galaxy Tab A9 64GB Gray (LTE)' },
   { sku: 'X230-128GB-GRAY', wfs: 96, home: 240, th: 'w', inb: 30, title: 'Galaxy Tab A11+ 128GB Gray' },
   { sku: 'X110-64GB-GRAY', wfs: 74, home: 88, th: '', inb: 40, title: 'Galaxy Tab A9 64GB Gray' },
@@ -406,39 +434,39 @@ const LISTINGS = {
   'X610-128GB-BLACK': [
     { ch: 'X610-128GB-BLACK-WFS', wfs: true, at: 190, sold: 52 },
   ],
+  'X400-128GB-GRAY': [
+    { ch: 'X400-128GB-GRAY-WFS', wfs: true, at: 128, sold: 31 },
+  ],
 };
 
 // the WFS key: ?tray=spark (default, Walmart spark) | spark-grey | text (like DS) | icon (box)
 const TRAY = ['spark', 'spark-grey', 'text', 'icon'].includes(new URLSearchParams(location.search).get('tray')) ? new URLSearchParams(location.search).get('tray') : 'spark';
 const S = { hover: null, pop: null, row: 'X133-64GB-GRAY', pick: 'X133-64GB-GRAY-WFS', converting: false, converted: false, menu: false, x: 'oct28', draftAdded: false, units: 60 };
 const STEPS = [
-  { k: 'home', n: 1, t: "SKU's shipments" },
-  { k: 'pick', n: 2, t: 'Pick the listing' },
-  { k: 'warn', n: 3, t: 'Not WFS yet' },
-  { k: 'convert', n: 4, t: 'Convert' },
-  { k: 'ship', n: 5, t: 'Shipment' },
-  { k: 'one', n: 6, t: 'Only one listing' },
-  { k: 'pendhome', n: 7, t: 'Conversion pending' },
-  { k: 'pending', n: 8, t: 'Pending detail' },
-  { k: 'empty', n: 9, t: 'No shipments yet' },
+  { k: 'pick', n: 1, t: 'Opened from the spark' },
+  { k: 'warn', n: 2, t: 'Not WFS yet' },
+  { k: 'convert', n: 3, t: 'Convert' },
+  { k: 'ship', n: 4, t: 'Shipment' },
+  { k: 'one', n: 5, t: 'Only one listing' },
+  { k: 'pending', n: 6, t: 'Conversion pending' },
+  { k: 'empty', n: 7, t: 'No shipments logged' },
 ];
 const WHY = {
   home: `<b>The spark on each row opens that SKU's WFS shipments</b>: every shipment it was in, newest first, with <b>received / sent</b> and Walmart's status (in transit, receiving, received, short). Click one to open it in the full shipment. <b>Send to WFS</b> starts a new one. The blue <b>+N inbound</b> tag in the At WFS column opens the same popup.`,
-  empty: `<b>A SKU that's never been sent to WFS</b>: the list is empty and <b>Send to WFS</b> is the only thing to do.`,
+  empty: `<b>No shipments logged</b> for this SKU (its stock at WFS went before the app kept a log). The left side says so; the right side works as usual.`,
   pendhome: `<b>A conversion still waiting on Walmart</b> sits at the top of the SKU's shipments, in amber, and the row shows a <b>Converting · 2d</b> tag so you see it without opening anything. Click it for the detail.`,
-  pick: `<b>Send to WFS</b> asks <b>which Walmart listing</b> the stock is for, using the Walmart listings linked to this SKU in Linnworks. Each one shows whether it's set up for WFS and how it's selling.`,
+  pick: `<b>One wide popup.</b> Left: the item, what's in stock (warehouse, at WFS, inbound, sold at WFS in 30 days) and its previous WFS shipments. Right: <b>Send to WFS</b>, starting with <b>which Walmart listing</b>. The shipments stay in view the whole time. Right side asks <b>which Walmart listing</b> the stock is for, using the Walmart listings linked to this SKU in Linnworks. Each one shows whether it's set up for WFS and how it's selling.`,
   warn: `<b>Picked a listing that isn't on WFS:</b> the warning opens inside that card, and the main button turns into <b>Convert to WFS</b>. Walmart won't take stock for a listing until it's converted. The link in the warning switches back to the WFS listing. The step bar gains a Convert step.`,
   convert: `<b>Convert without leaving the page.</b> The size, weight and battery fields fill in from the item's other WFS listing (same tablet), so it's usually just a check and <b>Send to Walmart</b>. Walmart reviews it. Once approved, the app reminds you to tick <b>Ignore</b> on that listing's Linnworks link, as you do today for WFS listings.`,
   ship: `<b>Then the shipment.</b> Units with a − / + stepper (one box at a time), units per box and an arrive-by date; the boxes work themselves out, and the two tiles show the counts before and after. <b>Create shipment</b> opens the WFS shipment with this line already in it, where you can add other SKUs and send it to Walmart (the flow from the first mockup).`,
   one: `<b>Even with one Walmart listing, the popup still asks you to pick it.</b> It's pre-selected, so it's one click to confirm, but you always see which listing the units go to.`,
-  pending: `<b>The conversion's detail</b>: the Sent / Reviewing / Approved track, when it was last checked, and two actions: <b>Check now</b>, or <b>Use WFS listing</b> to send the stock to the listing that's already on WFS. Hover the <b>2 days</b> pill for when it was sent and why it can take long. A rejection turns it red with Walmart's reason and <b>Fix &amp; resend</b>.`,
+  pending: `<b>A conversion still waiting on Walmart</b> shows in amber at the top of the left side, and the right side shows its detail: the Sent / Reviewing / Approved track, when it was last checked, and two actions: <b>Check now</b>, or <b>Use WFS listing</b> to send the stock to the listing that's already on WFS. Hover the <b>2 days</b> pill for when it was sent and why it can take long. A rejection turns it red with Walmart's reason and <b>Fix &amp; resend</b>.`,
 };
 
 const $ = (id) => document.getElementById(id);
 function set(k) {
-  Object.assign(S, { menu: false, pop: null, pend: k === 'pending' || k === 'pendhome', checked: false });
-  if (k === 'home' || k === 'pendhome') { S.row = 'X133-64GB-GRAY'; S.pop = 'home'; }
-  else if (k === 'empty') { S.row = 'X400-128GB-GRAY'; S.pop = 'home'; }
+  Object.assign(S, { menu: false, pop: null, pend: k === 'pending', checked: false });
+  if (k === 'empty') { S.row = 'X400-128GB-GRAY'; S.pick = 'X400-128GB-GRAY-WFS'; S.pop = 'pick'; }
   else if (k === 'pending') { S.row = 'X133-64GB-GRAY'; S.pick = 'x110gray'; S.converted = false; S.converting = false; S.pop = 'pending'; }
   else if (k === 'one') { S.row = 'X610-128GB-BLACK'; S.pick = 'X610-128GB-BLACK-WFS'; S.pop = 'pick'; }
   else {
@@ -451,7 +479,7 @@ function set(k) {
   render();
 }
 function curStep() {
-  if (S.pop === 'home') return !HIST[S.row] ? 'empty' : S.pend && S.row === 'X133-64GB-GRAY' ? 'pendhome' : 'home';
+  if (S.pop === 'pick' && S.row === 'X400-128GB-GRAY') return 'empty';
   if (S.pop === 'pick' && S.row === 'X610-128GB-BLACK') return 'one';
   if (S.pop === 'pick') return isWfs(S.pick) ? 'pick' : 'warn';
   return S.pop;
@@ -508,7 +536,7 @@ function tableHtml() {
 const CHECK = '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg>';
 function openPending() { S.menu = false; S.row = 'X133-64GB-GRAY'; S.pick = 'x110gray'; S.pop = 'pending'; render(); }
 function openPop(sku) {
-  S.menu = false; S.row = sku; S.pop = 'home';
+  S.menu = false; S.row = sku; S.pop = S.pend && sku === 'X133-64GB-GRAY' ? 'pending' : 'pick';
   S.pick = (LISTINGS[sku] || [{ ch: '' }])[0].ch;
   render();
 }
@@ -516,24 +544,40 @@ function startSend() { S.pick = (LISTINGS[S.row] || [{ ch: '' }])[0].ch; S.pop =
 function selListing() { return (LISTINGS[S.row] || []).find(l => l.ch === S.pick); }
 // Listing · (Convert) · Shipment — Convert shows only when the picked listing started off WFS
 function flowSteps() { const l = selListing(); return l && !l.wfs ? ['Listing', 'Convert', 'Shipment'] : ['Listing', 'Shipment']; }
-function popHead(i, compact, home) {
-  const r = ROWS.find(x => x.sku === S.row);
-  const kick = home ? 'WFS shipments' : 'Send to WFS';
-  if (home) return `<div class="ph"><div class="ph-img"><div class="thumb ${r.th}"></div></div>
-      <div><div class="pk">${IC.spark}${kick}</div><div class="ph-sku">${r.sku}</div><div class="ph-t">${r.title}</div></div>
-      <button class="px" onclick="S.pop=null;render()" title="Close">✕</button></div>
-    <div class="stats"><span class="stat">Warehouse <b>${r.home.toLocaleString()}</b></span><span class="stat">At WFS <b>${r.wfs}</b></span>${r.inb ? `<span class="stat in">Inbound <b>${r.inb}</b></span>` : ''}</div>`;
-  if (compact) return `<div class="ph"><div class="ph-img"><div class="thumb ${r.th}"></div></div>
-      <div><div class="pk">${IC.spark}Send to WFS</div><div class="ph-sku">${r.sku}</div><div class="ph-t">${r.title}</div></div>
-      <button class="px" onclick="S.pop=null;render()" title="Close">✕</button></div>`;
+function popHead(i, compact) {
+  const head = `<div class="rh">${IC.spark}<span>Send to WFS</span><button class="px" onclick="S.pop=null;render()" title="Close">✕</button></div>`;
+  if (compact) return head;
   const steps = flowSteps();
   const cols = `grid-template-columns:repeat(${steps.length},1fr)`;
-  return `<div class="ph"><div class="ph-img"><div class="thumb ${r.th}"></div></div>
-      <div><div class="pk">${IC.spark}Send to WFS</div><div class="ph-sku">${r.sku}</div><div class="ph-t">${r.title}</div></div>
-      <button class="px" onclick="S.pop=null;render()" title="Close">✕</button></div>
-    <div class="stats"><span class="stat">Warehouse <b>${r.home.toLocaleString()}</b></span><span class="stat">At WFS <b>${r.wfs}</b></span>${r.inb ? `<span class="stat in">Inbound <b>${r.inb}</b></span>` : ''}</div>
-    <div class="prog" style="${cols}">${steps.map((_, k) => `<i class="${k <= i ? 'd' : ''}"></i>`).join('')}</div>
+  return `${head}<div class="prog" style="${cols}">${steps.map((_, k) => `<i class="${k <= i ? 'd' : ''}"></i>`).join('')}</div>
     <div class="prog-l" style="${cols}">${steps.map((t, k) => k === i ? `<b>${t}</b>` : `<span>${t}</span>`).join('')}</div>`;
+}
+// LEFT column: the item, what's in stock, its previous WFS shipments
+function leftCol() {
+  const r = ROWS.find(x => x.sku === S.row);
+  const hs = HIST[S.row] || [];
+  const sent = hs.reduce((a, h) => a + h.sent, 0), got = hs.reduce((a, h) => a + (h.got || 0), 0);
+  const multi = new Set(hs.map(h => h.ch)).size > 1;
+  const conv = S.pend && S.row === 'X133-64GB-GRAY'
+    ? `<div class="conv-row${S.pop === 'pending' ? ' on' : ''}" onclick="openPending()"><span class="st no"></span><span>Converting <span class="mono">x110gray</span></span><span class="chip chip-warn">2 days</span><span class="chev">›</span></div>` : '';
+  return `<div class="pw-l">
+    <div class="lh"><div class="ph-img"><div class="thumb ${r.th}"></div></div>
+      <div><div class="pk">${IC.spark}Walmart WFS</div><div class="ph-sku">${r.sku}</div><div class="ph-t">${r.title}</div></div></div>
+    <div class="tiles4">
+      <div class="t4"><span>Warehouse</span><b>${r.home.toLocaleString()}</b></div>
+      <div class="t4"><span>At WFS</span><b>${r.wfs}</b></div>
+      <div class="t4 in"><span>Inbound</span><b>${r.inb || 0}</b></div>
+      <div class="t4"><span>Sold at WFS · 30d</span><b>${r.sold || 0}</b></div>
+    </div>
+    <div class="ls-h"><b>Previous shipments</b>${hs.length ? `<span>${hs.length} · ${sent} sent · ${got} received</span>` : ''}</div>
+    ${conv}
+    ${hs.length ? `<div class="hl-h"><span>Shipment</span><span>Received</span><span>Status</span></div>
+    ${hs.map(h => `<div class="hr" title="Open this shipment">
+      <div><div class="hr-d">${h.d}${h.car ? `<span>${h.car}</span>` : ''}</div><div class="hr-ch">${h.ch}</div></div>
+      <div class="hr-n">${h.got == null ? '—' : h.got}<em> / ${h.sent}</em></div>
+      <span class="chip ${h.c}">${h.t}</span></div>`).join('')}`
+    : `<div class="empty">No WFS shipments logged for this SKU.</div>`}
+  </div>`;
 }
 function metaFor(l) {
   if (l.ch === 'x110gray' && S.converted) return 'Just converted · <b>0</b> at WFS';
@@ -551,14 +595,14 @@ function popPick() {
       return `<div class="opt2${on ? ' on' : ''}" onclick="S.pick='${l.ch}';render()">
         <div class="opt2-r"><span class="ck">${CHECK}</span>
           <div><div class="o-sku">${l.ch}</div><div class="o-meta">${metaFor(l)}</div></div>
-          <span class="st ${ok ? 'ok' : 'no'}">${ok ? 'On WFS' : 'Not on WFS'}</span></div>
-        ${on && !ok ? `<div class="opt2-w fade">${IC.warn}<div>Walmart won't take stock for this listing until it's converted to WFS. It takes a few minutes.${alt ? `<br><a onclick="event.stopPropagation();S.pick='${alt.ch}';render()">Use ${alt.ch} instead</a>` : ''}</div></div>` : ''}
+          ${S.pend && l.ch === 'x110gray' ? '<span class="st no">Converting · 2d</span>' : `<span class="st ${ok ? 'ok' : 'no'}">${ok ? 'On WFS' : 'Not on WFS'}</span>`}</div>
+        ${on && !ok && !S.pend ? `<div class="opt2-w fade">${IC.warn}<div>Walmart won't take stock for this listing until it's converted to WFS. It takes a few minutes.${alt ? `<br><a onclick="event.stopPropagation();S.pick='${alt.ch}';render()">Use ${alt.ch} instead</a>` : ''}</div></div>` : ''}
       </div>`;
     }).join('')}
     ${one ? `<p class="hint2">The only Walmart listing linked to this SKU. Check it's the right one.</p>` : ''}
   </div>
-  <div class="pf"><button class="tbtn" onclick="S.pop='home';render()">Back</button><span class="grow"></span>
-    ${okNow
+  <div class="pf"><button class="tbtn" onclick="S.pop=null;render()">Cancel</button><span class="grow"></span>
+    ${S.pend && S.pick === 'x110gray' ? `<button class="pbtn" onclick="openPending()">See status ${IC.arrow}</button>` : okNow
       ? `<button class="pbtn" onclick="S.pop='ship';render()">Continue ${IC.arrow}</button>`
       : `<button class="pbtn" onclick="S.pop='convert';render()">Convert to WFS ${IC.arrow}</button>`}
   </div>`;
@@ -587,38 +631,18 @@ function popConvert() {
       : `<button class="pbtn" ${S.converting ? 'disabled' : ''} onclick="convert()">${S.converting ? 'Waiting for Walmart…' : 'Send to Walmart'}</button>`}
   </div>`;
 }
-// the spark's landing: this SKU's WFS shipments (+ a conversion still pending)
-function popHome() {
-  const hs = HIST[S.row] || [];
-  const sent = hs.reduce((a, h) => a + h.sent, 0), got = hs.reduce((a, h) => a + (h.got || 0), 0);
-  // the listing shows per row only when this SKU has gone into more than one
-  const multi = new Set(hs.map(h => h.ch)).size > 1;
-  const conv = S.pend && S.row === 'X133-64GB-GRAY'
-    ? `<div class="conv-row" onclick="openPending()"><span class="st no"></span><span>Converting <span class="mono">x110gray</span></span><span class="chip chip-warn">2 days</span><span class="chev">›</span></div>` : '';
-  return `${popHead(0, false, true)}<div class="pb home">
-    ${conv}
-    ${hs.length ? `<div class="hl-h"><span>Shipment</span><span>Received</span><span>Status</span></div>
-    ${hs.map(h => `<div class="hr" title="Open this shipment">
-      <div><div class="hr-d">${h.d}${h.car ? `<span>${h.car}</span>` : ''}</div>${multi ? `<div class="hr-ch">${h.ch}</div>` : ''}</div>
-      <div class="hr-n">${h.got == null ? '—' : h.got}<em> / ${h.sent}</em></div>
-      <span class="chip ${h.c}">${h.t}</span></div>`).join('')}
-    <div class="hl-f">${hs.length} shipment${hs.length === 1 ? '' : 's'} · ${sent} sent · ${got} received${multi ? '' : ` · into <span class="mono">${hs[0].ch}</span>`}</div>`
-    : `<div class="empty">No WFS shipments logged for this SKU.</div>`}
-  </div>
-  <div class="pf"><span class="grow"></span><button class="pbtn" onclick="startSend()">Send to WFS ${IC.arrow}</button></div>`;
-}
 // the same popup, reopened two days later while Walmart still hasn't answered
 function popPending() {
   // owner 2026-11-07 "this is so wordy": status line + buttons only; the
   // "taking longer than usual" explanation lives in the 2-days pill's tooltip
   const tk = (cls, t) => `<span class="tk ${cls}"><i>${cls === 'd' ? CHECK : ''}</i>${t}</span>`;
-  return `${popHead(1, true)}<div class="pb pend">
+  return `${popHead(1)}<div class="pb pend">
     <div class="pend-h"><span>Converting <span class="mono">x110gray</span></span>
       <span class="chip chip-warn" title="Sent Nov 5, 2:10 PM. Taking longer than usual; Walmart can hold battery items for an extra review. No need to resend.">2 days</span></div>
     <div class="track2">${tk('d', 'Sent')}<span class="tk-line d"></span>${tk('slow', 'Reviewing')}<span class="tk-line"></span>${tk('', 'Approved')}</div>
     <div class="pend-m">${S.checked ? 'Checked just now' : 'Checked 3 min ago'} · <a class="lnk">Seller Center</a> · <a class="lnk">Edit</a></div>
   </div>
-  <div class="pf"><button class="tbtn" onclick="S.pop='home';render()">Back</button><span class="grow"></span>
+  <div class="pf"><button class="tbtn" onclick="S.pick='X133-64GB-GRAY-WFS';S.pop='pick';render()">Back</button><span class="grow"></span>
     <button class="sbtn" title="Send the stock to X133-64GB-GRAY-WFS instead, it's already on WFS" onclick="S.pick='X133-64GB-GRAY-WFS';S.pop='ship';render()">Use WFS listing</button>
     <button class="pbtn" onclick="S.checked=true;render()">Check now</button>
   </div>`;
@@ -704,7 +728,7 @@ function render() {
   const cs = curStep();
   $('steps').innerHTML = STEPS.map(s => s.g ? `<span class="grp">${s.g}</span>`
     : `<button class="step${cs === s.k ? ' on' : ''}" onclick="set('${s.k}')"><i>${s.n}</i>${s.t}</button>`).join('');
-  const pop = S.pop ? `<div class="pop fade" id="pop">${({ home: popHome, pick: popPick, convert: popConvert, ship: popShip, pending: popPending })[S.pop]()}</div>` : '';
+  const pop = S.pop ? `<div class="pop wide fade" id="pop"><div class="pw">${leftCol()}<div class="pw-r">${({ pick: popPick, convert: popConvert, ship: popShip, pending: popPending })[S.pop]()}</div></div></div>` : '';
   $('stage').innerHTML = bandHtml() + tableHtml() + pop + (S.menu ? menuHtml() : '');
   $('why').innerHTML = WHY[cs] || WHY.pick;
   $('stage').style.marginBottom = '0px';
@@ -732,7 +756,7 @@ function render() {
   const q = new URLSearchParams(location.search);
   if (q.get('done')) S.converted = true;
   if (q.get('draft')) S.draftAdded = true;
-  set(q.get('s') || 'home');
+  set(q.get('s') || 'pick');
   if (q.get('pick')) { S.pick = q.get('pick'); render(); }
   if (q.get('hover')) { S.pop = null; S.hover = q.get('hover'); render(); }
 })();
