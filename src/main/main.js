@@ -4525,18 +4525,10 @@ exit 1
       const sold = ((overviewCache.money && overviewCache.money.wfsSold) || {})[String(sku || '').toUpperCase()] || null;
       const soldCh = new Map(Object.entries((sold && sold.ch) || {}).map(([k, v]) => [k.toUpperCase(), v]));
       const conv = wfsxConv.read() || [];
-      const listings = walmartLinks.map(l => {
-        const K = l.sku.toUpperCase();
-        const c = conv.find(x => String(x.channelSku).toUpperCase() === K);
-        return {
-          sku: l.sku, onWfs: wfsQty.has(K) || !!(c && c.status === 'APPROVED'), atWfs: wfsQty.get(K) || 0,
-          sold30: soldCh.has(K) ? soldCh.get(K) : (overviewCache.money && overviewCache.money.wfsSold ? 0 : null),
-          conversion: c && c.status !== 'APPROVED' ? { feedId: c.feedId, status: c.status, at: c.at, checkedAt: c.checkedAt || 0, errors: c.errors || [] } : null,
-        };
-      });
+      // the item's shipments first: a listing that ever went to WFS is on WFS
       let plansError = '';
       try { await wfsxPlans(); wfsxApplyItemCache(); } catch (e) { plansError = e.message; }
-      const keys = new Set(listings.map(l => l.sku.toUpperCase()));
+      const keys = new Set(walmartLinks.map(l => l.sku.toUpperCase()));
       const shipments = [];
       let unknown = 0;
       for (const p of wfsPlans.plans || []) {
@@ -4549,6 +4541,29 @@ exit 1
       }
       shipments.sort((a, b) => String(b.created).localeCompare(String(a.created)));
       if (unknown) wfsxFillItems();
+      const shipped = new Set(shipments.flatMap(s => s.lines.map(l => String(l.sku).toUpperCase())));
+      // On WFS (owner 2026-11-07: SM-X133-64GB-GREY, 429 sold at WFS, read
+      // "Not on WFS"): in Walmart's WFS stock, sold from WFS, sent to WFS
+      // before, or converted here; failing all of those, Walmart is asked
+      // about that one SKU before the popup offers to convert it
+      const listings = walmartLinks.map(l => {
+        const K = l.sku.toUpperCase();
+        const c = conv.find(x => String(x.channelSku).toUpperCase() === K);
+        const soldHere = soldCh.has(K) ? soldCh.get(K) : 0;
+        return {
+          sku: l.sku, atWfs: wfsQty.get(K) || 0,
+          onWfs: wfsQty.has(K) || soldHere > 0 || shipped.has(K) || !!(c && c.status === 'APPROVED'),
+          sold30: soldCh.has(K) ? soldCh.get(K) : (overviewCache.money && overviewCache.money.wfsSold ? 0 : null),
+          conversion: c && c.status !== 'APPROVED' ? { feedId: c.feedId, status: c.status, at: c.at, checkedAt: c.checkedAt || 0, errors: c.errors || [] } : null,
+        };
+      });
+      const wm = wmClient();
+      await Promise.all(listings.filter(l => !l.onWfs || !wfsQty.has(l.sku.toUpperCase())).slice(0, 6).map(async (l) => {
+        try {
+          const n = await wm.wfsInventoryFor(l.sku);
+          if (n !== null) { l.onWfs = true; l.atWfs = n; }
+        } catch { /* the other signals stand */ }
+      }));
       return { ok: true, listings, shipments, unknown, sold: sold ? sold.q : null, plansError, returnSet: !!wfsxReturnTo(cfg).line1 };
     } catch (e) {
       return { ok: false, error: (e && e.message) || 'Could not read this item.' };

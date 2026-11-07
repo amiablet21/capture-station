@@ -1910,13 +1910,17 @@ module.exports = async function run({ app, win, db, clipboard }) {
           }
           // Send to WFS (owner 2026-11-07): WFS stock, shipping plans and
           // their items, the listing, create inbound, the convert feed
-          if (req.url.startsWith('/v3/fulfillment/inventory')) return res.end(JSON.stringify({ payload: { inventory: [{ sku: 'WX-WFS', shipNodes: [{ onHandQty: 12, availToSellQty: 12 }] }] } }));
+          if (req.url.startsWith('/v3/fulfillment/inventory')) {
+            // WX-DIRECT is only found when asked for by SKU
+            if (req.url.includes('sku=WX-DIRECT')) return res.end(JSON.stringify({ payload: { inventory: [{ sku: 'WX-DIRECT', shipNodes: [{ onHandQty: 7, availToSellQty: 7 }] }] } }));
+            return res.end(JSON.stringify({ payload: { inventory: [{ sku: 'WX-WFS', shipNodes: [{ onHandQty: 12, availToSellQty: 12 }] }] } }));
+          }
           if (req.url.startsWith('/v3/fulfillment/inbound-shipments?')) return res.end(JSON.stringify({ headers: { totalCount: 1 }, payload: [
             { inboundOrderId: 'HOT-9', shipmentId: '4400001WFB', shipToAddress: { fcName: 'LAX2', city: 'Perris', stateCode: 'CA' }, status: 'CLOSED', createdDate: '2026-10-03T10:00:00Z', shipmentUnits: 25, receivedUnits: 24, carrierName: 'FedEx' },
             { inboundOrderId: 'HOT-8', shipmentId: '4400000WFB', shipToAddress: { fcName: 'PHL5', city: 'Bethlehem', stateCode: 'PA' }, status: 'CLOSED', createdDate: '2026-09-20T10:00:00Z', shipmentUnits: 10, receivedUnits: 10, carrierName: 'UPS' } ] }));
           if (req.url.startsWith('/v3/fulfillment/inbound-shipment-items?')) {
             const sid = new URL(req.url, 'http://x').searchParams.get('shipmentId');
-            return res.end(JSON.stringify({ payload: sid === '4400001WFB' ? [{ shipmentId: sid, sku: 'WX-WFS', itemQty: 25, receivedQty: 24 }] : [{ shipmentId: sid, sku: 'SOMETHING-ELSE', itemQty: 10, receivedQty: 10 }] }));
+            return res.end(JSON.stringify({ payload: sid === '4400001WFB' ? [{ shipmentId: sid, sku: 'WX-WFS', itemQty: 25, receivedQty: 24 }] : [{ shipmentId: sid, sku: 'WX-OLD', itemQty: 10, receivedQty: 10 }] }));
           }
           if (req.url === '/v3/fulfillment/inbound-shipments' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK', payload: [
             { shipmentId: '4400777WFB', shipToAddress: { fcName: 'LAX2', addressLine1: '2500 Fleet Way', city: 'Perris', stateCode: 'CA', postalCode: '92571' }, shipmentItems: [{ vendorSku: 'WX-WFS', itemQty: 30 }], expectedDeliveryDate: '2026-11-20T00:00:00.000Z' }] }));
@@ -2152,8 +2156,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
             const wmP = wmMod.WalmartClient.prototype;
             const keep = { gcs: lwMod.LinnworksClient.prototype.getChannelSkus, gmc: lwMod.LinnworksClient.prototype.getMappingChannels, gci: lwMod.LinnworksClient.prototype.getChannelItems, csl: lwMod.LinnworksClient.prototype.changeStockLevels };
             const moved = [];
-            lwMod.LinnworksClient.prototype.getChannelSkus = async () => [
-              { sku: 'WX-WFS', source: 'WALMART', subSource: 'Walmart US' }, { sku: 'wxconv', source: 'WALMART', subSource: 'Walmart US' }, { sku: 'WX-EBAY', source: 'EBAY', subSource: 'eBay' }];
+            lwMod.LinnworksClient.prototype.getChannelSkus = async (id) => (id === 'wx-2'
+              ? [{ sku: 'WX-OLD', source: 'WALMART', subSource: 'Walmart US' }, { sku: 'WX-DIRECT', source: 'WALMART', subSource: 'Walmart US' }]
+              : [{ sku: 'WX-WFS', source: 'WALMART', subSource: 'Walmart US' }, { sku: 'wxconv', source: 'WALMART', subSource: 'Walmart US' }, { sku: 'WX-EBAY', source: 'EBAY', subSource: 'eBay' }]);
             lwMod.LinnworksClient.prototype.getMappingChannels = async () => [{ id: 'cw', source: 'WALMART', subSource: 'Walmart US' }];
             lwMod.LinnworksClient.prototype.getChannelItems = async () => [{ sku: 'WX-WFS', linkedItemId: 'wx-1' }, { sku: 'wxconv', linkedItemId: 'wx-1' }];
             lwMod.LinnworksClient.prototype.changeStockLevels = async (entries) => { moved.push(...entries); return entries; };
@@ -2183,6 +2188,14 @@ module.exports = async function run({ app, win, db, clipboard }) {
               for (let i = 0; i < 10 && info2.ok && info2.unknown; i++) { await sleep(400); info2 = await exec(`api.wfsxInfo('WX-TAB', 'wx-1')`); }
               check('wfs popup: the item\'s shipments are the ones that carried its listings',
                 info2.ok && info2.shipments.length === 1 && info2.shipments[0].id === '4400001WFB' && info2.shipments[0].lines[0].received === 24, info2);
+              // owner 2026-11-07: a WFS listing missing from the WFS stock list
+              // read "Not on WFS" - one sent to WFS before, or found when
+              // Walmart is asked about its SKU, is on WFS
+              const info3 = await exec(`api.wfsxInfo('WX-OLDTAB', 'wx-2')`);
+              const lOld = info3.ok && info3.listings.find(l => l.sku === 'WX-OLD');
+              const lDirect = info3.ok && info3.listings.find(l => l.sku === 'WX-DIRECT');
+              check('wfs popup: a listing sent to WFS before, or found by asking Walmart for its SKU, reads On WFS',
+                lOld && lOld.onWfs && lDirect && lDirect.onWfs && lDirect.atWfs === 7, info3);
 
               // the popup itself, opened from the row's spark
               await exec(`(() => {
@@ -2202,6 +2215,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
                 rows: document.querySelectorAll('#wfsxLeft .wfsx-row').length }))()`);
               check('wfs popup: the spark opens it with the stock strip, the shipments and the Walmart listings to pick',
                 opened === 'ok' && pop.open && pop.cards.join(',') === 'WX-WFS,wxconv' && pop.strip[0] === '300' && pop.strip[2] === '12' && pop.rows === 1, { opened, pop });
+              // a long history shows the 5 newest, the rest behind a link
+              const cut = await exec(`(() => { const keep = WX.info.shipments; WX.info.shipments = Array.from({ length: 8 }, (_, i) => ({ ...keep[0], id: 'S' + i })); wxRender();
+                const n1 = document.querySelectorAll('#wfsxLeft .wfsx-row').length; const b = document.querySelector('#wfsxLeft .wfsx-morebtn'); const t = b ? b.textContent : '';
+                if (b) b.click(); const n2 = document.querySelectorAll('#wfsxLeft .wfsx-row').length;
+                WX.info.shipments = keep; WX.allShips = false; wxRender(); return [n1, t, n2]; })()`);
+              check('wfs popup: previous shipments stop at the 5 newest, Show all opens the rest', cut[0] === 5 && cut[1] === 'Show all 8 shipments' && cut[2] === 8, cut);
               if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-pick.png'), (await win.webContents.capturePage()).toPNG());
               // pick the listing that isn't on WFS: the warning and Convert
               await exec(`document.querySelector('#wfsxRight [data-wxpick="wxconv"]').click()`);

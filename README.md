@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.133 highlights
+
+- **Send to WFS: listings already on WFS read On WFS** (owner: SM-X133-64GB-GREY, 429 sold at WFS, showed "Not on WFS" and offered Convert). A listing now counts as on WFS when it is in Walmart's WFS stock, has sold from WFS in the last 30 days, or was in any WFS shipment; failing all three, the app asks Walmart about that one SKU before offering to convert it.
+- **Previous shipments stop at the 5 newest** (owner: "it is a lot, make a cut off"). **Show all N shipments** under them opens the rest, **Show fewer** closes them; the totals line still counts every shipment.
+
 ## v1.32.132 highlights
 
 - **Send to WFS from the Stock page** (owner 2026-11-07; mock-up `variants/wfs-send-from-stock.html`). Every row's hover tray has Walmart's yellow spark. It opens one wide popup under the row:

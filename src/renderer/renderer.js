@@ -10958,9 +10958,13 @@ function wxLeft() {
         <span class="wfsx-chip ${l.conversion.status === 'REJECTED' ? 'is-red' : 'is-warn'}">${l.conversion.status === 'REJECTED' ? 'See why' : esc(wxAgo(l.conversion.at))}</span><span class="wfsx-chev">›</span></button>`).join('');
     const sent = info.shipments.reduce((a, s) => a + s.lines.reduce((b, l) => b + (Number(l.expected) || 0), 0), 0);
     const got = info.shipments.reduce((a, s) => a + s.lines.reduce((b, l) => b + (Number(l.received) || 0), 0), 0);
+    // the 5 newest, the rest behind a link (owner 2026-11-07: "it is a lot,
+    // make a cut off")
+    const shown = WX.allShips ? info.shipments : info.shipments.slice(0, 5);
+    const more = info.shipments.length - shown.length;
     list = `${convs}${info.shipments.length ? `
       <div class="wfsx-lh"><span>Shipment</span><span>Received</span><span>Status</span></div>
-      ${info.shipments.map(s => {
+      ${shown.map(s => {
         const exp = s.lines.reduce((a, l) => a + (Number(l.expected) || 0), 0);
         const rec = s.lines.reduce((a, l) => a + (Number(l.received) || 0), 0);
         const open = !/closed|cancel/i.test(s.status);
@@ -10969,6 +10973,8 @@ function wxLeft() {
             <div class="wfsx-rc">${multi ? esc(s.lines.map(l => l.sku).join(', ')) : esc(s.shipTo || s.id)}</div></div>
           <div class="wfsx-rn">${open && !rec ? '—' : rec}<em> / ${exp}</em></div>${wxChip(s)}</div>`;
       }).join('')}
+      ${more > 0 ? `<button class="wfsx-morebtn" data-wx="allShips">Show all ${info.shipments.length} shipments</button>`
+        : WX.allShips && info.shipments.length > 5 ? '<button class="wfsx-morebtn" data-wx="allShips">Show fewer</button>' : ''}
       <div class="wfsx-lf">${info.shipments.length} shipment${info.shipments.length === 1 ? '' : 's'} · ${sent} sent · ${got} received${!multi && info.shipments[0] ? ` · into <span class="mono">${esc(info.shipments[0].lines[0].sku)}</span>` : ''}</div>`
       : `<div class="wfsx-empty">${info.listings.length ? 'No WFS shipments for this item yet.' : 'No Walmart listing is linked to this item.'}</div>`}
       ${info.unknown ? `<p class="wfsx-note">Reading ${info.unknown} older shipment${info.unknown === 1 ? '' : 's'} from Walmart…</p>` : ''}
@@ -11217,6 +11223,7 @@ $('wfsxDialog').addEventListener('click', async (e) => {
   if (!btn) return;
   const act = btn.dataset.wx;
   if (act === 'close') { $('wfsxDialog').close(); return; }
+  if (act === 'allShips') { WX.allShips = !WX.allShips; wxRender(); return; }
   if (act === 'next') { WX.units = wxSuggest(); WX.step = 'ship'; WX.confirm = false; WX.msg = ''; wxRender(); return; }
   if (act === 'convert') { await wxStartConvert(); return; }
   if (act === 'fix') { WX.conv = null; WX.msg = ''; wxRender(); return; } // edit the form again, then resend

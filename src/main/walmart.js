@@ -1355,6 +1355,15 @@ WalmartClient.prototype.shipmentLabels = async function (shipmentId, boxes) {
   if (!r || !r.buffer || r.buffer.length < 100) throw new WalmartError('Walmart sent back no label file.');
   return r.buffer;
 };
+// one listing's WFS stock straight from Walmart (Get WFS Inventory filtered
+// by sku): its on-hand count, or null when Walmart sent back no WFS record
+// for that SKU
+WalmartClient.prototype.wfsInventoryFor = async function (sku) {
+  const body = await this.call('GET', `/v3/fulfillment/inventory?sku=${encodeURIComponent(String(sku))}&limit=10&offset=0`);
+  const row = arr(body && body.payload && body.payload.inventory).find(r => String((r && r.sku) || '').toUpperCase() === String(sku).toUpperCase());
+  if (!row) return null;
+  return arr(row.shipNodes).reduce((t, n) => t + Math.max(0, Number(n && n.onHandQty) || 0), 0);
+};
 WalmartClient.prototype.itemFacts = async function (sku) {
   return parseItemFacts(await this.call('GET', `/v3/items/${encodeURIComponent(String(sku))}`));
 };
