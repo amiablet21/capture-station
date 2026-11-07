@@ -4422,6 +4422,282 @@ exit 1
     return { ok: true, at: wfsPlans.at, plans: wfsPlans.plans, error: wfsPlans.error };
   });
 
+  /* ----- Send to WFS from a Stock row (owner 2026-11-07; approved
+     mock-up variants/wfs-send-from-stock.html). The Walmart spark in a
+     row's hover tray opens one wide popup: the item's stock and its WFS
+     shipments on the left, Send to WFS on the right - pick the Walmart
+     listing (always, even with one), convert it to WFS when it isn't
+     (OMNI_WFS feed), then create the inbound shipment at Walmart; the
+     units come off the warehouse the way WFS Shipments always did. ----- */
+  const wfsxJson = (name) => ({
+    read: () => { try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), name), 'utf8')); } catch { return null; } },
+    write: (v) => { try { fs.writeFileSync(path.join(app.getPath('userData'), name), JSON.stringify(v, null, 2), 'utf8'); } catch { /* best effort */ } },
+  });
+  const wfsxConv = wfsxJson('wfs-conversions.json'); // [{ feedId, channelSku, sku, at, status, errors, checkedAt }]
+  const wfsxPrefs = wfsxJson('wfs-convert-prefs.json'); // { family: last convert form }
+  const wfsxItemCache = wfsxJson('wfs-shipment-items.json'); // { shipmentId: items } for settled shipments
+  // the next listing of the same tablet (X133 of X133-64GB-GRAY) starts
+  // from the last convert form
+  const wfsxFamily = (sku) => String(sku || '').toUpperCase().split(/[-_ ]/)[0];
+  // the return address on the inbound order: the Ship tab's return-to, else
+  // its ship-from (the warehouse)
+  const wfsxReturnTo = (cfg) => {
+    const u = cfg.ups || {};
+    const ok = (a) => a && a.line1 && a.city && a.state && a.zip;
+    return ok(u.returnTo) ? u.returnTo : ok(u.shipFrom) ? u.shipFrom : (u.shipFrom || {});
+  };
+  const wfsxSettled = (status) => /closed|cancel/i.test(String(status || ''));
+
+  // the shipping plans, read the way Sent to WFS reads them (10 min cache)
+  async function wfsxPlans() {
+    if (wfsPlans.plans && Date.now() - wfsPlans.at < 10 * 60000) return;
+    if (!wfsPlans.promise) {
+      wfsPlans.promise = readWfsPlans()
+        .then((plans) => { wfsPlans = { at: Date.now(), plans, error: '', promise: null }; })
+        .catch((e) => { wfsPlans = { ...wfsPlans, error: (e && e.message) || 'Walmart did not answer.', promise: null }; });
+    }
+    await wfsPlans.promise;
+    if (!wfsPlans.plans) throw new Error(wfsPlans.error || 'Walmart did not answer.');
+  }
+  // which listings each shipment carried: Sent to WFS only reads the 15
+  // newest eagerly, so the rest are read here one at a time in the
+  // background; settled shipments never change, so theirs are kept on disk
+  let wfsxFill = null;
+  function wfsxApplyItemCache() {
+    const cache = wfsxItemCache.read() || {};
+    for (const p of wfsPlans.plans || []) for (const s of p.shipments) if (s.id && !Array.isArray(s.items) && Array.isArray(cache[s.id])) s.items = cache[s.id];
+  }
+  function wfsxKeepItems() {
+    const cache = wfsxItemCache.read() || {};
+    let n = 0;
+    for (const p of wfsPlans.plans || []) for (const s of p.shipments) if (s.id && Array.isArray(s.items) && wfsxSettled(s.status) && !cache[s.id]) { cache[s.id] = s.items; n++; }
+    if (n) wfsxItemCache.write(cache);
+  }
+  function wfsxFillItems() {
+    if (wfsxFill || !wfsPlans.plans) return;
+    const todo = [];
+    for (const p of wfsPlans.plans) for (const s of p.shipments) if (s.id && !Array.isArray(s.items) && !s.itemsFailed) todo.push(s);
+    if (!todo.length) return;
+    wfsxFill = (async () => {
+      const client = wmClient();
+      for (const s of todo.slice(0, 150)) {
+        try { s.items = await client.inboundShipmentItems(s.id); } catch (e) {
+          if (e && e.rateLimited) break; // picked up again on the next open
+          s.itemsFailed = true;
+        }
+      }
+      wfsxKeepItems();
+    })().finally(() => { wfsxFill = null; });
+  }
+
+  // the review boot (CAPTURE_DEMO) shows the popup without Walmart
+  const wfsxDemo = (sku) => {
+    const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    const base = String(sku || 'DEMO').toUpperCase();
+    return {
+      ok: true, demo: true, sold: 84, unknown: 0, returnSet: true,
+      listings: [
+        { sku: `${base}-WFS`, onWfs: true, atWfs: 260, sold30: 84, conversion: null },
+        { sku: base.toLowerCase().replace(/[^a-z0-9]/g, ''), onWfs: false, atWfs: 0, sold30: null, conversion: null },
+      ],
+      shipments: [
+        { id: '4417190WFB', orderId: 'HOT-1', created: day(3), status: 'In transit', eta: day(-5), shipTo: 'LAX2 · Perris, CA', carrier: 'UPS', lines: [{ sku: `${base}-WFS`, expected: 50, received: 0 }] },
+        { id: '4398102WFB', orderId: 'HOT-2', created: day(35), status: 'Closed', eta: day(30), shipTo: 'PHL5 · Bethlehem, PA', carrier: 'FedEx', lines: [{ sku: `${base}-WFS`, expected: 60, received: 60 }] },
+        { id: '4389915WFB', orderId: 'HOT-3', created: day(38), status: 'Closed', eta: day(33), shipTo: 'LAX2 · Perris, CA', carrier: 'FedEx', lines: [{ sku: `${base}-WFS`, expected: 25, received: 24 }] },
+      ],
+    };
+  };
+
+  ipcMain.handle('wfsx:info', async (_e, { sku, stockItemId } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (IS_DEMO) return wfsxDemo(sku);
+    if (!wmKeys()) return { ok: false, needsKeys: true, error: 'Add the Walmart API keys first (Settings › Shipping).' };
+    if (!stockItemId) return { ok: false, error: 'This row has no Linnworks item to look up.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const [links, byItem] = await Promise.all([client.getChannelSkus(stockItemId), walmartWfsByItem(cfg).catch(() => null)]);
+      const seen = new Set();
+      const walmartLinks = links.filter(c => /walmart/i.test(c.source) && c.sku && !seen.has(c.sku.toUpperCase()) && seen.add(c.sku.toUpperCase()));
+      // a listing in Walmart's WFS inventory is on WFS (count 0 or more)
+      const w = byItem && byItem.get(String(stockItemId).toLowerCase());
+      const wfsQty = new Map(((w && w.listings) || []).map(l => [String(l.sku).toUpperCase(), l.qty]));
+      const sold = ((overviewCache.money && overviewCache.money.wfsSold) || {})[String(sku || '').toUpperCase()] || null;
+      const soldCh = new Map(Object.entries((sold && sold.ch) || {}).map(([k, v]) => [k.toUpperCase(), v]));
+      const conv = wfsxConv.read() || [];
+      const listings = walmartLinks.map(l => {
+        const K = l.sku.toUpperCase();
+        const c = conv.find(x => String(x.channelSku).toUpperCase() === K);
+        return {
+          sku: l.sku, onWfs: wfsQty.has(K) || !!(c && c.status === 'APPROVED'), atWfs: wfsQty.get(K) || 0,
+          sold30: soldCh.has(K) ? soldCh.get(K) : (overviewCache.money && overviewCache.money.wfsSold ? 0 : null),
+          conversion: c && c.status !== 'APPROVED' ? { feedId: c.feedId, status: c.status, at: c.at, checkedAt: c.checkedAt || 0, errors: c.errors || [] } : null,
+        };
+      });
+      let plansError = '';
+      try { await wfsxPlans(); wfsxApplyItemCache(); } catch (e) { plansError = e.message; }
+      const keys = new Set(listings.map(l => l.sku.toUpperCase()));
+      const shipments = [];
+      let unknown = 0;
+      for (const p of wfsPlans.plans || []) {
+        for (const s of p.shipments) {
+          if (!Array.isArray(s.items)) { if (!s.itemsFailed) unknown++; continue; }
+          const mine = s.items.filter(i => keys.has(String(i.sku).toUpperCase()));
+          if (!mine.length) continue;
+          shipments.push({ id: s.id, orderId: s.orderId, created: s.created, status: s.status, eta: s.eta, shipTo: s.shipTo, carrier: s.carrier, lines: mine.map(i => ({ sku: i.sku, expected: i.expected, received: i.received })) });
+        }
+      }
+      shipments.sort((a, b) => String(b.created).localeCompare(String(a.created)));
+      if (unknown) wfsxFillItems();
+      return { ok: true, listings, shipments, unknown, sold: sold ? sold.q : null, plansError, returnSet: !!wfsxReturnTo(cfg).line1 };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || 'Could not read this item.' };
+    }
+  });
+
+  // what the convert form starts from: the listing as Walmart has it, then
+  // the last form for the same tablet family
+  ipcMain.handle('wfsx:facts', async (_e, { channelSku, sku } = {}) => {
+    const prefs = (wfsxPrefs.read() || {})[wfsxFamily(sku)] || null;
+    let facts = {};
+    if (!IS_DEMO && wmKeys() && channelSku) {
+      try { facts = await wmClient().itemFacts(channelSku); } catch (e) { facts = { error: e.message }; }
+    }
+    if (IS_DEMO) facts = { productName: 'Demo tablet 64GB Gray', brand: 'SAMSUNG', gtin: '195949183522', price: 129, productType: 'Tablet Computers', condition: 'New', imageUrl: 'https://example.com/demo.jpg' };
+    return { ok: true, facts, prefs, productTypes: walmart.WFS_PRODUCT_TYPES, conditions: walmart.WFS_CONDITIONS,
+      origins: ['CN - China', 'VN - Viet Nam', 'KR - South Korea', 'IN - India', 'TW - Taiwan', 'MY - Malaysia', 'TH - Thailand', 'ID - Indonesia', 'MX - Mexico', 'BR - Brazil', 'JP - Japan', 'HK - Hong Kong', 'US - United States'] };
+  });
+
+  ipcMain.handle('wfsx:convert', async (_e, form = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!IS_DEMO && !wmKeys()) return { ok: false, error: 'Add the Walmart API keys first (Settings › Shipping).' };
+    const f = { ...form, sku: String(form.channelSku || '').trim() };
+    const problems = walmart.convertProblems(f);
+    if (problems.length) return { ok: false, error: `Still needed: ${problems.join(' ')}` };
+    let feedId;
+    try { feedId = IS_DEMO ? `DEMO-${Date.now()}` : await wmClient().submitConvertFeed(f); } catch (e) { return { ok: false, error: e.message }; }
+    const list = (wfsxConv.read() || []).filter(x => String(x.channelSku).toUpperCase() !== f.sku.toUpperCase());
+    list.unshift({ feedId, channelSku: f.sku, sku: String(form.itemSku || ''), at: Date.now(), status: IS_DEMO ? 'APPROVED' : 'SENT', errors: [], checkedAt: 0 });
+    wfsxConv.write(list.slice(0, 200));
+    // remembered for the next listing of the same tablet (never the SKU,
+    // ids or price)
+    const prefs = wfsxPrefs.read() || {};
+    const keep = ['brand', 'productType', 'condition', 'length', 'width', 'height', 'weight', 'origin', 'battery', 'wh', 'batteryGrams', 'cells', 'batteryModel', 'sdsUrl'];
+    prefs[wfsxFamily(form.itemSku)] = Object.fromEntries(keep.map(k => [k, form[k]]));
+    wfsxPrefs.write(prefs);
+    return { ok: true, feedId, status: IS_DEMO ? 'APPROVED' : 'SENT' };
+  });
+
+  // one conversion asked again: SUCCESS = on WFS, *_ERROR = Walmart said
+  // no (its reasons kept), anything else = still reviewing
+  async function wfsxCheckConversion(feedId) {
+    const list = wfsxConv.read() || [];
+    const c = list.find(x => x.feedId === feedId);
+    if (!c) return null;
+    if (c.status === 'APPROVED' || c.status === 'REJECTED') return c;
+    const st = await wmClient().feedStatus(feedId);
+    const item = st.items[c.channelSku] || Object.entries(st.items).find(([k]) => k.toUpperCase() === String(c.channelSku).toUpperCase())?.[1];
+    if (item && item.status === 'SUCCESS') c.status = 'APPROVED';
+    else if (item && /ERROR$/.test(item.status)) { c.status = 'REJECTED'; c.errors = item.errors; }
+    else if (st.status === 'ERROR') { c.status = 'REJECTED'; c.errors = st.feedErrors.length ? st.feedErrors : ['Walmart could not process the request.']; }
+    else c.status = 'REVIEWING';
+    c.checkedAt = Date.now();
+    wfsxConv.write(list);
+    return c;
+  }
+  ipcMain.handle('wfsx:convertCheck', async (_e, { feedId } = {}) => {
+    if (IS_DEMO) return { ok: true, status: 'APPROVED', errors: [], checkedAt: Date.now() };
+    try {
+      const c = await wfsxCheckConversion(String(feedId || ''));
+      if (!c) return { ok: false, error: 'That conversion is not on this computer.' };
+      return { ok: true, status: c.status, errors: c.errors || [], checkedAt: c.checkedAt || 0 };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // the Stock rows' "Converting" tags: open conversions, and refusals from
+  // the last two weeks
+  ipcMain.handle('wfsx:conversions', () => {
+    const cut = Date.now() - 14 * 86400000;
+    return { ok: true, list: (wfsxConv.read() || []).filter(c => c.status !== 'APPROVED' && c.at > cut) };
+  });
+  // open conversions are asked about every 15 minutes in the background
+  setInterval(() => {
+    if (IS_DEMO || !wmKeys()) return;
+    for (const c of (wfsxConv.read() || []).filter(x => x.status === 'SENT' || x.status === 'REVIEWING')) {
+      wfsxCheckConversion(c.feedId).catch(() => { /* asked again next round */ });
+    }
+  }, 15 * 60000).unref();
+
+  // create the inbound shipment at Walmart, then take the units off the
+  // warehouse (the WFS Shipments path); Walmart splits the order into one
+  // or more shipments, each to a warehouse it picks
+  ipcMain.handle('wfsx:create', async (_e, p = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!IS_DEMO && !wmKeys()) return { ok: false, error: 'Add the Walmart API keys first (Settings › Shipping).' };
+    const line = { sku: String(p.channelSku || '').trim(), gtin: String(p.gtin || ''), desc: String(p.desc || ''), qty: Number(p.qty), perBox: Number(p.perBox) };
+    // the GTIN Walmart has on the listing beats the Linnworks barcode
+    if (!IS_DEMO && line.sku) {
+      try { const facts = await wmClient().itemFacts(line.sku); if (facts.gtin) line.gtin = facts.gtin; if (!line.desc) line.desc = facts.productName; } catch { /* the barcode it is */ }
+    }
+    const order = { orderId: `DWS-${Date.now()}`, returnTo: wfsxReturnTo(cfg), arriveBy: String(p.arriveBy || ''), lines: [line] };
+    const problems = walmart.inboundProblems(order);
+    if (problems.length) return { ok: false, error: problems.join(' ') };
+    let shipments;
+    try {
+      shipments = IS_DEMO
+        ? [{ id: '4420001WFB', shipTo: 'LAX2 · Perris, CA', address: '', eta: order.arriveBy, items: [{ sku: line.sku, qty: line.qty }] }]
+        : await wmClient().createInboundShipment(order);
+    } catch (e) {
+      let more = [];
+      try { more = await wmClient().inboundErrors(order.orderId); } catch { /* the first message stands */ }
+      return { ok: false, error: [e.message, ...more].filter(Boolean).join(' · ') };
+    }
+    let warn = '';
+    try {
+      await wfsLogShipment(cfg, `Walmart ${order.orderId} · ${shipments.map(s => s.id).join(', ')}`.slice(0, 500),
+        [{ sku: String(p.sku || '').trim(), channelSku: line.sku, gtin: line.gtin, qty: line.qty }]);
+    } catch (e) {
+      warn = `Created at Walmart, but Linnworks did not take the ${line.qty} units off the warehouse: ${e.message}`;
+    }
+    wfsPlans.at = 0; // the next read brings the new shipments in
+    return { ok: true, orderId: order.orderId, shipments, boxes: Math.round(line.qty / line.perBox), warn };
+  });
+
+  // cancel a just-made inbound order and put the units back on the shelf
+  ipcMain.handle('wfsx:cancel', async (_e, { orderId, sku, qty } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      if (!IS_DEMO) await wmClient().cancelInboundOrder(String(orderId || ''));
+      const n = Number(qty);
+      if (!IS_DEMO && sku && Number.isInteger(n) && n > 0) {
+        await new LinnworksClient(cfg.linnworks).changeStockLevels([{ sku: String(sku), delta: n }], cfg.linnworks.locationId,
+          'Capture Station WFS shipment cancelled', { note: `Walmart ${orderId} cancelled` });
+      }
+      wfsPlans.at = 0;
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // the receiving labels for a shipment's boxes, opened as a PDF
+  ipcMain.handle('wfsx:labels', async (_e, { shipmentId, boxes } = {}) => {
+    if (IS_DEMO) return { ok: false, error: 'Labels are not drawn in the demo.' };
+    try {
+      const pdf = await wmClient().shipmentLabels(String(shipmentId || ''), boxes);
+      const file = path.join(os.tmpdir(), `WFS-labels-${String(shipmentId).replace(/[^\w-]/g, '')}.pdf`);
+      fs.writeFileSync(file, pdf);
+      const err = await shell.openPath(file);
+      return err ? { ok: false, error: err } : { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   /* ----- walmart.com inside the tab ----- */
   const WM_SITE_PARTITION = 'persist:walmart-site';
   const WM_SITE = process.env.CAPTURE_WALMART_SITE || 'https://www.walmart.com'; // a stand-in in test runs only
@@ -5905,7 +6181,7 @@ exit 1
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
-      v: 8, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30 · v6: + wfsChBySku · v7: + stock rows (design 1a) · v8: + buyRows (60-day What to buy)
+      v: 9, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30 · v6: + wfsChBySku · v7: + stock rows (design 1a) · v8: + buyRows (60-day What to buy) · v9: + wfsSold (Send to WFS popup)
       stock,
       buyRows,
       wfsCand,
@@ -5914,6 +6190,11 @@ exit 1
       wfsChBySku: Object.fromEntries(Object.entries(stats)
         .filter(([, st]) => Object.keys(st.wfsCh).length)
         .map(([k, st]) => [k, Object.entries(st.wfsCh).sort((a, b) => b[1] - a[1]).map(([c]) => c)])),
+      // units sold from WFS in the window, per item and per Walmart listing
+      // (the Stock row's Send to WFS popup, owner 2026-11-07)
+      wfsSold: Object.fromEntries(Object.entries(stats)
+        .filter(([, st]) => st.wfsQty)
+        .map(([k, st]) => [k, { q: st.wfsQty, ch: st.wfsCh }])),
       low: low.slice(0, 40),
       lowCount: low.length,
       coverDays: cover,
@@ -5979,7 +6260,8 @@ exit 1
       historyPending: !hist,
     };
     const sold = live ? live.sold : null;
-    let money = overviewCache.money && overviewCache.money.v === 8 ? overviewCache.money : null;
+    // v8 money still serves (no 30-day re-read on update); v9 adds wfsSold
+    let money = overviewCache.money && overviewCache.money.v >= 8 ? overviewCache.money : null;
     const stale = !money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS;
     if (stale && !overviewCache.promise && Date.now() - (overviewCache.failedAt || 0) > OVERVIEW_RETRY_MS) {
       // stale (or missing) money refreshes behind the page; a pass that just
@@ -6735,24 +7017,30 @@ exit 1
       .filter(i => i.sku && Number.isInteger(i.qty) && i.qty > 0);
     if (!items.length) return { ok: false, error: 'Add at least one line with a SKU and quantity.' };
     try {
-      // stock leaves the physical warehouse; WFS FULFILLED is fed by the
-      // Linnworks WFS connection itself, so only the primary is adjusted
-      const client = new LinnworksClient(cfg.linnworks);
-      await client.changeStockLevels(
-        items.map(i => ({ sku: i.sku, delta: -i.qty })),
-        cfg.linnworks.locationId,
-        'Capture Station WFS shipment',
-        { note: note.slice(0, 120) }
-      );
-      const id = db.createWfsShipment({ note, items });
-      // the shared folder hears about it at once (append-only aux log)
-      retsync.appendAux('wfs', { id, ts: new Date().toISOString(), note, items });
-      writeWfsCsv();
-      return { ok: true, id };
+      return { ok: true, id: await wfsLogShipment(cfg, note, items) };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
+  // units leaving for WFS: off the warehouse in Linnworks, into the local
+  // shipment log and the shared folder (WFS Shipments and the Stock row's
+  // Send to WFS both come through here)
+  async function wfsLogShipment(cfg, note, items) {
+    // stock leaves the physical warehouse; WFS FULFILLED is fed by the
+    // Linnworks WFS connection itself, so only the primary is adjusted
+    const client = new LinnworksClient(cfg.linnworks);
+    await client.changeStockLevels(
+      items.map(i => ({ sku: i.sku, delta: -i.qty })),
+      cfg.linnworks.locationId,
+      'Capture Station WFS shipment',
+      { note: String(note || '').slice(0, 120) }
+    );
+    const id = db.createWfsShipment({ note, items });
+    // the shared folder hears about it at once (append-only aux log)
+    retsync.appendAux('wfs', { id, ts: new Date().toISOString(), note, items });
+    writeWfsCsv();
+    return id;
+  }
   /* ---- wholesale invoices: customers, invoices, serial numbers ---- */
   const wsStation = () => stockLogComputer();
   const wsOff = () => { const c = config.load(); return c.captureOnly || !(c.pages && c.pages.wholesale); };

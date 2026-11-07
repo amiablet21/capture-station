@@ -1126,8 +1126,248 @@ WalmartClient.prototype.inboundShipmentItems = async function (shipmentId) {
   return parseInboundItems(body);
 };
 
+/* ---------- Send to WFS from a Stock row (owner 2026-11-07) ----------
+   Create Inbound Shipment, its errors, cancel, the receiving (box) labels,
+   and Convert items for WFS. Shapes per developer.walmart.com (US): the
+   createshipment / getinboundordererrors / cancelshipment /
+   createinboundshipmentlabelv2 references, and the OMNI_WFS "Convert
+   existing item to WFS" spec 5.0.20260829-12_49_39-api (Consolidated
+   schema, Oct 2026). */
+
+// an inbound order's arrival day as the date-time Walmart takes
+const wfsDay = (day) => `${String(day || '').slice(0, 10)}T00:00:00.000Z`;
+
+function inboundAddress(a, countryCode = 'US') {
+  const out = {
+    addressLine1: clip(a.line1, 60),
+    city: clip(a.city, 40),
+    stateCode: clip(a.state, 2).toUpperCase(),
+    countryCode,
+    postalCode: String(a.zip || '').trim(),
+  };
+  if (a.line2) out.addressLine2 = clip(a.line2, 60);
+  return out;
+}
+
+// { orderId, returnTo, arriveBy (YYYY-MM-DD), lines: [{ sku, gtin, desc, qty,
+// perBox }] } -> the Create Inbound Shipment body. itemQty is the units,
+// vendorPackQty the boxes and innerPackQty the units in each box, so a line
+// must fill whole boxes (checked by the caller).
+function buildInboundOrder({ orderId, returnTo, arriveBy, lines }, countryCode = 'US') {
+  return {
+    inboundOrderId: clip(orderId, 100),
+    returnAddress: inboundAddress(returnTo || {}, countryCode),
+    orderItems: arr(lines).map(l => ({
+      productId: toGtin14(l.gtin),
+      productType: 'GTIN',
+      sku: String(l.sku).slice(0, 50),
+      itemDesc: clip(l.desc || l.sku, 150),
+      itemQty: Number(l.qty),
+      vendorPackQty: Math.round(Number(l.qty) / Number(l.perBox)),
+      innerPackQty: Number(l.perBox),
+      expectedDeliveryDate: wfsDay(arriveBy),
+    })),
+  };
+}
+
+// what to fix before anything is sent: [] when the order can go
+function inboundProblems({ returnTo, arriveBy, lines }) {
+  const p = [];
+  const a = returnTo || {};
+  if (!a.line1 || !a.city || !a.state || !a.zip) p.push('Set the return address (Settings › Shipping, Ship from).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(arriveBy || ''))) p.push('Pick the date it should arrive at Walmart.');
+  if (!arr(lines).length) p.push('Nothing to send.');
+  for (const l of arr(lines)) {
+    const qty = Number(l.qty), per = Number(l.perBox);
+    if (!toGtin14(l.gtin)) p.push(`${l.sku}: no UPC / GTIN to send it under.`);
+    if (!Number.isInteger(qty) || qty < 1) p.push(`${l.sku}: enter the units to send.`);
+    else if (!Number.isInteger(per) || per < 1) p.push(`${l.sku}: enter the units in each box.`);
+    else if (qty % per) p.push(`${l.sku}: ${qty} units don't fill whole boxes of ${per}. Use ${Math.floor(qty / per) * per || per} or ${Math.ceil(qty / per) * per}.`);
+  }
+  return p;
+}
+
+// Walmart's answer -> the shipments it split the order into, each with its
+// warehouse; a FAIL answer (sometimes with HTTP 200) throws its errors
+function parseInboundCreate(body) {
+  const failed = body && (String(body.status || '').toUpperCase() === 'FAIL' || (arr(body.errors).length && !body.payload));
+  if (failed) throw new WalmartError(errorText(body, 400));
+  const list = arr(body && (body.payload || body.data || body.shipments));
+  return list.map(s => {
+    const a = s.shipToAddress || {};
+    return {
+      id: clip(s.shipmentId || s.id, 40),
+      shipTo: clip([a.fcName, [a.city, a.stateCode].filter(Boolean).join(', ')].filter(Boolean).join(' · '), 90),
+      address: [a.addressLine1, a.addressLine2, [a.city, a.stateCode, a.postalCode].filter(Boolean).join(' ')].filter(Boolean).map(x => clip(x, 80)).join(', '),
+      eta: dayOf(s.expectedDeliveryDate),
+      items: arr(s.shipmentItems).map(i => ({ sku: clip(i.vendorSku || i.sku, 80), qty: Number(i.itemQty) || 0 })).filter(i => i.sku),
+    };
+  }).filter(s => s.id);
+}
+
+// GET inbound-shipment-errors for one order -> the error lines Walmart kept
+function parseInboundErrors(body) {
+  const out = [];
+  for (const o of arr(body && (body.payload || body.data))) {
+    for (const e of arr(o && o.errors)) {
+      const t = [e.field ? `${e.field}: ` : '', e.description || e.code || ''].join('').trim();
+      if (t) out.push(clip(t, 300));
+    }
+  }
+  return out;
+}
+
+// the OMNI_WFS spec this app builds against (the header must name it)
+const OMNI_WFS_VERSION = '5.0.20260829-12_49_39-api';
+// product types offered when converting; any spec product type works
+const WFS_PRODUCT_TYPES = ['Tablet Computers', 'Cell Phones', 'Laptop Computers', 'Smart Watches', 'Headphones', 'Cell Phone Cases', 'Tablet Holders, Carriers & Cases'];
+const WFS_CONDITIONS = ['New', 'New with defects', 'New without box', 'Open Box', 'Pre-Owned: Fair', 'Pre-Owned: Good', 'Pre-Owned: Like New', 'Restored: Fair', 'Restored: Good', 'Restored: Like New', 'Restored: Premium'];
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : NaN; };
+
+// what the convert form is missing: [] when it can go
+function convertProblems(c) {
+  const p = [];
+  if (!c || !c.sku) return ['No listing picked.'];
+  if (!toGtin14(c.gtin)) p.push('The listing\'s UPC / GTIN.');
+  if (!(num(c.price) > 0)) p.push('The listing\'s price.');
+  if (!c.productName) p.push('Product name.');
+  if (!c.brand) p.push('Brand.');
+  if (!/^https?:\/\//i.test(String(c.imageUrl || ''))) p.push('Main image link.');
+  if (!WFS_CONDITIONS.includes(c.condition)) p.push('Condition.');
+  if (!c.productType) p.push('Product type.');
+  for (const [k, label] of [['length', 'Length'], ['width', 'Width'], ['height', 'Height'], ['weight', 'Weight']]) {
+    if (!(num(c[k]) > 0)) p.push(`${label} of one boxed unit.`);
+  }
+  if (!c.origin) p.push('Country of origin.');
+  if (c.battery === 'lithium-ion') {
+    if (!(num(c.wh) > 0)) p.push('Battery watt-hours.');
+    if (!(num(c.batteryGrams) > 0)) p.push('Battery weight (grams).');
+    if (!(num(c.cells) >= 1)) p.push('Battery cell count.');
+    if (!c.batteryModel) p.push('Battery model.');
+    if (!/^https?:\/\//i.test(String(c.sdsUrl || ''))) p.push('Link to the battery\'s safety data sheet (SDS).');
+  }
+  return p;
+}
+
+// convert form -> the OMNI_WFS feed body for one existing listing. Required
+// by the spec: Visible (per product type: productName, brand,
+// isProp65WarningRequired, mainImageUrl, netContent, condition), Orderable
+// (sku, ids, price, stateRestrictions, electronicsIndicator,
+// batteryTechnologyType, isChemical/isAerosol/isPesticide; a lithium-ion
+// battery adds hasBatteries, batterySize, safetyDataSheet,
+// numberOfHazardousComponents and lithiumIonBatteries) and TradeItem (sku,
+// countryOfOriginAssembly, each: inches and pounds).
+function buildConvertFeed(c) {
+  const lithium = c.battery === 'lithium-ion';
+  const round = (v, d = 2) => Math.round(num(v) * 10 ** d) / 10 ** d;
+  const orderable = {
+    sku: String(c.sku).slice(0, 50),
+    productIdentifiers: { productIdType: 'GTIN', productId: toGtin14(c.gtin) },
+    price: round(c.price),
+    stateRestrictions: [{ stateRestrictionsText: 'None' }],
+    electronicsIndicator: c.electronics === false ? 'No' : 'Yes',
+    batteryTechnologyType: lithium ? 'Lithium Ion' : 'Does Not Contain a Battery',
+    isChemical: 'No',
+    isAerosol: 'No',
+    isPesticide: 'No',
+  };
+  if (lithium) {
+    Object.assign(orderable, {
+      hasBatteries: 'Yes',
+      batterySize: 'Proprietary Device Specific',
+      safetyDataSheet: [String(c.sdsUrl).trim().slice(0, 2500)],
+      numberOfHazardousComponents: 1,
+      lithiumIonBatteries: {
+        ionNumberOfBatteries: 1,
+        ionNumberOfBatteryCells: Math.max(1, Math.round(num(c.cells))),
+        ionBatteryFormFactor: 'Battery',
+        ionBatteryModel: clip(c.batteryModel, 400),
+        batteryWattHour: round(c.wh),
+        ionIncludedBatteryPackaging: 'Contained In',
+        ionBatteryWeight: round(c.batteryGrams),
+      },
+    });
+  }
+  return {
+    SupplierItemFeedHeader: { businessUnit: 'WALMART_US', locale: 'en', version: OMNI_WFS_VERSION },
+    SupplierItem: [{
+      Visible: {
+        [c.productType]: {
+          productName: clip(c.productName, 200),
+          brand: clip(c.brand, 60),
+          isProp65WarningRequired: 'No',
+          mainImageUrl: String(c.imageUrl).trim(),
+          netContent: { productNetContentMeasure: 1, productNetContentUnit: 'Each' },
+          condition: c.condition,
+        },
+      },
+      Orderable: orderable,
+      TradeItem: {
+        sku: String(c.sku).slice(0, 50),
+        countryOfOriginAssembly: [c.origin],
+        each: { eachDepth: round(c.length), eachWidth: round(c.width), eachHeight: round(c.height), eachWeight: round(c.weight, 3) },
+      },
+    }],
+  };
+}
+
+// a seller's own item by SKU -> what the convert form can start from
+function parseItemFacts(j) {
+  const it = arr((j && (j.ItemResponse || j.itemResponse || j.items)) || j)[0] || {};
+  const price = it.price && typeof it.price === 'object' ? it.price.amount : it.price;
+  return {
+    sku: String(it.sku || ''),
+    productName: clip(it.productName, 200),
+    brand: clip(it.brand, 60),
+    gtin: String(it.gtin || it.upc || '').replace(/\D/g, ''),
+    price: money2(price),
+    productType: clip(it.productType, 80),
+    condition: clip(it.condition, 40),
+    imageUrl: /^https?:\/\//i.test(String(it.mainImageUrl || '')) ? String(it.mainImageUrl) : '',
+    itemId: String(it.itemId || it.wpid || ''),
+  };
+}
+
+// Create Inbound Shipment. Walmart's samples disagree on the return
+// address's country ("USA" in the request sample, "US" in the response):
+// a refusal naming the country is retried once with the other spelling.
+WalmartClient.prototype.createInboundShipment = async function (order) {
+  try {
+    return parseInboundCreate(await this.call('POST', '/v3/fulfillment/inbound-shipments', buildInboundOrder(order, 'US')));
+  } catch (e) {
+    if (!/country/i.test(String(e.message))) throw e;
+    return parseInboundCreate(await this.call('POST', '/v3/fulfillment/inbound-shipments', buildInboundOrder(order, 'USA')));
+  }
+};
+WalmartClient.prototype.inboundErrors = async function (orderId) {
+  const q = `inboundOrderId=${encodeURIComponent(orderId)}&limit=10&offset=0`;
+  return parseInboundErrors(await this.call('GET', `/v3/fulfillment/inbound-shipment-errors?${q}`));
+};
+WalmartClient.prototype.cancelInboundOrder = async function (orderId) {
+  const body = await this.call('DELETE', `/v3/fulfillment/inbound-shipments/${encodeURIComponent(orderId)}`);
+  if (body && String(body.status || '').toUpperCase() === 'FAIL') throw new WalmartError(errorText(body, 400));
+  return true;
+};
+// the receiving labels for one shipment's boxes (a 4x6 PDF, one per box)
+WalmartClient.prototype.shipmentLabels = async function (shipmentId, boxes) {
+  const body = { shipmentId: String(shipmentId), labelSize: 'X4_6', labelFormat: 'PDF', loadTypes: [{ loadType: 'SINGLE SKU', count: Math.max(1, Math.round(Number(boxes) || 1)) }] };
+  const r = await this.call('POST', '/v3/fulfillment/shipment-label', body, { accept: 'application/pdf' });
+  if (!r || !r.buffer || r.buffer.length < 100) throw new WalmartError('Walmart sent back no label file.');
+  return r.buffer;
+};
+WalmartClient.prototype.itemFacts = async function (sku) {
+  return parseItemFacts(await this.call('GET', `/v3/items/${encodeURIComponent(String(sku))}`));
+};
+WalmartClient.prototype.submitConvertFeed = async function (form) {
+  const body = await this.call('POST', '/v3/feeds?feedType=OMNI_WFS', buildConvertFeed(form));
+  if (!body || !body.feedId) throw new WalmartError(`Walmart took the request but returned no feed id${body ? ` (${errorText(body, 200)})` : ''}.`);
+  return String(body.feedId);
+};
+
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
+  buildInboundOrder, inboundProblems, parseInboundCreate, parseInboundErrors,
+  buildConvertFeed, convertProblems, parseItemFacts, OMNI_WFS_VERSION, WFS_PRODUCT_TYPES, WFS_CONDITIONS,
   parseInboundShipments, parseInboundItems,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,

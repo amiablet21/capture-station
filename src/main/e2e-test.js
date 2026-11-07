@@ -1908,6 +1908,21 @@ module.exports = async function run({ app, win, db, clipboard }) {
             res.setHeader('Content-Type', 'image/png');
             return res.end(Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 4, 176, 0, 0, 7, 8]), Buffer.alloc(200)]));
           }
+          // Send to WFS (owner 2026-11-07): WFS stock, shipping plans and
+          // their items, the listing, create inbound, the convert feed
+          if (req.url.startsWith('/v3/fulfillment/inventory')) return res.end(JSON.stringify({ payload: { inventory: [{ sku: 'WX-WFS', shipNodes: [{ onHandQty: 12, availToSellQty: 12 }] }] } }));
+          if (req.url.startsWith('/v3/fulfillment/inbound-shipments?')) return res.end(JSON.stringify({ headers: { totalCount: 1 }, payload: [
+            { inboundOrderId: 'HOT-9', shipmentId: '4400001WFB', shipToAddress: { fcName: 'LAX2', city: 'Perris', stateCode: 'CA' }, status: 'CLOSED', createdDate: '2026-10-03T10:00:00Z', shipmentUnits: 25, receivedUnits: 24, carrierName: 'FedEx' },
+            { inboundOrderId: 'HOT-8', shipmentId: '4400000WFB', shipToAddress: { fcName: 'PHL5', city: 'Bethlehem', stateCode: 'PA' }, status: 'CLOSED', createdDate: '2026-09-20T10:00:00Z', shipmentUnits: 10, receivedUnits: 10, carrierName: 'UPS' } ] }));
+          if (req.url.startsWith('/v3/fulfillment/inbound-shipment-items?')) {
+            const sid = new URL(req.url, 'http://x').searchParams.get('shipmentId');
+            return res.end(JSON.stringify({ payload: sid === '4400001WFB' ? [{ shipmentId: sid, sku: 'WX-WFS', itemQty: 25, receivedQty: 24 }] : [{ shipmentId: sid, sku: 'SOMETHING-ELSE', itemQty: 10, receivedQty: 10 }] }));
+          }
+          if (req.url === '/v3/fulfillment/inbound-shipments' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK', payload: [
+            { shipmentId: '4400777WFB', shipToAddress: { fcName: 'LAX2', addressLine1: '2500 Fleet Way', city: 'Perris', stateCode: 'CA', postalCode: '92571' }, shipmentItems: [{ vendorSku: 'WX-WFS', itemQty: 30 }], expectedDeliveryDate: '2026-11-20T00:00:00.000Z' }] }));
+          if (req.url.startsWith('/v3/items/WX-') || req.url.startsWith('/v3/items/wx')) return res.end(JSON.stringify({ ItemResponse: [{ sku: decodeURIComponent(req.url.split('/')[3]), productName: 'Galaxy Tab Test 64GB', brand: 'SAMSUNG', gtin: '00195949183522', price: { amount: 129 }, productType: 'Tablet Computers', condition: 'New' }] }));
+          if (req.url === '/v3/feeds?feedType=OMNI_WFS' && req.method === 'POST') return res.end(JSON.stringify({ feedId: 'FEEDWFS1' }));
+          if (req.url.startsWith('/v3/feeds/FEEDWFS1')) return res.end(JSON.stringify({ feedStatus: 'PROCESSED', itemsReceived: 1, itemsSucceeded: 1, itemDetails: { itemIngestionStatus: [{ sku: 'wxconv', ingestionStatus: 'SUCCESS' }] } }));
           res.statusCode = 404; res.end('{}');
         });
       });
@@ -2129,6 +2144,114 @@ module.exports = async function run({ app, win, db, clipboard }) {
             await exec(`document.getElementById('osLabelDlg').close()`);
             await sleep(400);
             fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-order-ship-done.png'), (await win.webContents.capturePage()).toPNG());
+          }
+          // Send to WFS from a Stock row (owner 2026-11-07): the popup reads
+          // the item's Walmart listings and shipments, converts a listing
+          // through the OMNI_WFS feed and creates the inbound shipment
+          {
+            const wmP = wmMod.WalmartClient.prototype;
+            const keep = { gcs: lwMod.LinnworksClient.prototype.getChannelSkus, gmc: lwMod.LinnworksClient.prototype.getMappingChannels, gci: lwMod.LinnworksClient.prototype.getChannelItems, csl: lwMod.LinnworksClient.prototype.changeStockLevels };
+            const moved = [];
+            lwMod.LinnworksClient.prototype.getChannelSkus = async () => [
+              { sku: 'WX-WFS', source: 'WALMART', subSource: 'Walmart US' }, { sku: 'wxconv', source: 'WALMART', subSource: 'Walmart US' }, { sku: 'WX-EBAY', source: 'EBAY', subSource: 'eBay' }];
+            lwMod.LinnworksClient.prototype.getMappingChannels = async () => [{ id: 'cw', source: 'WALMART', subSource: 'Walmart US' }];
+            lwMod.LinnworksClient.prototype.getChannelItems = async () => [{ sku: 'WX-WFS', linkedItemId: 'wx-1' }, { sku: 'wxconv', linkedItemId: 'wx-1' }];
+            lwMod.LinnworksClient.prototype.changeStockLevels = async (entries) => { moved.push(...entries); return entries; };
+            try {
+              const built = wmMod.buildInboundOrder({ orderId: 'DWS-1', returnTo: { line1: '1 Main St', city: 'Edison', state: 'nj', zip: '08817' }, arriveBy: '2026-11-18',
+                lines: [{ sku: 'WX-WFS', gtin: '195949183522', desc: 'Tab', qty: 60, perBox: 10 }] });
+              check('wfs send: the inbound order carries GTIN-14, boxes and units per box, the arrival as a date-time',
+                built.orderItems[0].productId === '00195949183522' && built.orderItems[0].vendorPackQty === 6 && built.orderItems[0].innerPackQty === 10
+                && built.orderItems[0].expectedDeliveryDate === '2026-11-18T00:00:00.000Z' && built.returnAddress.stateCode === 'NJ', built);
+              check('wfs send: units that don\'t fill whole boxes are refused before Walmart sees them',
+                /whole boxes/.test(wmMod.inboundProblems({ returnTo: { line1: 'a', city: 'b', state: 'NJ', zip: '1' }, arriveBy: '2026-11-18', lines: [{ sku: 'X', gtin: '195949183522', qty: 65, perBox: 10 }] }).join(' ')));
+              const feed = wmMod.buildConvertFeed({ sku: 'wxconv', gtin: '195949183522', price: 129, productName: 'Tab', brand: 'SAMSUNG', imageUrl: 'https://x/y.jpg', condition: 'New', productType: 'Tablet Computers',
+                length: 10.6, width: 7, height: 1.9, weight: 1.3, origin: 'VN - Viet Nam', battery: 'lithium-ion', wh: 19, batteryGrams: 70, cells: 1, batteryModel: 'EB-1', sdsUrl: 'https://x/sds.pdf' });
+              const o = feed.SupplierItem[0].Orderable;
+              check('wfs convert: OMNI_WFS 5.0 header, the product type block, lithium-ion with its SDS and battery details',
+                feed.SupplierItemFeedHeader.version === wmMod.OMNI_WFS_VERSION && feed.SupplierItemFeedHeader.businessUnit === 'WALMART_US'
+                && feed.SupplierItem[0].Visible['Tablet Computers'].brand === 'SAMSUNG' && o.batteryTechnologyType === 'Lithium Ion' && o.hasBatteries === 'Yes'
+                && o.safetyDataSheet[0] === 'https://x/sds.pdf' && o.lithiumIonBatteries.batteryWattHour === 19 && feed.SupplierItem[0].TradeItem.each.eachDepth === 10.6, feed);
+
+              await exec(`api.setConfig({ ups: { shipFrom: { name: 'DWS', company: 'DWS', phone: '7325550100', line1: '1 Main St', city: 'Edison', state: 'NJ', zip: '08817' } } })`);
+              const info = await exec(`api.wfsxInfo('WX-TAB', 'wx-1')`);
+              const lWfs = info.ok && info.listings.find(l => l.sku === 'WX-WFS');
+              const lConv = info.ok && info.listings.find(l => l.sku === 'wxconv');
+              check('wfs popup: only the Walmart listings, the one in Walmart\'s WFS stock marked on WFS with its count',
+                info.ok && info.listings.length === 2 && lWfs && lWfs.onWfs && lWfs.atWfs === 12 && lConv && !lConv.onWfs, info);
+              let info2 = info;
+              for (let i = 0; i < 10 && info2.ok && info2.unknown; i++) { await sleep(400); info2 = await exec(`api.wfsxInfo('WX-TAB', 'wx-1')`); }
+              check('wfs popup: the item\'s shipments are the ones that carried its listings',
+                info2.ok && info2.shipments.length === 1 && info2.shipments[0].id === '4400001WFB' && info2.shipments[0].lines[0].received === 24, info2);
+
+              // the popup itself, opened from the row's spark
+              await exec(`(() => {
+                const lvl = (loc, name, n) => ({ locationId: loc, locationName: name, stockLevel: n, inOrders: 0, due: 0, minimumLevel: 0, available: n });
+                showPage('stock');
+                stockSeed({ ok: true, locationId: 'L1', locationName: 'Digital World Shop', items: [
+                  { stockItemId: 'wx-1', sku: 'WX-TAB', title: 'Galaxy Tab Test 64GB', barcode: '195949183522', category: '', image: '', levels: [lvl('L1', 'Digital World Shop', 300), lvl('LW', 'WFS FULFILLED', 12)] },
+                ] });
+                renderStock();
+              })()`);
+              await sleep(300);
+              const opened = await exec(`(() => { const b = document.querySelector('button.stock-wfs-btn[data-wfssku="WX-TAB"]'); if (!b) return 'no spark'; b.click(); return 'ok'; })()`);
+              await sleep(1500);
+              const pop = await exec(`(() => ({ open: document.getElementById('wfsxDialog').open,
+                cards: [...document.querySelectorAll('#wfsxRight .wfsx-opt')].map(b => b.dataset.wxpick),
+                strip: [...document.querySelectorAll('#wfsxLeft .wfsx-cell b')].map(b => b.textContent),
+                rows: document.querySelectorAll('#wfsxLeft .wfsx-row').length }))()`);
+              check('wfs popup: the spark opens it with the stock strip, the shipments and the Walmart listings to pick',
+                opened === 'ok' && pop.open && pop.cards.join(',') === 'WX-WFS,wxconv' && pop.strip[0] === '300' && pop.strip[2] === '12' && pop.rows === 1, { opened, pop });
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-pick.png'), (await win.webContents.capturePage()).toPNG());
+              // pick the listing that isn't on WFS: the warning and Convert
+              await exec(`document.querySelector('#wfsxRight [data-wxpick="wxconv"]').click()`);
+              await sleep(200);
+              const warn = await exec(`({ warn: !!document.querySelector('#wfsxRight .wfsx-warn'), btn: (document.querySelector('#wfsxRight [data-wx="convert"]') || {}).textContent })`);
+              check('wfs popup: a listing not on WFS warns and offers Convert to WFS', warn.warn && warn.btn === 'Convert to WFS', warn);
+              await exec(`document.querySelector('#wfsxRight [data-wx="convert"]').click()`);
+              await sleep(900);
+              const form = await exec(`(() => ({ name: (document.querySelector('[data-wxf="productName"]') || {}).value, brand: (document.querySelector('[data-wxf="brand"]') || {}).value, type: (document.querySelector('[data-wxf="productType"]') || {}).value }))()`);
+              check('wfs convert: the form starts from the listing as Walmart has it', form.name === 'Galaxy Tab Test 64GB' && form.brand === 'SAMSUNG' && form.type === 'Tablet Computers', form);
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-convert.png'), (await win.webContents.capturePage()).toPNG());
+              await exec(`(() => { const set = (k, v) => { const el = document.querySelector('[data-wxf="' + k + '"]'); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+                set('length', '10.6'); set('width', '7'); set('height', '1.9'); set('weight', '1.3'); set('wh', '19'); set('batteryGrams', '70'); set('cells', '1'); set('batteryModel', 'EB-BX216ABY'); set('sdsUrl', 'https://example.com/sds.pdf');
+                set('imageUrl', 'https://example.com/a.jpg'); })()`);
+              const seenBefore = upsSeen.length;
+              await exec(`document.querySelector('#wfsxRight [data-wx="sendConvert"]').click()`);
+              await sleep(4500);
+              const sentFeed = upsSeen.slice(seenBefore).find(x => x.url === '/v3/feeds?feedType=OMNI_WFS');
+              const convState = await exec(`({ step: WX && WX.step, conv: WX && WX.conv && WX.conv.status, cont: !!document.querySelector('#wfsxRight [data-wx="toShip"]') })`);
+              let sentBody = null; try { sentBody = JSON.parse(sentFeed.body); } catch { /* checked below */ }
+              check('wfs convert: Send to Walmart posts the OMNI_WFS feed and the approval leads on to the shipment',
+                !!sentBody && sentBody.SupplierItem[0].Orderable.sku === 'wxconv' && sentBody.SupplierItem[0].Orderable.lithiumIonBatteries.ionBatteryModel === 'EB-BX216ABY'
+                && convState.conv === 'APPROVED' && convState.cont, { convState, sentBody });
+              // the shipment: 30 units in boxes of 10, confirmed, created at Walmart
+              await exec(`document.querySelector('#wfsxRight [data-wx="toShip"]').click()`);
+              await sleep(200);
+              await exec(`(() => { const u = document.querySelector('[data-wxunits]'); u.value = '30'; u.dispatchEvent(new Event('input', { bubbles: true })); u.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+              await sleep(150);
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-ship.png'), (await win.webContents.capturePage()).toPNG());
+              await exec(`document.querySelector('#wfsxRight [data-wx="create"]').click()`);
+              await sleep(150);
+              const asks = await exec(`({ confirm: !!document.querySelector('#wfsxRight .wfsx-confirm'), btn: document.querySelector('#wfsxRight [data-wx="create"]').textContent })`);
+              check('wfs send: Create shipment asks once more before anything goes to Walmart', asks.confirm && asks.btn === 'Yes, create it', asks);
+              const before = upsSeen.length;
+              await exec(`document.querySelector('#wfsxRight [data-wx="create"]').click()`);
+              await sleep(1800);
+              const posted = upsSeen.slice(before).find(x => x.url === '/v3/fulfillment/inbound-shipments' && x.method === 'POST');
+              let order = null; try { order = JSON.parse(posted.body); } catch { /* checked below */ }
+              const done = await exec(`({ step: WX && WX.step, ids: [...document.querySelectorAll('#wfsxRight .wfsx-made b')].map(b => b.textContent) })`);
+              check('wfs send: the inbound order goes to Walmart for the picked listing, the shipment Walmart made is shown',
+                !!order && order.orderItems[0].sku === 'wxconv' && order.orderItems[0].itemQty === 30 && order.orderItems[0].vendorPackQty === 3
+                && order.orderItems[0].productId === '00195949183522' && /^\d{5}/.test(order.returnAddress.postalCode) && done.step === 'done' && done.ids.join(',') === '4400777WFB', { order, done });
+              check('wfs send: the units come off the warehouse in Linnworks under the item\'s own SKU',
+                moved.some(m => m.sku === 'WX-TAB' && m.delta === -30), moved);
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-done.png'), (await win.webContents.capturePage()).toPNG());
+              await exec(`document.getElementById('wfsxDialog').close()`);
+            } finally {
+              Object.assign(lwMod.LinnworksClient.prototype, { getChannelSkus: keep.gcs, getMappingChannels: keep.gmc, getChannelItems: keep.gci, changeStockLevels: keep.csl });
+              void wmP;
+            }
           }
         } finally {
           lwMod.LinnworksClient.prototype.findOrderForLabel = realFind;

@@ -1412,6 +1412,12 @@
   <!-- WFS shipments: internal log of inventory sent to Walmart fulfilment -->
   <!-- owner pick 2026-09-09: design C with A's elements — the green-sheet
        lines and footer total on the left, past shipments always beside -->
+  <!-- Send to WFS from a Stock row (owner 2026-11-07): one wide popup
+       anchored under the row's Walmart spark; left = stock + previous
+       shipments, right = which listing / convert / shipment -->
+  <dialog id="wfsxDialog" class="dlg-wfsx" aria-label="Send to WFS">
+    <div class="wfsx-cols"><div id="wfsxLeft" class="wfsx-l"></div><div id="wfsxRight" class="wfsx-r"></div></div>
+  </dialog>
   <dialog id="wfsDialog" class="dlg dlg-wfs">
     <div class="wfs-cols">
       <div class="wfs-left">

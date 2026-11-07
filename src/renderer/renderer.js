@@ -233,6 +233,9 @@ const ICONS = {
   box: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
   arrowOut: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.52a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg>',
   chartBar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,200h-4V40a12,12,0,0,0-12-12H160a12,12,0,0,0-12,12V76H100A12,12,0,0,0,88,88v36H48a12,12,0,0,0-12,12v64H28a12,12,0,0,0,0,24H228a12,12,0,0,0,0-24ZM172,52h28V200H172ZM112,100h36V200H112ZM60,148H88v52H60Z"/></svg>',
+  // Walmart's spark (Send to WFS in a Stock row's tray, owner 2026-11-07)
+  spark: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/><path transform="rotate(60 12 12)" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/><path transform="rotate(120 12 12)" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/><path transform="rotate(180 12 12)" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/><path transform="rotate(240 12 12)" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/><path transform="rotate(300 12 12)" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/></svg>',
+  checkSmall: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg>',
   histThin: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>',
   clock: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>',
   monitor: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,36H48A28,28,0,0,0,20,64V168a28,28,0,0,0,28,28h68v20H88a12,12,0,0,0,0,24h80a12,12,0,0,0,0-24H140V196h68a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,132a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Z"/></svg>',
@@ -4724,6 +4727,7 @@ async function loadStockDeltas() {
 }
 
 function renderStock() {
+  wxLoadConversions(); // the rows' Converting tags (throttled, re-renders once)
   if (!stockCache) return;
   // an inline pad/stock edit is open and focused: redrawing the table now
   // would destroy it mid-type (the lazy delta/reorder/unlisted loaders all
@@ -4814,9 +4818,13 @@ function renderStock() {
     // dot on it means the SKU moved today
     const today = stockHistToday && stockHistToday[String(r.sku).toUpperCase()];
     const hist = `<button class="btn-icon stock-hist-btn ${today ? 'has-today' : ''}" data-histsku="${esc(r.sku)}" title="${esc(stockHistTip(today))}">${ICONS.histThin}</button>`;
+    // Send to WFS (owner 2026-11-07): the item's WFS shipments and the send
+    const wfsx = (state && !state.captureOnly && r.stockItemId)
+      ? `<button class="btn-icon stock-wfs-btn" data-wfssku="${esc(r.sku)}" data-wfssid="${esc(r.stockItemId)}" title="WFS: shipments and send">${ICONS.spark}</button>`
+      : '';
     return `<span class="stock-tray">
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
-      ${hist}${ds}${ren}${del}</span>`;
+      ${hist}${wfsx}${ds}${ren}${del}</span>`;
   };
   // when the search matched a linked channel SKU and not the row's own
   // fields, the matching channel SKU shows beside the row so the hit
@@ -4826,7 +4834,7 @@ function renderStock() {
     const hit = chSkuHit(r);
     return hit ? `<span class="stock-chhit" title="Matched this linked channel SKU">${esc(hit)}</span>` : '';
   };
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${r.isComposite ? '<span class="badge-unlisted badge-composite" title="A composite: it draws from its parts in Linnworks, so it holds no stock of its own — the count shown is what the parts can cover">composite</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${r.isComposite ? '<span class="badge-unlisted badge-composite" title="A composite: it draws from its parts in Linnworks, so it holds no stock of its own — the count shown is what the parts can cover">composite</span>' : ''}${deltaHtml(r)}${wxRowTag(r.sku)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   // dead-end searches offer the missing SKU as a one-click create; inside a
@@ -5766,6 +5774,15 @@ $('stockList').addEventListener('click', async (e) => {
   if (salesBtn) { openSalesDialog(salesBtn.dataset.salesku, Number(salesBtn.dataset.avail) || 0); return; }
   const histBtn = e.target.closest('button.stock-hist-btn');
   if (histBtn) { openStockHistory(histBtn.dataset.histsku); return; }
+  const wfsxBtn = e.target.closest('button.stock-wfs-btn');
+  if (wfsxBtn) { openWfsx(wfsxBtn.dataset.wfssku, wfsxBtn.dataset.wfssid, wfsxBtn); return; }
+  const wfsxTag = e.target.closest('[data-wfsxtag]');
+  if (wfsxTag) {
+    const row = wfsxTag.closest('td');
+    const b = row && row.querySelector('button.stock-wfs-btn');
+    if (b) openWfsx(b.dataset.wfssku, b.dataset.wfssid, b);
+    return;
+  }
   const padBtn = e.target.closest('button.ds-pad-btn');
   if (padBtn) { beginPadEdit(padBtn); return; }
   const dsRemove = e.target.closest('button.ds-remove-btn');
@@ -10813,6 +10830,475 @@ async function renderWfsPast() {
 // (WFS Shipments opens from the Stock page's Actions menu — see stockActionsDlg)
 $('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
 $('wfsClose').addEventListener('click', () => $('wfsDialog').close());
+
+/* ---------- Send to WFS from a Stock row (owner 2026-11-07) ----------
+   The Walmart spark in a row's hover tray opens one wide popup (approved
+   mock-up variants/wfs-send-from-stock.html). Left: the item's stock
+   (Warehouse › Inbound › At WFS, then its WFS sales) and its previous WFS
+   shipments, read from Walmart. Right: Send to WFS — which Walmart listing
+   (always asked, even with one), convert it when it isn't on WFS, then the
+   shipment, created at Walmart after a confirm; the units come off the
+   warehouse the way WFS Shipments always did. */
+// var, not let: renderStock (earlier in the file) may run before this line
+var WX = null; // eslint-disable-line no-var
+var wxConvs = null; // eslint-disable-line no-var -- { at, list }: open conversions, for the rows' tags
+const wxMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const wxDay = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return m ? `${wxMonths[Number(m[2]) - 1]} ${Number(m[3])}` : ''; };
+const wxYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const wxAgo = (ts) => { const d = Math.floor((Date.now() - ts) / 86400000); return d < 1 ? 'today' : d === 1 ? '1 day' : `${d} days`; };
+const wxItem = (sku) => (stockCache && stockCache.items.find(i => i.sku === sku)) || null;
+function wxLevels(it) {
+  const wfs = stockWfsLocation();
+  const home = it && stockCache ? it.levels.find(l => l.locationId === stockCache.locationId) : null;
+  const at = it && wfs ? it.levels.find(l => l.locationId === wfs.id) : null;
+  return { home: home ? Number(home.stockLevel) || 0 : 0, wfs: at ? Number(at.stockLevel) || 0 : 0 };
+}
+const wxListing = () => (WX && WX.info && WX.info.listings.find(l => l.sku === WX.pick)) || null;
+const wxInbound = () => (WX && WX.info ? WX.info.shipments : [])
+  .filter(s => !/closed|cancel/i.test(s.status))
+  .reduce((a, s) => a + s.lines.reduce((b, l) => b + Math.max(0, (Number(l.expected) || 0) - (Number(l.received) || 0)), 0), 0);
+// four weeks at the listing's WFS pace, less what's there and on the way,
+// in whole boxes, never more than the shelf holds
+function wxSuggest() {
+  const l = wxListing();
+  const per = Math.max(1, WX.perBox);
+  const home = wxLevels(wxItem(WX.sku)).home;
+  let n = per;
+  if (l && l.sold30 > 0) n = Math.ceil(Math.max(per, l.sold30 / 30 * 28 - l.atWfs - wxInbound()) / per) * per;
+  return Math.max(per, Math.min(n, Math.floor(home / per) * per || per));
+}
+
+async function wxLoadConversions(force) {
+  if (!wxConvs) wxConvs = { at: 0, list: [] };
+  if (!force && Date.now() - wxConvs.at < 5 * 60000) return;
+  wxConvs.at = Date.now();
+  try {
+    const r = await api.wfsxConversions();
+    if (r && r.ok) {
+      wxConvs.list = r.list || [];
+      if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
+    }
+  } catch { /* the tags are a nicety */ }
+}
+// a row's tag: a conversion still waiting on Walmart, or one it refused
+function wxRowTag(sku) {
+  const c = wxConvs && wxConvs.list.find(x => String(x.sku).toUpperCase() === String(sku).toUpperCase());
+  if (!c) return '';
+  return c.status === 'REJECTED'
+    ? `<span class="wfsx-rowtag is-bad" data-wfsxtag="${esc(sku)}" title="${esc((c.errors || []).join(' · ') || 'Walmart refused the conversion')}">WFS refused</span>`
+    : `<span class="wfsx-rowtag" data-wfsxtag="${esc(sku)}" title="${esc(c.channelSku)}: waiting on Walmart since ${new Date(c.at).toLocaleDateString()}">Converting · ${esc(wxAgo(c.at))}</span>`;
+}
+
+async function openWfsx(sku, sid, anchor) {
+  const it = wxItem(sku);
+  WX = { sku, sid, anchor, title: it ? it.title || '' : '', image: it ? it.image || '' : '', barcode: it ? it.barcode || '' : '',
+    info: null, err: '', pick: '', step: 'pick', perBox: 10, units: 0, arrive: wxYmd(new Date(Date.now() + 10 * 86400000)),
+    busy: false, confirm: false, result: null, facts: null, form: null, conv: null, polls: 0, msg: '' };
+  wxRender();
+  const dlg = $('wfsxDialog');
+  if (!dlg.open) dlg.showModal();
+  wxPlace();
+  await wxLoadInfo();
+}
+async function wxLoadInfo(again) {
+  const me = WX;
+  if (!me) return;
+  let res;
+  try { res = await api.wfsxInfo(me.sku, me.sid); } catch (e) { res = { ok: false, error: e.message }; }
+  if (WX !== me) return;
+  if (!res || !res.ok) { me.err = (res && res.error) || 'Could not read this item.'; wxRender(); return; }
+  me.info = res;
+  if (!again) {
+    const firstWfs = res.listings.find(l => l.onWfs) || res.listings[0];
+    me.pick = firstWfs ? firstWfs.sku : '';
+    me.units = wxSuggest();
+  }
+  wxRender();
+  wxPlace();
+  // older shipments' listings are read in the background: look again
+  if (res.unknown && (me.polls = (me.polls || 0) + 1) <= 4) setTimeout(() => { if (WX === me) wxLoadInfo(true); }, 7000);
+}
+function wxPlace() {
+  const dlg = $('wfsxDialog');
+  if (!dlg.open || !WX) return;
+  const w = Math.min(920, window.innerWidth - 16);
+  dlg.style.width = `${w}px`;
+  const a = WX.anchor && WX.anchor.isConnected ? WX.anchor.getBoundingClientRect() : null;
+  const left = a ? Math.max(8, Math.min(a.left + a.width / 2 + 34 - w, window.innerWidth - w - 8)) : Math.max(8, (window.innerWidth - w) / 2);
+  const h = dlg.offsetHeight;
+  let top = a ? a.bottom + 10 : 60;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, window.innerHeight - h - 8);
+  dlg.style.left = `${Math.round(left)}px`;
+  dlg.style.top = `${Math.round(top)}px`;
+  // the caret points at the spark when the popup hangs right under it
+  const caret = a && top === a.bottom + 10 ? Math.round(a.left + a.width / 2 - left - 6) : -100;
+  dlg.style.setProperty('--wx-caret', `${caret}px`);
+}
+
+/* the left side: the item, what's in stock, previous shipments */
+function wxChip(s) {
+  const exp = s.lines.reduce((a, l) => a + (Number(l.expected) || 0), 0);
+  const got = s.lines.reduce((a, l) => a + (Number(l.received) || 0), 0);
+  if (/cancel/i.test(s.status)) return '<span class="wfsx-chip is-grey">Cancelled</span>';
+  if (/closed/i.test(s.status)) return exp > got ? `<span class="wfsx-chip is-red">${exp - got} short</span>` : '<span class="wfsx-chip is-ok">Received</span>';
+  return `<span class="wfsx-chip is-wait">${esc(s.status || 'Open')}${s.eta && !/receiv/i.test(s.status) ? ` · ${esc(wxDay(s.eta))}` : ''}</span>`;
+}
+function wxLeft() {
+  const it = wxItem(WX.sku);
+  const lv = wxLevels(it);
+  const info = WX.info;
+  const sold = info && info.sold != null ? info.sold : null;
+  const multi = info && new Set(info.shipments.flatMap(s => s.lines.map(l => l.sku.toUpperCase()))).size > 1;
+  let list;
+  if (!info) list = WX.err ? '' : '<div class="wfsx-wait"><span class="spinner" aria-label="Loading"></span></div>';
+  else {
+    const convs = info.listings.filter(l => l.conversion).map(l => `
+      <button class="wfsx-conv${l.conversion.status === 'REJECTED' ? ' is-bad' : ''}" data-wxconv="${esc(l.sku)}">
+        <span class="wfsx-dot"></span><span>${l.conversion.status === 'REJECTED' ? 'WFS refused' : 'Converting'} <span class="mono">${esc(l.sku)}</span></span>
+        <span class="wfsx-chip ${l.conversion.status === 'REJECTED' ? 'is-red' : 'is-warn'}">${l.conversion.status === 'REJECTED' ? 'See why' : esc(wxAgo(l.conversion.at))}</span><span class="wfsx-chev">›</span></button>`).join('');
+    const sent = info.shipments.reduce((a, s) => a + s.lines.reduce((b, l) => b + (Number(l.expected) || 0), 0), 0);
+    const got = info.shipments.reduce((a, s) => a + s.lines.reduce((b, l) => b + (Number(l.received) || 0), 0), 0);
+    list = `${convs}${info.shipments.length ? `
+      <div class="wfsx-lh"><span>Shipment</span><span>Received</span><span>Status</span></div>
+      ${info.shipments.map(s => {
+        const exp = s.lines.reduce((a, l) => a + (Number(l.expected) || 0), 0);
+        const rec = s.lines.reduce((a, l) => a + (Number(l.received) || 0), 0);
+        const open = !/closed|cancel/i.test(s.status);
+        return `<div class="wfsx-row" title="${esc(`${s.id}${s.shipTo ? ` · ${s.shipTo}` : ''}`)}">
+          <div><div class="wfsx-rd">${esc(wxDay(s.created) || '—')}${s.carrier ? `<span>${esc(s.carrier)}</span>` : ''}</div>
+            <div class="wfsx-rc">${multi ? esc(s.lines.map(l => l.sku).join(', ')) : esc(s.shipTo || s.id)}</div></div>
+          <div class="wfsx-rn">${open && !rec ? '—' : rec}<em> / ${exp}</em></div>${wxChip(s)}</div>`;
+      }).join('')}
+      <div class="wfsx-lf">${info.shipments.length} shipment${info.shipments.length === 1 ? '' : 's'} · ${sent} sent · ${got} received${!multi && info.shipments[0] ? ` · into <span class="mono">${esc(info.shipments[0].lines[0].sku)}</span>` : ''}</div>`
+      : `<div class="wfsx-empty">${info.listings.length ? 'No WFS shipments for this item yet.' : 'No Walmart listing is linked to this item.'}</div>`}
+      ${info.unknown ? `<p class="wfsx-note">Reading ${info.unknown} older shipment${info.unknown === 1 ? '' : 's'} from Walmart…</p>` : ''}
+      ${info.plansError ? `<p class="wfsx-note">Walmart's shipments: ${esc(info.plansError)}</p>` : ''}`;
+  }
+  return `<div class="wfsx-head">
+      <div class="wfsx-img">${WX.image ? `<img src="${esc(WX.image)}" alt="" />` : ''}</div>
+      <div class="wfsx-id"><div class="wfsx-sku mono">${esc(WX.sku)}</div><div class="wfsx-title">${esc(WX.title)}</div></div>
+    </div>
+    <div class="wfsx-strip">
+      <div class="wfsx-cell"><span>Warehouse</span><b>${lv.home.toLocaleString()}</b></div><i class="wfsx-ar">›</i>
+      <div class="wfsx-cell is-in"><span>Inbound</span><b>${info ? wxInbound() : '—'}</b></div><i class="wfsx-ar">›</i>
+      <div class="wfsx-cell"><span>At WFS</span><b>${lv.wfs.toLocaleString()}</b></div>
+      <div class="wfsx-cell is-sold"${sold == null ? ' title="Fills in once the Overview has read the last 30 days of sales"' : ''}><span>Sold at WFS</span><b>${sold == null ? '—' : sold}</b><small>${sold == null ? '30 days' : `30 days · ${(sold / 30).toFixed(1)}/day`}</small></div>
+    </div>
+    <div class="wfsx-lt"><b>Previous shipments</b></div>
+    <div class="wfsx-list">${list}</div>`;
+}
+
+/* the right side: Send to WFS */
+function wxSteps(i) {
+  const l = wxListing();
+  // Convert shows while the picked listing isn't on WFS, and stays in the
+  // bar once this popup converted it
+  const steps = (l && !l.onWfs) || WX.converted ? ['Listing', 'Convert', 'Shipment'] : ['Listing', 'Shipment'];
+  return `<div class="wfsx-prog n${steps.length}">${steps.map((_, k) => `<i class="${k <= i ? 'is-on' : ''}"></i>`).join('')}</div>
+    <div class="wfsx-progl n${steps.length}">${steps.map((t, k) => k === i ? `<b>${t}</b>` : `<span>${t}</span>`).join('')}</div>`;
+}
+function wxRight() {
+  const head = `<div class="wfsx-rh">${ICONS.spark}<span>Send to WFS</span><button class="dlg-x" data-wx="close" title="Close" aria-label="Close">✕</button></div>`;
+  if (WX.err) return `${head}<div class="wfsx-body"><p class="wfsx-msg is-bad">${esc(WX.err)}</p></div>`;
+  if (!WX.info) return `${head}<div class="wfsx-body"><div class="wfsx-wait"><span class="spinner" aria-label="Loading"></span></div></div>`;
+  if (!WX.info.listings.length) return `${head}<div class="wfsx-body"><p class="wfsx-msg">Link a Walmart listing to this item first (Stock › Actions › Mappings), then it can go to WFS.</p></div>`;
+  return head + ({ pick: wxPick, convert: wxConvert, pending: wxPending, ship: wxShip, done: wxDone })[WX.step]();
+}
+function wxCardMeta(l) {
+  if (l.onWfs) return `<b>${l.atWfs}</b> at WFS${l.sold30 != null ? ` · <b>${l.sold30}</b> sold in 30 days` : ''}`;
+  return `Shipped by you${l.sold30 ? ` · <b>${l.sold30}</b> sold at WFS` : ''}`;
+}
+function wxPick() {
+  const ls = WX.info.listings;
+  const l = wxListing();
+  const alt = ls.find(x => x.onWfs && x.sku !== WX.pick);
+  const status = (x) => x.conversion
+    ? `<span class="wfsx-st is-warn">${x.conversion.status === 'REJECTED' ? 'Refused' : `Converting · ${esc(wxAgo(x.conversion.at))}`}</span>`
+    : x.onWfs ? '<span class="wfsx-st is-ok">On WFS</span>' : '<span class="wfsx-st is-warn">Not on WFS</span>';
+  let action;
+  if (l && l.conversion) action = '<button class="btn btn-primary" data-wx="status">See status</button>';
+  else if (l && !l.onWfs) action = '<button class="btn btn-primary" data-wx="convert">Convert to WFS</button>';
+  else action = '<button class="btn btn-primary" data-wx="next">Continue</button>';
+  return `${wxSteps(0)}<div class="wfsx-body">
+    <div class="wfsx-q"><b>${ls.length === 1 ? 'Walmart listing' : 'Which Walmart listing?'}</b><span>${ls.length} linked in Linnworks</span></div>
+    ${ls.map(x => `<button class="wfsx-opt${x.sku === WX.pick ? ' is-on' : ''}" data-wxpick="${esc(x.sku)}">
+        <span class="wfsx-ck">${ICONS.checkSmall}</span>
+        <span class="wfsx-om"><span class="wfsx-os mono">${esc(x.sku)}</span><span class="wfsx-meta">${wxCardMeta(x)}</span></span>${status(x)}
+      </button>${x.sku === WX.pick && !x.onWfs && !x.conversion ? `<div class="wfsx-warn">Walmart won't take stock for this listing until it's converted to WFS.${alt ? ` <button class="wfsx-link" data-wxpick="${esc(alt.sku)}">Use ${esc(alt.sku)} instead</button>` : ''}</div>` : ''}`).join('')}
+    ${ls.length === 1 ? '<p class="wfsx-hint">The only Walmart listing linked to this item. Check it\'s the right one.</p>' : ''}
+  </div>
+  <div class="wfsx-foot"><button class="btn btn-ghost" data-wx="close">Cancel</button><span class="wfsx-grow"></span>${action}</div>`;
+}
+
+function wxField(label, inner) { return `<label class="wfsx-f"><span class="wfsx-fl">${label}</span><span class="wfsx-fv">${inner}</span></label>`; }
+function wxConvert() {
+  const f = WX.form;
+  if (!f) return `${wxSteps(1)}<div class="wfsx-body"><div class="wfsx-wait"><span class="spinner" aria-label="Loading"></span></div></div>`;
+  const opts = (list, cur) => list.map(v => `<option${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
+  const num = (k, unit, w) => `<span class="wfsx-ig"><input class="mono wfsx-n${w ? ` ${w}` : ''}" data-wxf="${k}" value="${esc(f[k] == null ? '' : f[k])}" inputmode="decimal" />${unit ? `<span>${unit}</span>` : ''}</span>`;
+  const text = (k, ph) => `<input class="wfsx-in" data-wxf="${k}" value="${esc(f[k] || '')}" placeholder="${esc(ph || '')}" />`;
+  const li = f.battery === 'lithium-ion';
+  const c = WX.conv;
+  const track = c ? `<div class="wfsx-track">
+      <span class="wfsx-tk is-done"><i>${ICONS.checkSmall}</i>Sent</span><span class="wfsx-tl is-done"></span>
+      <span class="wfsx-tk ${c.status === 'APPROVED' ? 'is-done' : c.status === 'REJECTED' ? 'is-bad' : 'is-now'}"><i>${c.status === 'APPROVED' ? ICONS.checkSmall : ''}</i>${c.status === 'REJECTED' ? 'Refused' : 'Walmart reviewing'}</span><span class="wfsx-tl${c.status === 'APPROVED' ? ' is-done' : ''}"></span>
+      <span class="wfsx-tk${c.status === 'APPROVED' ? ' is-done' : ''}"><i>${c.status === 'APPROVED' ? ICONS.checkSmall : ''}</i>Approved</span></div>
+    ${c.status === 'REJECTED' ? `<p class="wfsx-msg is-bad">${esc((c.errors || []).join(' · ') || 'Walmart refused it.')}</p>` : ''}
+    ${c.status === 'APPROVED' ? '<label class="wfsx-todo"><input type="checkbox" /><span><b>Then in Linnworks:</b> tick Ignore on this listing\'s link, so Linnworks stops overwriting its WFS count.</span></label>' : ''}
+    ${c.status !== 'APPROVED' && c.status !== 'REJECTED' && WX.polls > 12 ? '<p class="wfsx-hint">Walmart is still reviewing. You can close this; the app keeps checking and the row shows a Converting tag.</p>' : ''}` : '';
+  const sent = c && c.status !== 'REJECTED';
+  return `${wxSteps(1)}<div class="wfsx-body">
+    <div class="wfsx-ct">Convert <span class="mono">${esc(WX.pick)}</span> to WFS${f.prefilled ? '<span class="wfsx-tag">Pre-filled</span>' : ''}</div>
+    <fieldset class="wfsx-fs"${sent ? ' disabled' : ''}>
+      ${wxField('Size, boxed', `<span class="wfsx-ig">${['length', 'width', 'height'].map((k, i) => `${i ? '<span class="wfsx-x">×</span>' : ''}<input class="mono wfsx-n" data-wxf="${k}" value="${esc(f[k] == null ? '' : f[k])}" inputmode="decimal" />`).join('')}<span>in</span></span>`)}
+      ${wxField('Weight', num('weight', 'lb'))}
+      ${wxField('Battery', `<span class="wfsx-seg"><button type="button" class="${li ? '' : 'is-on'}" data-wxbat="none">None</button><button type="button" class="${li ? 'is-on' : ''}" data-wxbat="lithium-ion">Lithium-ion, in device</button></span>`)}
+      ${li ? `${wxField('Battery', `${num('wh', 'Wh', 'w4')}${num('batteryGrams', 'g', 'w4')}${num('cells', 'cells', 'w3')}`)}
+        ${wxField('Battery model', text('batteryModel', 'e.g. EB-BX216ABY'))}
+        ${wxField('Safety data sheet', text('sdsUrl', 'https://… (SDS or battery spec PDF)'))}` : ''}
+      ${wxField('Made in', `<select class="wfsx-in" data-wxf="origin">${opts(WX.facts.origins, f.origin)}</select>`)}
+      <details class="wfsx-more"${f.needMore ? ' open' : ''}><summary>Listing details from Walmart</summary>
+        ${wxField('Product type', `<select class="wfsx-in" data-wxf="productType">${opts(WX.facts.productTypes.includes(f.productType) ? WX.facts.productTypes : [f.productType, ...WX.facts.productTypes].filter(Boolean), f.productType)}</select>`)}
+        ${wxField('Condition', `<select class="wfsx-in" data-wxf="condition">${opts(WX.facts.conditions, f.condition)}</select>`)}
+        ${wxField('Product name', text('productName'))}
+        ${wxField('Brand', text('brand'))}
+        ${wxField('Main image link', text('imageUrl', 'https://…'))}
+        ${wxField('Price', num('price', '$', 'w5'))}
+        ${wxField('UPC / GTIN', text('gtin'))}
+      </details>
+    </fieldset>
+    ${track}
+    ${WX.msg ? `<p class="wfsx-msg is-bad">${esc(WX.msg)}</p>` : ''}
+  </div>
+  <div class="wfsx-foot"><button class="btn btn-ghost" data-wx="back">Back</button><span class="wfsx-grow"></span>
+    ${c && c.status === 'APPROVED' ? '<button class="btn btn-primary" data-wx="toShip">Continue</button>'
+      : c && c.status === 'REJECTED' ? '<button class="btn btn-primary" data-wx="fix">Fix and resend</button>'
+      : `<button class="btn btn-primary" data-wx="sendConvert"${WX.busy || sent ? ' disabled' : ''}>${sent ? 'Waiting for Walmart…' : WX.busy ? 'Sending…' : 'Send to Walmart'}</button>`}</div>`;
+}
+function wxPending() {
+  const l = wxListing();
+  const c = l && l.conversion;
+  if (!c) { WX.step = 'pick'; return wxPick(); }
+  const alt = WX.info.listings.find(x => x.onWfs && x.sku !== WX.pick);
+  const bad = c.status === 'REJECTED';
+  return `${wxSteps(1)}<div class="wfsx-body">
+    <div class="wfsx-ph"><span>${bad ? 'Walmart refused' : 'Converting'} <span class="mono">${esc(l.sku)}</span></span><span class="wfsx-chip ${bad ? 'is-red' : 'is-warn'}" title="Sent ${esc(new Date(c.at).toLocaleString())}">${esc(wxAgo(c.at))}</span></div>
+    <div class="wfsx-track">
+      <span class="wfsx-tk is-done"><i>${ICONS.checkSmall}</i>Sent</span><span class="wfsx-tl is-done"></span>
+      <span class="wfsx-tk ${bad ? 'is-bad' : 'is-now'}"><i></i>${bad ? 'Refused' : 'Reviewing'}</span><span class="wfsx-tl"></span>
+      <span class="wfsx-tk"><i></i>Approved</span></div>
+    ${bad ? `<p class="wfsx-msg is-bad">${esc((c.errors || []).join(' · ') || 'Walmart refused it.')}</p>` : ''}
+    <p class="wfsx-hint">${c.checkedAt ? `Checked ${esc(new Date(c.checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}` : 'Not checked yet'}${WX.msg ? ` · ${esc(WX.msg)}` : ''}</p>
+  </div>
+  <div class="wfsx-foot"><button class="btn btn-ghost" data-wx="back">Back</button><span class="wfsx-grow"></span>
+    ${alt ? `<button class="btn btn-ghost" data-wxpick="${esc(alt.sku)}" data-wxgo="ship">Use WFS listing</button>` : ''}
+    ${bad ? '<button class="btn btn-primary" data-wx="convert">Fix and resend</button>' : `<button class="btn btn-primary" data-wx="checkNow"${WX.busy ? ' disabled' : ''}>Check now</button>`}</div>`;
+}
+function wxShip() {
+  const l = wxListing();
+  const home = wxLevels(wxItem(WX.sku)).home;
+  const boxes = WX.perBox > 0 ? WX.units / WX.perBox : 0;
+  const atW = l ? l.atWfs : 0;
+  return `${wxSteps(WX.converted ? 2 : 1)}<div class="wfsx-body">
+    <div class="wfsx-form">
+      <div class="wfsx-fr"><span>Listing</span><span class="wfsx-fvr"><span class="wfsx-st is-ok"></span><span class="mono wfsx-pk">${esc(WX.pick)}</span><button class="wfsx-link" data-wx="back">Change</button></span></div>
+      <div class="wfsx-fr"><span>Units</span><span class="wfsx-step"><button type="button" data-wxstep="-1">−</button><input class="mono" data-wxunits value="${WX.units}" inputmode="numeric" /><button type="button" data-wxstep="1">+</button></span></div>
+      <div class="wfsx-fr"><span>Units per box</span><input class="mono wfsx-sm" data-wxper value="${WX.perBox}" inputmode="numeric" /></div>
+      <div class="wfsx-fr"><span>Boxes</span><b class="mono${Number.isInteger(boxes) ? '' : ' is-bad'}">${Number.isInteger(boxes) ? boxes : 'not whole'}</b></div>
+      <div class="wfsx-fr"><span>Arrive at Walmart by</span><input type="date" class="wfsx-date" data-wxarrive value="${esc(WX.arrive)}" /></div>
+    </div>
+    <p class="wfsx-hint">${l && l.sold30 > 0 ? 'Started at four weeks of its WFS sales, in whole boxes.' : 'No WFS sales to go by yet.'}</p>
+    <div class="wfsx-after"><div class="wfsx-ah">After this shipment</div>
+      <div class="wfsx-ar2"><span>Warehouse</span><span class="mono">${home.toLocaleString()}<em>→</em><b>${(home - WX.units).toLocaleString()}</b></span></div>
+      <div class="wfsx-ar2"><span>This listing at WFS<small>once received</small></span><span class="mono">${atW}<em>→</em><b>${atW + WX.units}</b></span></div>
+    </div>
+    ${WX.confirm ? `<p class="wfsx-confirm">This creates the shipment at Walmart and takes <b>${WX.units}</b> units off the warehouse in Linnworks.</p>` : ''}
+    ${WX.msg ? `<p class="wfsx-msg is-bad">${esc(WX.msg)}</p>` : ''}
+  </div>
+  <div class="wfsx-foot"><button class="btn btn-ghost" data-wx="back">Back</button><span class="wfsx-grow"></span>
+    <button class="btn btn-primary" data-wx="create"${WX.busy ? ' disabled' : ''}>${WX.busy ? 'Creating at Walmart…' : WX.confirm ? 'Yes, create it' : 'Create shipment'}</button></div>`;
+}
+function wxDone() {
+  const r = WX.result;
+  return `<div class="wfsx-body">
+    <div class="wfsx-ok">${ICONS.checkSmall}<div><b>Created at Walmart</b><span class="mono">${esc(r.orderId)}</span></div></div>
+    <p class="wfsx-hint">Walmart split it into ${r.shipments.length} shipment${r.shipments.length === 1 ? '' : 's'}. Book the carrier in Seller Center › Shipping plans, and put a box label on every box.</p>
+    ${r.shipments.map(s => `<div class="wfsx-made"><div><b class="mono">${esc(s.id)}</b><span>${esc(s.shipTo || '')}${s.eta ? ` · arrive ${esc(wxDay(s.eta))}` : ''}</span></div>
+      <span class="mono">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
+      <button class="btn btn-ghost" data-wxlabels="${esc(s.id)}" data-wxboxes="${Math.max(1, Math.round(s.items.reduce((a, i) => a + i.qty, 0) / WX.perBox))}">Box labels</button></div>`).join('')}
+    ${r.warn ? `<p class="wfsx-msg is-bad">${esc(r.warn)}</p>` : ''}
+    ${WX.msg ? `<p class="wfsx-msg">${esc(WX.msg)}</p>` : ''}
+  </div>
+  <div class="wfsx-foot"><button class="btn btn-ghost" data-wx="cancelOrder"${WX.busy ? ' disabled' : ''}>${WX.confirm ? 'Yes, cancel it' : 'Cancel this order'}</button><span class="wfsx-grow"></span>
+    <button class="btn btn-primary" data-wx="close">Done</button></div>`;
+}
+
+function wxRender() {
+  if (!WX) return;
+  $('wfsxLeft').innerHTML = wxLeft();
+  $('wfsxRight').innerHTML = wxRight();
+  wxPlace(); // a taller step (the convert form) re-fits the window
+}
+async function wxStartConvert() {
+  WX.step = 'convert';
+  WX.msg = '';
+  WX.conv = null;
+  wxRender();
+  const l = wxListing();
+  let res;
+  try { res = await api.wfsxFacts(WX.pick, WX.sku); } catch (e) { res = { ok: false, error: e.message }; }
+  if (!WX || WX.step !== 'convert') return;
+  if (!res || !res.ok) { WX.msg = (res && res.error) || 'Could not read the listing.'; WX.facts = { origins: [], productTypes: [], conditions: [] }; }
+  else WX.facts = res;
+  const f = (res && res.facts) || {};
+  const p = (res && res.prefs) || {};
+  WX.form = {
+    itemSku: WX.sku, channelSku: l ? l.sku : WX.pick,
+    productType: f.productType || p.productType || 'Tablet Computers',
+    condition: (WX.facts.conditions || []).includes(f.condition) ? f.condition : (p.condition || 'New'),
+    productName: f.productName || WX.title, brand: f.brand || p.brand || '', imageUrl: f.imageUrl || (/^https?:/i.test(WX.image) ? WX.image : ''),
+    price: f.price != null ? f.price : '', gtin: f.gtin || WX.barcode,
+    length: p.length ?? '', width: p.width ?? '', height: p.height ?? '', weight: p.weight ?? '',
+    origin: p.origin || 'CN - China', battery: p.battery || 'lithium-ion',
+    wh: p.wh ?? '', batteryGrams: p.batteryGrams ?? '', cells: p.cells ?? 1, batteryModel: p.batteryModel || '', sdsUrl: p.sdsUrl || '',
+    prefilled: !!(res && res.prefs),
+  };
+  WX.form.needMore = !WX.form.brand || !WX.form.imageUrl || !WX.form.productName || WX.form.price === '';
+  wxRender();
+}
+async function wxPollConvert() {
+  const me = WX;
+  if (!me || !me.conv || me.conv.status === 'APPROVED' || me.conv.status === 'REJECTED') return;
+  let r;
+  try { r = await api.wfsxConvertCheck(me.conv.feedId); } catch { r = null; }
+  if (WX !== me || !me.conv) return;
+  if (r && r.ok) me.conv = { ...me.conv, status: r.status, errors: r.errors };
+  me.polls += 1;
+  if (me.conv.status === 'APPROVED') {
+    const l = wxListing();
+    if (l) { l.onWfs = true; l.conversion = null; }
+    me.converted = true;
+    wxLoadConversions(true);
+  }
+  wxRender();
+  // Walmart often answers at once: ask every 5 s for a minute, then leave
+  // it to the 15-minute check in the background
+  if (me.conv.status !== 'APPROVED' && me.conv.status !== 'REJECTED' && me.polls <= 12) setTimeout(wxPollConvert, 5000);
+  else if (me.conv.status === 'REVIEWING' || me.conv.status === 'SENT') wxLoadConversions(true);
+}
+
+$('wfsxDialog').addEventListener('click', async (e) => {
+  if (!WX) return;
+  if (e.target === $('wfsxDialog')) { $('wfsxDialog').close(); return; } // the backdrop
+  const pick = e.target.closest('[data-wxpick]');
+  if (pick) {
+    WX.pick = pick.dataset.wxpick;
+    WX.msg = '';
+    WX.confirm = false;
+    if (pick.dataset.wxgo === 'ship') { WX.units = wxSuggest(); WX.step = 'ship'; } else WX.step = 'pick';
+    wxRender();
+    return;
+  }
+  const bat = e.target.closest('[data-wxbat]');
+  if (bat && WX.form) { WX.form.battery = bat.dataset.wxbat; wxRender(); return; }
+  const stepBtn = e.target.closest('[data-wxstep]');
+  if (stepBtn) { WX.units = Math.max(WX.perBox, WX.units + Number(stepBtn.dataset.wxstep) * WX.perBox); WX.confirm = false; wxRender(); return; }
+  const conv = e.target.closest('[data-wxconv]');
+  if (conv) { WX.pick = conv.dataset.wxconv; WX.step = 'pending'; WX.msg = ''; wxRender(); return; }
+  const lab = e.target.closest('[data-wxlabels]');
+  if (lab) {
+    lab.disabled = true;
+    const r = await api.wfsxLabels(lab.dataset.wxlabels, Number(lab.dataset.wxboxes) || 1).catch(err => ({ ok: false, error: err.message }));
+    lab.disabled = false;
+    if (!r.ok) { WX.msg = r.error || 'Walmart did not send the labels.'; wxRender(); }
+    return;
+  }
+  const btn = e.target.closest('[data-wx]');
+  if (!btn) return;
+  const act = btn.dataset.wx;
+  if (act === 'close') { $('wfsxDialog').close(); return; }
+  if (act === 'next') { WX.units = wxSuggest(); WX.step = 'ship'; WX.confirm = false; WX.msg = ''; wxRender(); return; }
+  if (act === 'convert') { await wxStartConvert(); return; }
+  if (act === 'fix') { WX.conv = null; WX.msg = ''; wxRender(); return; } // edit the form again, then resend
+  if (act === 'status') { WX.step = 'pending'; wxRender(); return; }
+  if (act === 'toShip') { WX.units = wxSuggest(); WX.step = 'ship'; WX.confirm = false; wxRender(); return; }
+  if (act === 'back') {
+    WX.msg = '';
+    WX.confirm = false;
+    WX.step = 'pick';
+    WX.converted = false;
+    wxRender();
+    return;
+  }
+  if (act === 'checkNow') {
+    const l = wxListing();
+    if (!l || !l.conversion) return;
+    WX.busy = true; wxRender();
+    const r = await api.wfsxConvertCheck(l.conversion.feedId).catch(err => ({ ok: false, error: err.message }));
+    WX.busy = false;
+    if (r.ok) {
+      l.conversion = { ...l.conversion, status: r.status, errors: r.errors, checkedAt: r.checkedAt };
+      if (r.status === 'APPROVED') { l.onWfs = true; l.conversion = null; WX.step = 'pick'; }
+      WX.msg = r.status === 'APPROVED' ? '' : r.status === 'REJECTED' ? '' : 'still reviewing';
+      wxLoadConversions(true);
+    } else WX.msg = r.error || 'Walmart did not answer.';
+    wxRender();
+    return;
+  }
+  if (act === 'sendConvert') {
+    WX.busy = true; WX.msg = ''; wxRender();
+    const r = await api.wfsxConvert(WX.form).catch(err => ({ ok: false, error: err.message }));
+    WX.busy = false;
+    if (!r.ok) { WX.msg = r.error || 'Walmart did not take it.'; wxRender(); return; }
+    WX.conv = { feedId: r.feedId, status: r.status, errors: [] };
+    WX.polls = 0;
+    wxRender();
+    if (r.status === 'APPROVED') { const l = wxListing(); if (l) { l.onWfs = true; l.conversion = null; } WX.converted = true; wxRender(); }
+    else setTimeout(wxPollConvert, 3000);
+    return;
+  }
+  if (act === 'create') {
+    if (!WX.confirm) { WX.confirm = true; WX.msg = ''; wxRender(); return; }
+    WX.busy = true; WX.msg = ''; wxRender();
+    const r = await api.wfsxCreate({ sku: WX.sku, channelSku: WX.pick, gtin: WX.barcode, desc: WX.title, qty: WX.units, perBox: WX.perBox, arriveBy: WX.arrive })
+      .catch(err => ({ ok: false, error: err.message }));
+    WX.busy = false;
+    WX.confirm = false;
+    if (!r.ok) { WX.msg = r.error || 'Walmart did not create it.'; wxRender(); return; }
+    WX.result = r;
+    WX.step = 'done';
+    wxRender();
+    loadStock(); // the warehouse count moved
+    setTimeout(() => { if (WX && WX.step === 'done') wxLoadInfo(true); }, 4000);
+    return;
+  }
+  if (act === 'cancelOrder') {
+    if (!WX.confirm) { WX.confirm = true; wxRender(); return; }
+    WX.busy = true; wxRender();
+    const r = await api.wfsxCancel(WX.result.orderId, WX.sku, WX.units).catch(err => ({ ok: false, error: err.message }));
+    WX.busy = false;
+    WX.confirm = false;
+    if (!r.ok) { WX.msg = r.error || 'Walmart did not cancel it.'; wxRender(); return; }
+    toast('Cancelled at Walmart; the units are back on the warehouse.');
+    $('wfsxDialog').close();
+    loadStock();
+  }
+});
+$('wfsxDialog').addEventListener('input', (e) => {
+  if (!WX) return;
+  const t = e.target;
+  if (t.dataset.wxf && WX.form) { WX.form[t.dataset.wxf] = t.value; return; }
+  if ('wxunits' in t.dataset) { WX.units = Math.max(0, Math.floor(Number(t.value) || 0)); WX.confirm = false; return; }
+  if ('wxper' in t.dataset) { WX.perBox = Math.max(1, Math.floor(Number(t.value) || 1)); WX.confirm = false; return; }
+  if ('wxarrive' in t.dataset) { WX.arrive = t.value; }
+});
+// numbers re-render when a field is left (boxes and the after-box follow)
+$('wfsxDialog').addEventListener('change', (e) => {
+  if (!WX || e.target.dataset.wxf) return;
+  if ('wxunits' in e.target.dataset || 'wxper' in e.target.dataset) wxRender();
+});
+$('wfsxDialog').addEventListener('close', () => { WX = null; });
+window.addEventListener('resize', () => wxPlace());
 
 /* ---------- Wholesale invoices (owner 2026-09-30) ---------- */
 // Design: variants/wholesale-qb-simple.html. The list opens first; an
