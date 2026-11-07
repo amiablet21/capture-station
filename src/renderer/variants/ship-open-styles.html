@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Orders — how the Ship panel opens</title>
+<!--
+  Owner 2026-10-20: "different animation or better ways to open the
+  dropdown when pressing Ship". Six ways side by side: pick one at the top,
+  press Ship on any line. Esc or Ship again closes it (with its own close
+  motion). Sample data only.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: var(--canvas); }
+  .pg { max-width: 1180px; margin: 0 auto; padding: 22px 24px 60px; }
+  .pick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .pick button { font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+  .pick button b { color: var(--faint); margin-right: 6px; }
+  .pick button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pick button.on b { color: rgba(255,255,255,.7); }
+  .what { font-size: 12.5px; color: var(--muted); margin: 0 0 16px 4px; min-height: 18px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  table.ot { border-collapse: collapse; width: 100%; }
+  .ot th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); text-align: left; padding: 8px 16px; border-bottom: 1px solid var(--border); }
+  .ot td { padding: 11px 16px; border-bottom: 1px solid #EFEEEC; vertical-align: middle; transition: background 200ms; }
+  .ot tr.open > td { background: #FBFAF8; border-bottom-color: transparent; }
+  .gut { color: var(--faint); font-size: 12px; width: 40px; }
+  .po { font-family: var(--mono); font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .sku { font-family: var(--mono); font-size: 12.5px; }
+  .mk { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-right: 8px; }
+  .mk.walmart { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .mk.ebay { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .act { text-align: right; white-space: nowrap; }
+  .proc { font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 3px 12px; }
+  .os-btn { transition: background 160ms, color 160ms; }
+
+  /* the panel row: the td carries no padding so its height can animate */
+  tr.os-row > td { padding: 0 !important; background: #FBFAF8; }
+  .wrap { display: grid; grid-template-rows: 1fr; }
+  .wrap > .in { min-height: 0; overflow: hidden; }
+  .wrap > .in > .pad { padding: 0 14px 14px; }
+
+  /* B · Slide down */
+  .s-b .wrap { transition: grid-template-rows 260ms cubic-bezier(.2,.8,.2,1); }
+  .s-b .wrap.shut { grid-template-rows: 0fr; }
+  .s-b .os-panel { transition: opacity 220ms, transform 260ms cubic-bezier(.2,.8,.2,1); }
+  .s-b .wrap.shut .os-panel { opacity: 0; transform: translateY(-10px); }
+
+  /* C · Slide + parts in order */
+  .s-c .wrap { transition: grid-template-rows 240ms cubic-bezier(.2,.8,.2,1); }
+  .s-c .wrap.shut { grid-template-rows: 0fr; }
+  .s-c .os-panel { transition: opacity 180ms; }
+  .s-c .wrap.shut .os-panel { opacity: 0; }
+  .s-c .stg { opacity: 0; transform: translateY(6px); animation: stg 300ms cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes stg { to { opacity: 1; transform: none; } }
+  .sk { height: 40px; border-top: 1px solid var(--border-soft); display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+  .sk:first-child { border-top: none; }
+  .sk i { display: block; height: 10px; border-radius: 6px; background: linear-gradient(90deg, #EFEEEC 0%, #F7F6F4 50%, #EFEEEC 100%); background-size: 200% 100%; animation: shim 1s linear infinite; }
+  @keyframes shim { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+  /* D · Drop & settle (a little bounce) */
+  .s-d .wrap { transition: grid-template-rows 320ms cubic-bezier(.2,.8,.2,1); }
+  .s-d .wrap.shut { grid-template-rows: 0fr; }
+  .s-d .os-panel { transform-origin: top center; transition: transform 420ms cubic-bezier(.34,1.56,.64,1), opacity 200ms; }
+  .s-d .wrap.shut .os-panel { transform: translateY(-14px) scale(.97); opacity: 0; transition: transform 200ms ease-in, opacity 160ms; }
+
+  /* E · Grows out of the Ship button */
+  .s-e .wrap { transition: grid-template-rows 260ms cubic-bezier(.2,.8,.2,1); }
+  .s-e .wrap.shut { grid-template-rows: 0fr; }
+  .s-e .os-panel { clip-path: circle(150% at var(--ox) 0); transition: clip-path 460ms cubic-bezier(.2,.8,.2,1); }
+  .s-e .wrap.shut .os-panel { clip-path: circle(0 at var(--ox) 0); transition: clip-path 220ms ease-in; }
+
+  /* F · Side drawer */
+  .scrim { position: fixed; inset: 0; background: rgba(47,52,55,.18); opacity: 0; pointer-events: none; transition: opacity 240ms; z-index: 20; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(780px, 92vw); background: #FBFAF8; border-left: 1px solid var(--border); box-shadow: -18px 0 48px rgba(47,52,55,.12); transform: translateX(105%); transition: transform 320ms cubic-bezier(.2,.8,.2,1); z-index: 21; display: flex; flex-direction: column; }
+  .drawer.on { transform: none; }
+  .drawer .dh { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .drawer .dh .po { font-size: 15px; }
+  .drawer .dh .x { margin-left: auto; border: none; background: none; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+  .drawer .dh .x:hover { background: var(--surface-2); }
+  .drawer .db { padding: 16px 18px; overflow-y: auto; }
+  .drawer .os-panel { box-shadow: none; }
+</style>
+</head>
+<body>
+<div class="pg">
+  <div class="pick" id="pick">
+    <button data-s="a"><b>A</b>Now (instant)</button>
+    <button data-s="b"><b>B</b>Slide down</button>
+    <button data-s="c"><b>C</b>Slide, parts in order</button>
+    <button data-s="d"><b>D</b>Drop &amp; settle</button>
+    <button data-s="e"><b>E</b>Grow from Ship</button>
+    <button data-s="f"><b>F</b>Side drawer</button>
+  </div>
+  <div class="what" id="what"></div>
+  <div class="card" id="card">
+    <table class="ot">
+      <thead><tr><th>#</th><th>Order #</th><th>Items</th><th>Tracking</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer"><div class="dh"><span class="mk walmart">Walmart</span><span class="po" id="dPo"></span><button class="x" id="dX" type="button">×</button></div><div class="db" id="dBody"></div></aside>
+
+<script>
+const ORDERS = [
+  { po: '108829451230774', ch: 'walmart', sku: 'S25-128GB-NAVY', who: 'Cara Cross', city: 'Chicago, IL 60614' },
+  { po: '108829451230812', ch: 'walmart', sku: 'A15-64GB-BLACK', who: 'Dee Ramos', city: 'Austin, TX 78701' },
+  { po: '12-11873-40921', ch: 'ebay', sku: 'X133-64GB-GRAY', who: 'Sam Patel', city: 'Edison, NJ 08817' },
+  { po: '108829451230901', ch: 'walmart', sku: 'P8-128GB-OBSIDIAN', who: 'Lee Wong', city: 'Seattle, WA 98101' },
+];
+const RATES = [
+  { via: 'wm', tag: 'Walmart', name: 'UPS Ground', eta: 'Thu, Oct 23', pr: 8.40, best: true },
+  { via: 'a', tag: 'DWS', name: 'UPS Ground', eta: 'Thu, Oct 23', pr: 9.12 },
+  { via: 'b', tag: 'Co 2', name: 'UPS Ground', eta: 'Thu, Oct 23', pr: 9.38 },
+  { via: 'wm', tag: 'Walmart', name: 'FedEx 2Day', eta: 'Wed, Oct 22', pr: 14.20 },
+  { via: 'a', tag: 'DWS', name: 'UPS 2nd Day Air', eta: 'Wed, Oct 22', pr: 18.95 },
+  { via: 'b', tag: 'Co 2', name: 'UPS Next Day Air Saver', eta: 'Tue, Oct 21', pr: 31.60 },
+];
+const WHAT = {
+  a: 'What it does today: the panel appears at once.',
+  b: 'The line opens smoothly and the panel slides down into it.',
+  c: 'Same slide, then each part arrives in order: address, box, rates (shimmering while they load), Create label last.',
+  d: 'The panel drops in and settles with a small bounce.',
+  e: 'The panel spreads out from the Ship button you pressed.',
+  f: 'A drawer slides in from the right; the list stays where it is behind it.',
+};
+const STAR = '<svg class="sp-star" viewBox="0 0 256 256" fill="currentColor"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>';
+let style = 'c';
+let openPo = '';
+let busy = false;
+const $ = (id) => document.getElementById(id);
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+function rateRows(stagger) {
+  return RATES.map((r, i) => `<div class="sp-rate ${r.best ? 'is-on' : ''} ${stagger ? 'stg' : ''}" style="${stagger ? `animation-delay:${i * 45}ms` : ''}">
+    <span class="rd"></span><div><div class="sv">${r.best ? STAR : ''}${r.name}<span class="os-via ${r.via === 'wm' ? 'os-via-wm' : r.via === 'b' ? 'os-via-b' : ''}">${r.tag}</span></div><div class="eta">${r.eta}</div></div>
+    <span class="pr">$${r.pr.toFixed(2)}</span></div>`).join('');
+}
+function panel(o, stagger) {
+  const st = (d) => (stagger ? `class="stg" style="animation-delay:${d}ms"` : '');
+  return `<div class="os-panel">
+    <div class="os-left">
+      <div ${st(60)}><div class="os-h">Ship to</div><div class="os-addr"><b>${o.who}</b><br>1200 W Fullerton Ave<br>${o.city}</div></div>
+      <div ${st(110)}><label class="os-f"><span>Box</span><select class="input"><option>Phone box · 9 × 6 × 3</option></select></label></div>
+      <div ${st(150)} ><div class="os-two"><label class="os-f"><span>Weight (lb)</span><input class="input mono" value="1.1" /></label><label class="os-f"><span>Declared value</span><input class="input mono" value="189.99" /></label></div></div>
+      <div ${st(190)}><div class="os-f"><span>Reference #1</span><div class="sp-lock mono">${o.po}</div></div></div>
+    </div>
+    <div class="os-right">
+      <div class="os-h">Rates <span class="os-chips"><button class="is-on">All</button><button>Walmart</button><button>DWS</button><button>Co 2</button></span></div>
+      <div class="os-rates" data-rates>${stagger ? '<div class="sk"><i style="width:40%"></i><i style="width:18%;margin-left:auto"></i></div>'.repeat(6) : rateRows(false)}</div>
+      <div class="os-foot" ${st(stagger ? 760 : 0)}><span class="os-err"></span><button class="btn btn-primary" type="button">Create label</button></div>
+    </div>
+  </div>`;
+}
+
+function renderRows() {
+  $('rows').innerHTML = ORDERS.map((o, i) => `<tr data-po="${o.po}">
+    <td class="gut">${ORDERS.length - i}</td>
+    <td><span class="mk ${o.ch}">${o.ch}</span><span class="po">${o.po}</span></td>
+    <td class="sku">${o.sku}</td>
+    <td style="color:var(--faint);font-size:12px">—</td>
+    <td class="act"><button class="os-btn" type="button">Ship</button><button class="proc" type="button">Process</button></td>
+  </tr>`).join('');
+}
+
+async function close() {
+  if (!openPo) return;
+  busy = true;
+  const tr = document.querySelector(`tr[data-po="${openPo}"]`);
+  const pr = document.querySelector('tr.os-row');
+  tr.querySelector('.os-btn').classList.remove('is-on');
+  if (style === 'f') {
+    $('drawer').classList.remove('on'); $('scrim').classList.remove('on');
+    await wait(320);
+  } else if (pr && style !== 'a') {
+    pr.querySelector('.wrap').classList.add('shut');
+    await wait(style === 'd' ? 260 : 270);
+  }
+  if (pr) pr.remove();
+  tr.classList.remove('open');
+  openPo = '';
+  busy = false;
+}
+
+async function open(po, btn) {
+  const o = ORDERS.find(x => x.po === po);
+  const tr = document.querySelector(`tr[data-po="${po}"]`);
+  openPo = po;
+  tr.classList.add('open');
+  btn.classList.add('is-on');
+  const stagger = style === 'c';
+  if (style === 'f') {
+    $('dPo').textContent = po;
+    $('dBody').innerHTML = panel(o, false);
+    $('drawer').classList.add('on'); $('scrim').classList.add('on');
+    return;
+  }
+  const row = document.createElement('tr');
+  row.className = `os-row s-${style}`;
+  row.innerHTML = `<td colspan="5"><div class="wrap ${style === 'a' ? '' : 'shut'}"><div class="in"><div class="pad">${panel(o, stagger)}</div></div></div></td>`;
+  tr.after(row);
+  if (style === 'e') {
+    const b = btn.getBoundingClientRect(), p = row.querySelector('.os-panel').getBoundingClientRect();
+    row.querySelector('.os-panel').style.setProperty('--ox', `${b.left + b.width / 2 - p.left}px`);
+  }
+  if (style !== 'a') { void row.offsetHeight; row.querySelector('.wrap').classList.remove('shut'); }
+  if (stagger) {
+    await wait(620); // the rates "arrive"
+    const box = row.querySelector('[data-rates]');
+    if (box) box.innerHTML = rateRows(true);
+  }
+}
+
+$('rows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.os-btn');
+  if (!btn || busy) return;
+  const po = btn.closest('tr').dataset.po;
+  const was = openPo;
+  await close();
+  if (was !== po) open(po, btn);
+});
+$('dX').addEventListener('click', close);
+$('scrim').addEventListener('click', close);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+function pick(s) {
+  close().then(() => {
+    style = s;
+    document.querySelectorAll('#pick button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
+    $('what').textContent = WHAT[s];
+  });
+}
+$('pick').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (b) pick(b.dataset.s); });
+renderRows();
+pick(new URLSearchParams(location.search).get('s') || 'c');
+</script>
+</body>
+</html>

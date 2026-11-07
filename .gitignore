@@ -7,3 +7,5 @@ tools/hubx.env
 # Walmart Marketplace API credentials + the lister's local working data
 tools/walmart.env
 tools/walmart-lister-data.json
+# stock-history rows written by tools/linnworks/lw.js receive (upload them to returns-sync)
+stocklog-*.jsonl

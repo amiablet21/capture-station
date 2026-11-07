@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Channel SKUs popup — three new designs (2026-10-30)</title>
+<style>
+  /* Three takes on the "Channel SKUs linked to …" popup (owner 2026-10-30:
+     "a little nicer perhaps? Give me 3 different versions"). Real data for
+     X133-64GB-GRAY from Linnworks: the channel SKU, account, price, sync
+     state, and the quantity each listing is told (listedQuantity - the
+     app already reads it, the popup does not show it yet). App tokens. */
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8; --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #1E3A66; --accent-soft: #E4EAF4;
+    --pos-bg: #EDF3EC; --pos-text: #346538; --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --amber-bg: #FBF3DB; --amber-text: #956400;
+    --wm: #0071DC; --wm-bg: #E1F0FD; --eb: #2E7D32; --eb-bg: #E8F3E8; --tm: #C2410C; --tm-bg: #FDEEE3;
+    --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', sans-serif; --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); background: #DCDBD7; padding: 28px 20px 40px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .page-h { max-width: 720px; margin: 0 auto 8px; font-size: 15px; font-weight: 600; }
+  .page-s { max-width: 720px; margin: 0 auto 26px; color: #5f5d58; font-size: 12.5px; }
+  .opt { max-width: 720px; margin: 0 auto 36px; }
+  .opt-h { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #5f5d58; margin-bottom: 10px; }
+  .opt-h b { color: var(--text); }
+  .dlg { background: var(--surface); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.06); overflow: hidden; }
+  .dlg-foot { display: flex; align-items: center; gap: 10px; padding: 12px 20px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .dlg-foot .note { color: var(--muted); font-size: 12px; }
+  .btn { margin-left: auto; font: inherit; font-weight: 600; font-size: 13px; color: #fff; background: var(--accent); border: 0; border-radius: 8px; padding: 8px 16px; }
+  .btn-ghost { font: inherit; font-size: 12.5px; color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; white-space: nowrap; }
+  .mk { display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; border-radius: 8px; }
+  .mk.walmart { background: var(--wm); } .mk.ebay { background: var(--eb); } .mk.temu { background: var(--tm); }
+  .copy { font: inherit; font-size: 11px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+
+  /* ---------- A: marketplace cards ---------- */
+  .a-head { padding: 18px 20px 4px; }
+  .a-head h2 { font-size: 16px; font-weight: 600; }
+  .a-head h2 .mono { font-weight: 600; }
+  .a-head p { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .a-list { padding: 12px 20px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .a-card { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; align-items: center; border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; }
+  .a-card .mk { width: 40px; height: 40px; font-size: 16px; border-radius: 10px; }
+  .a-name { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .a-name b { color: var(--text); font-weight: 600; }
+  .a-sku { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .a-sku .mono { font-size: 14.5px; font-weight: 600; color: var(--accent); text-decoration: underline; text-decoration-color: #c9d3e3; text-underline-offset: 3px; }
+  .a-meta { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+  .chip { font-size: 11px; font-weight: 500; border-radius: 999px; padding: 1px 8px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .chip.on { background: var(--pos-bg); border-color: transparent; color: var(--pos-text); }
+  .chip.off { background: var(--amber-bg); border-color: transparent; color: var(--amber-text); }
+  .a-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .a-price { font-family: var(--mono); font-size: 18px; font-weight: 600; }
+  .a-price.none { font-size: 12px; font-weight: 400; color: var(--faint); font-family: var(--font); }
+
+  /* ---------- B: clean table ---------- */
+  .b-head { display: flex; align-items: baseline; gap: 10px; padding: 18px 20px 12px; }
+  .b-head h2 { font-size: 16px; font-weight: 600; }
+  .b-head .sub { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .b-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .b-table th { text-align: left; font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); padding: 8px 12px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .b-table th:first-child, .b-table td:first-child { padding-left: 20px; }
+  .b-table th:last-child, .b-table td:last-child { padding-right: 20px; }
+  .b-table th.r, .b-table td.r { text-align: right; }
+  .b-table td { padding: 12px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  .b-table tr:hover td { background: #FBFBFA; }
+  .b-ch { display: flex; align-items: center; gap: 9px; }
+  .b-ch .mk { width: 26px; height: 26px; font-size: 12px; border-radius: 7px; }
+  .b-ch .n { font-weight: 600; }
+  .b-ch .acct { display: block; font-size: 11.5px; color: var(--faint); }
+  .b-sku { font-weight: 600; color: var(--accent); }
+  .b-sku::after { content: " ↗"; color: var(--faint); font-weight: 400; }
+  .sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+  .sync i { width: 28px; height: 16px; border-radius: 999px; background: #D7D5D0; position: relative; }
+  .sync i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .sync.on i { background: #4C9A5B; } .sync.on i::after { left: 14px; }
+  .sync.off { color: var(--amber-text); }
+
+  /* ---------- C: summary + rows with plain-English status ---------- */
+  .c-top { padding: 18px 20px 14px; background: linear-gradient(180deg, #F3F5F9 0%, #fff 100%); border-bottom: 1px solid var(--border); }
+  .c-top .k { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+  .c-top h2 { font-family: var(--mono); font-size: 19px; font-weight: 600; margin-top: 2px; }
+  .c-strip { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .c-pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 5px; border-radius: 999px; background: #fff; border: 1px solid var(--border); font-size: 12px; }
+  .c-pill .mk { width: 20px; height: 20px; font-size: 10px; border-radius: 50%; }
+  .c-pill .warn { color: var(--amber-text); font-weight: 600; }
+  .c-row { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 16px; padding: 14px 20px 14px 0; border-bottom: 1px solid var(--border-soft); align-items: center; }
+  .c-row .bar { align-self: stretch; border-radius: 0 3px 3px 0; }
+  .c-row.walmart .bar { background: var(--wm); } .c-row.ebay .bar { background: var(--eb); } .c-row.temu .bar { background: var(--tm); }
+  .c-l1 { display: flex; align-items: baseline; gap: 8px; }
+  .c-l1 .ch { font-weight: 600; }
+  .c-l1 .acct { color: var(--faint); font-size: 11.5px; }
+  .c-sku { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .c-sku .mono { font-size: 13.5px; font-weight: 600; }
+  .c-warn { margin-top: 7px; font-size: 12px; color: var(--amber-text); background: var(--amber-bg); border-radius: 6px; padding: 4px 8px; display: inline-block; }
+  .c-ok { margin-top: 6px; font-size: 12px; color: var(--pos-text); }
+  .c-r { display: grid; grid-template-columns: auto auto; gap: 2px 18px; text-align: right; align-items: baseline; }
+  .c-r .k { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+  .c-r .v { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+  .c-r .v.none { color: var(--faint); font-weight: 400; }
+  .c-r .btn-ghost { grid-column: 1 / -1; justify-self: end; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <p class="page-h">Channel SKUs popup — three new designs</p>
+  <p class="page-s">Real data for X133-64GB-GRAY from Linnworks. Each version shows the same facts: marketplace, account, channel SKU (click to open the listing, copy button), price, whether stock sync is on, and the quantity that listing is told — which the current popup doesn't show.</p>
+
+  <!-- ========== A ========== -->
+  <div class="opt">
+    <div class="opt-h"><b>A</b> · Marketplace cards</div>
+    <div class="dlg">
+      <div class="a-head"><h2>Channel SKUs for <span class="mono">X133-64GB-GRAY</span></h2><p>3 listings link to this item</p></div>
+      <div class="a-list">
+        <div class="a-card">
+          <span class="mk walmart">W</span>
+          <div>
+            <div class="a-name"><b>Walmart</b> · 10001467995</div>
+            <div class="a-sku"><span class="mono">SM-X133-64GB-GREY</span><button class="copy" type="button">Copy</button></div>
+            <div class="a-meta"><span class="chip off">Stock sync off</span><span class="chip">Listed 203</span></div>
+          </div>
+          <div class="a-right"><span class="a-price">$149.99</span><button class="btn-ghost" type="button">Open listing ↗</button></div>
+        </div>
+        <div class="a-card">
+          <span class="mk ebay">e</span>
+          <div>
+            <div class="a-name"><b>eBay</b> · wirelesstechnostore</div>
+            <div class="a-sku"><span class="mono">X133-64GB-GRAY</span><button class="copy" type="button">Copy</button></div>
+            <div class="a-meta"><span class="chip on">Stock sync on</span><span class="chip">Listed 30</span></div>
+          </div>
+          <div class="a-right"><span class="a-price none">No price in Linnworks</span><button class="btn-ghost" type="button">Open listing ↗</button></div>
+        </div>
+        <div class="a-card">
+          <span class="mk temu">T</span>
+          <div>
+            <div class="a-name"><b>Temu</b> · Digital World Shop</div>
+            <div class="a-sku"><span class="mono">X133-64GB-GRAY</span><button class="copy" type="button">Copy</button></div>
+            <div class="a-meta"><span class="chip on">Stock sync on</span><span class="chip">Listed 30</span></div>
+          </div>
+          <div class="a-right"><span class="a-price none">No price in Linnworks</span><button class="btn-ghost" type="button">Open listing ↗</button></div>
+        </div>
+      </div>
+      <div class="dlg-foot"><span class="note">Right-click a SKU to copy it</span><button class="btn" type="button">Close</button></div>
+    </div>
+  </div>
+
+  <!-- ========== B ========== -->
+  <div class="opt">
+    <div class="opt-h"><b>B</b> · Clean table</div>
+    <div class="dlg">
+      <div class="b-head"><h2>Channel SKUs</h2><span class="mono" style="font-weight:600">X133-64GB-GRAY</span><span class="sub">3 listings · 1 with sync off</span></div>
+      <table class="b-table">
+        <thead><tr><th>Marketplace</th><th>Channel SKU</th><th class="r">Price</th><th class="r">Listed</th><th>Stock sync</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="b-ch"><span class="mk walmart">W</span><span><span class="n">Walmart</span><span class="acct">10001467995</span></span></div></td>
+            <td class="mono b-sku">SM-X133-64GB-GREY</td>
+            <td class="r mono">$149.99</td>
+            <td class="r mono">203</td>
+            <td><span class="sync off"><i></i>Off</span></td>
+          </tr>
+          <tr>
+            <td><div class="b-ch"><span class="mk ebay">e</span><span><span class="n">eBay</span><span class="acct">wirelesstechnostore</span></span></div></td>
+            <td class="mono b-sku">X133-64GB-GRAY</td>
+            <td class="r" style="color:var(--faint)">—</td>
+            <td class="r mono">30</td>
+            <td><span class="sync on"><i></i>On</span></td>
+          </tr>
+          <tr>
+            <td><div class="b-ch"><span class="mk temu">T</span><span><span class="n">Temu</span><span class="acct">Digital World Shop</span></span></div></td>
+            <td class="mono b-sku">X133-64GB-GRAY</td>
+            <td class="r" style="color:var(--faint)">—</td>
+            <td class="r mono">30</td>
+            <td><span class="sync on"><i></i>On</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="dlg-foot"><span class="note">Click a SKU to open its listing · right-click to copy</span><button class="btn" type="button">Close</button></div>
+    </div>
+  </div>
+
+  <!-- ========== C ========== -->
+  <div class="opt">
+    <div class="opt-h"><b>C</b> · Summary on top, plain-English status</div>
+    <div class="dlg">
+      <div class="c-top">
+        <div class="k">Linked listings</div>
+        <h2>X133-64GB-GRAY</h2>
+        <div class="c-strip">
+          <span class="c-pill"><span class="mk walmart">W</span>Walmart <span class="warn">· sync off</span></span>
+          <span class="c-pill"><span class="mk ebay">e</span>eBay</span>
+          <span class="c-pill"><span class="mk temu">T</span>Temu</span>
+        </div>
+      </div>
+      <div class="c-row walmart">
+        <span class="bar"></span>
+        <div>
+          <div class="c-l1"><span class="ch">Walmart</span><span class="acct">10001467995</span></div>
+          <div class="c-sku"><span class="mono">SM-X133-64GB-GREY</span><button class="copy" type="button">Copy</button></div>
+          <div class="c-warn">Stock sync is off — stock changes here don't reach this listing</div>
+        </div>
+        <div class="c-r"><span class="k">Price</span><span class="k">Listed</span><span class="v">$149.99</span><span class="v">203</span><button class="btn-ghost" type="button">Open ↗</button></div>
+      </div>
+      <div class="c-row ebay">
+        <span class="bar"></span>
+        <div>
+          <div class="c-l1"><span class="ch">eBay</span><span class="acct">wirelesstechnostore</span></div>
+          <div class="c-sku"><span class="mono">X133-64GB-GRAY</span><button class="copy" type="button">Copy</button></div>
+          <div class="c-ok">✓ Stock syncs automatically</div>
+        </div>
+        <div class="c-r"><span class="k">Price</span><span class="k">Listed</span><span class="v none">—</span><span class="v">30</span><button class="btn-ghost" type="button">Open ↗</button></div>
+      </div>
+      <div class="c-row temu">
+        <span class="bar"></span>
+        <div>
+          <div class="c-l1"><span class="ch">Temu</span><span class="acct">Digital World Shop</span></div>
+          <div class="c-sku"><span class="mono">X133-64GB-GRAY</span><button class="copy" type="button">Copy</button></div>
+          <div class="c-ok">✓ Stock syncs automatically</div>
+        </div>
+        <div class="c-r"><span class="k">Price</span><span class="k">Listed</span><span class="v none">—</span><span class="v">30</span><button class="btn-ghost" type="button">Open ↗</button></div>
+      </div>
+      <div class="dlg-foot"><button class="btn" type="button">Close</button></div>
+    </div>
+  </div>
+</body>
+</html>

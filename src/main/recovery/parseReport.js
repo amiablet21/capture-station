@@ -1,0 +1,348 @@
+'use strict';
+// Walmart reconciliation report parsing — ported from the Walmart app's
+// src/lib/parseReport.js (spec docs/recovery/SPEC.md §2). Behaviour kept
+// identical, only the input moved from a file path to the CSV text:
+//  - New format: rows with Transaction Type === "REFUNDED", grouped by
+//    "Walmart.com PO #"; detected by the absence of a Period Start Date column
+//  - Old format: rows with Transaction Type === "Refund", Amount Type rows
+//    summed per PO
+//  - Money fields sign-flipped so refunds display as positive amounts owed
+//  - PO numbers always strings, never numbers
+const { parseCsvText } = require('./csv');
+
+// pd.to_numeric(errors="coerce").fillna(0)
+function toNum(v) {
+  const n = Number(String(v ?? '').trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+function detectFormat(columns) {
+  return columns.includes('Period Start Date') ? 'old' : 'new';
+}
+
+function parseNewFormat(rows) {
+  const refunds = rows.filter((r) => r['Transaction Type'] === 'REFUNDED');
+  const map = new Map();
+  for (const r of refunds) {
+    const po = r['Walmart.com PO #'];
+    if (!map.has(po)) {
+      map.set(po, {
+        'PO #': po,
+        'Refunded Retail Sales': 0,
+        'Net Refund (Payable Impact)': 0,
+        Qty: 0,
+        Item: r['Partner Item name'],
+        SKU: String(r['Partner Item Id'] ?? '').trim(),
+        'Refund Date': r['Transaction Date Time'],
+        'Return Reason': r['Return Reason Description'],
+        'Refunded By': r['Transaction Description'] || '',
+        'Order #': r['Walmart.com Order #'],
+        'Fulfillment Type': r['Fulfillment Type'],
+      });
+    }
+    const g = map.get(po);
+    g['Refunded Retail Sales'] += toNum(r['Refunded Retail Sales']);
+    g['Net Refund (Payable Impact)'] += toNum(r['Payable to Partner from Sale']);
+    g.Qty += 1; // new format: one refunded row per unit
+  }
+  return [...map.values()];
+}
+
+function parseOldFormat(rows) {
+  const refunds = rows.filter((r) => r['Transaction Type'] === 'Refund');
+  const map = new Map();
+  for (const r of refunds) {
+    const po = r['Purchase Order #'];
+    if (!map.has(po)) {
+      map.set(po, {
+        'PO #': po,
+        'Refunded Retail Sales': 0,
+        'Net Refund (Payable Impact)': 0,
+        Qty: 0,
+        Item: r['Partner Item Name'],
+        SKU: String(r['Partner Item Id'] ?? '').trim(),
+        'Refund Date': r['Transaction Posted Timestamp'],
+        'Return Reason': r['Transaction Reason Description'],
+        // who issued it: Return Refund (the customer through Walmart), Seller
+        // Initiated Returns, Walmart Customer Care Refund (owner 2026-10-12)
+        'Refunded By': r['Transaction Description'] || '',
+        'Order #': r['Customer Order #'],
+        'Fulfillment Type': r['Fulfillment Type'],
+      });
+    }
+    const g = map.get(po);
+    const amount = toNum(r['Amount']);
+    g['Net Refund (Payable Impact)'] += amount;
+    if (r['Amount Type'] === 'Product Price') {
+      g['Refunded Retail Sales'] += amount;
+      g.Qty += Math.max(1, Math.trunc(Math.abs(Number(r['Ship Qty']))) || 1);
+    }
+  }
+  return [...map.values()];
+}
+
+// strptime("%m/%d/%Y") equivalent; returns Date at local midnight or null
+function parseRefundDate(s) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s ?? ''));
+  if (!m) return null;
+  const [, mo, d, y] = m.map(Number);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(y, mo - 1, d);
+  return dt.getMonth() === mo - 1 && dt.getDate() === d ? dt : null;
+}
+
+function toIsoDay(s) {
+  const d = parseRefundDate(String(s ?? '').slice(0, 10));
+  if (!d) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Report period: old format carries explicit Period Start/End Date columns;
+// otherwise fall back to the min/max refund date across the report.
+function detectPeriod(rows, refunds) {
+  // the Period columns sit on Walmart's summary rows only, blank elsewhere:
+  // one row per week paid plus one for the whole statement (09/05–09/19
+  // beside 09/05–09/11 and 09/12–09/18), and the odd adjustment row with a
+  // window of its own. The statement's period is the widest span on offer
+  // (owner 2026-10-14: a renamed file named itself from the first row
+  // found and sat beside the period it should have replaced)
+  let start = null; let end = null; let widest = -1;
+  for (const r of rows) {
+    const a = parseRefundDate(String(r['Period Start Date'] ?? '').slice(0, 10));
+    const b = parseRefundDate(String(r['Period End Date'] ?? '').slice(0, 10));
+    if (!a || !b || b < a) continue;
+    const span = b - a;
+    if (span > widest) { widest = span; start = a; end = b; }
+  }
+  if (start && end) return { start, end, explicit: true };
+  // fallback: min/max refund date — misleading for new-format files (refund
+  // rows reference dates far outside the payment period), so callers override
+  start = null;
+  end = null;
+  for (const r of refunds) {
+    const d = r.refundDateParsed;
+    if (!d) continue;
+    if (!start || d < start) start = d;
+    if (!end || d > end) end = d;
+  }
+  return { start, end, explicit: false };
+}
+
+// ---------- Refunds (one record per PO) ----------
+// a report whose SKU column is named differently (owner 2026-10-12: a period
+// of 1,304 orders landed under "(no SKU)") — alias the first header that
+// reads like an item id or SKU onto the name the parsers use
+function aliasSkuColumn(rows, columns) {
+  if (columns.includes('Partner Item Id')) return;
+  const alt = columns.find((c) => /^(partner\s*|seller\s*)?(item\s*(id|number|#)|sku(\s*(id|number|#))?)$/i.test(String(c).trim()));
+  if (!alt) return;
+  for (const r of rows) r['Partner Item Id'] = r[alt];
+  columns.push('Partner Item Id');
+}
+function parseRefunds(text) {
+  const { rows, columns } = parseCsvText(text);
+  aliasSkuColumn(rows, columns);
+  const format = detectFormat(columns);
+  const agg = format === 'new' ? parseNewFormat(rows) : parseOldFormat(rows);
+  for (const r of agg) {
+    r['PO #'] = String(r['PO #'] ?? '').trim();
+    r['Refund Date'] = String(r['Refund Date'] ?? '').slice(0, 10);
+    // Sign-flip: refunds show as positive amounts owed
+    r['Refunded Retail Sales'] = -r['Refunded Retail Sales'];
+    r['Net Refund (Payable Impact)'] = -r['Net Refund (Payable Impact)'];
+    r.refundDateParsed = parseRefundDate(r['Refund Date']);
+  }
+  return { refunds: agg, format, period: detectPeriod(rows, agg), rows, columns, lines: parseStatementLines(rows, format) };
+}
+
+// The statement as Walmart lays it out (owner 2026-10-13: "a 1 to 1 of what
+// I see on Walmart"): every CSV line summed by transaction type, Walmart's
+// description, amount type and day. Small per period, enough to rebuild the
+// Sales / Refunds / Fees / Adjustments / Paid to you sections for any scope.
+function parseStatementLines(rows, format) {
+  const map = new Map();
+  const add = (type, desc, amountType, date, amount, po) => {
+    const k = `${type}|${desc}|${amountType}|${date || ''}`;
+    const g = map.get(k) || { type, desc, amountType, date: date || null, amount: 0, count: 0, pos: 0 };
+    g.amount += amount; g.count++; if (po) g.pos++;
+    map.set(k, g);
+  };
+  if (format === 'new') {
+    for (const r of rows) {
+      const raw = String(r['Transaction Type'] ?? '').trim();
+      if (!raw) continue;
+      // a refund keeps who issued it (owner 2026-10-13); the label stays by amount type
+      add(NEW_FORMAT_TYPE_LABELS[raw] || raw, raw === 'REFUNDED' ? String(r['Transaction Description'] ?? '').trim() : '', 'Payable to partner', toIsoDay(r['Transaction Date Time']), toNum(r['Payable to Partner from Sale']), String(r['Walmart.com PO #'] ?? '').trim());
+    }
+  } else {
+    for (const r of rows) {
+      const type = String(r['Transaction Type'] ?? '').trim();
+      if (!type) continue;
+      const desc = String(r['Transaction Description'] ?? '').trim();
+      const at = String(r['Amount Type'] ?? '').trim();
+      // the summary line carries the period's payable in its own column
+      const amount = type === 'PaymentSummary' ? toNum(r['Total Payable']) : toNum(r['Amount']);
+      add(type, desc, at, toIsoDay(r['Transaction Posted Timestamp']), amount, String(r['Purchase Order #'] ?? '').trim());
+    }
+  }
+  return [...map.values()].map((g) => ({ ...g, amount: Math.round(g.amount * 100) / 100 }));
+}
+
+// ---------- Walmart payouts ("Walmart paid you back") ----------
+// Walmart paying YOU back for a refunded item: { po: { amount, date, kind } }.
+// Three shapes, all credits: a Dispute Settlement (a case you won); claim
+// payouts on an Adjustment line ("Shipping Protection Claim Payout"); the
+// automatic lost-item reimbursement on Fee/Reimbursement (base $100, up to
+// the sale value, capped $500 if insured). The negative "Walmart Shipping
+// Label Service Charge" shares that Amount Type and is excluded by the sign.
+// Checked against a real Sep 19 – Oct 3 2026 report (2026-10-12): the
+// Walmart app's broad match (any "Fee/Reimbursement" amount type) also
+// caught "Refund for unused label" ($7–8 label credits) and the positive
+// reversals of "Walmart Shipping Label Service Charge", which would have
+// marked a return "paid back". A payout is now: a Dispute Settlement, a
+// claim payout (Shipping Protection), or a lost-item reimbursement — and
+// never a label, fee, storage, advertising or inventory line.
+const SETTLEMENT_RX = /dispute|claim payout|shipping protection|lost ?(item|inventory|in transit|after delivery)|reimbursement for lost/i;
+const NOT_SETTLEMENT_RX = /unused label|label service|fulfillment fee|processing fee|removal fee|storage|advertising|inbound|found ?inventory|wfs charge|wfs refund/i;
+
+function parsePayouts(rows, format) {
+  const byPo = {};
+  for (const r of rows) {
+    const tt = String(r['Transaction Type'] ?? '');
+    const desc = String(r['Transaction Description'] ?? r['Transaction Reason Description'] ?? '');
+    if (!SETTLEMENT_RX.test(tt) && !SETTLEMENT_RX.test(desc)) continue;
+    if (NOT_SETTLEMENT_RX.test(desc)) continue;
+    const po = String((format === 'old' ? r['Purchase Order #'] : r['Walmart.com PO #']) ?? '').trim();
+    if (!po) continue;
+    const amount = toNum(format === 'old' ? r['Amount'] : r['Payable to Partner from Sale']);
+    if (amount <= 0) continue; // only credits TO you, never charges
+    const kind = /dispute/i.test(tt) || /dispute/i.test(desc) ? 'dispute' : 'adjustment';
+    if (!byPo[po]) {
+      byPo[po] = {
+        amount: 0,
+        kind,
+        date: String((format === 'old' ? r['Transaction Posted Timestamp'] : r['Transaction Date Time']) ?? '').slice(0, 10),
+      };
+    } else if (byPo[po].kind !== kind) {
+      byPo[po].kind = 'mixed';
+    }
+    byPo[po].amount += amount;
+  }
+  return byPo;
+}
+
+// ---------- Per-transaction ledger ----------
+// Minimal rows { po, order, type, date (ISO day), amount } — the summaries
+// read the Refund rows and the positive /dispute/ rows (spec §2.4, §8).
+const NEW_FORMAT_TYPE_LABELS = { SALE: 'Sale', REFUNDED: 'Refund' };
+
+function parseLedger(rows, format) {
+  const out = [];
+  if (format === 'old') {
+    const map = new Map();
+    let n = 0;
+    for (const r of rows) {
+      const type = String(r['Transaction Type'] ?? '').trim();
+      if (!type || type === 'PaymentSummary') continue;
+      const po = String(r['Purchase Order #'] ?? '').trim();
+      const key = String(r['Transaction Key'] ?? '').trim() || `${po}|${type}|${n++}`;
+      if (!map.has(key)) {
+        map.set(key, { key, po, order: String(r['Customer Order #'] ?? '').trim(), type, date: toIsoDay(r['Transaction Posted Timestamp']), amount: 0 });
+      }
+      const g = map.get(key);
+      g.amount += toNum(r['Amount']);
+      if (!g.order && r['Customer Order #']) g.order = String(r['Customer Order #']).trim();
+    }
+    return [...map.values()];
+  }
+  let n = 0;
+  for (const r of rows) {
+    const raw = String(r['Transaction Type'] ?? '').trim();
+    if (!raw) continue;
+    const po = String(r['Walmart.com PO #'] ?? '').trim();
+    out.push({
+      key: String(r['Transaction Key'] ?? '').trim() || `${po}|${raw}|${n++}`,
+      po,
+      order: String(r['Walmart.com Order #'] ?? r['Customer Order #'] ?? '').trim(),
+      type: NEW_FORMAT_TYPE_LABELS[raw] || raw,
+      date: toIsoDay(r['Transaction Date Time']),
+      amount: toNum(r['Payable to Partner from Sale']),
+    });
+  }
+  return out;
+}
+
+// ---------- Per-order sales, for Profit ----------
+// One record per PO with the net payable across its SALE and REFUNDED rows
+// (old format: every PO-linked row), units from the rows (new) or Ship
+// Qty (old). The Walmart app's loadOrders, kept so cost per unit sold can
+// be set against what Walmart actually paid.
+// the goods price on a SALE row of the new layout: its own column when the
+// report has one, else the first price-like column that carries a number
+const SALE_PRICE_COLS = ['Refunded Retail Sales', 'Retail Sales', 'Retail Price', 'Product Price', 'Item Price', 'Sale Price', 'Gross Sales', 'Gross Sale Amount', 'Order Line Amount'];
+function salePrice(r) {
+  for (const k of SALE_PRICE_COLS) { const v = Math.abs(toNum(r[k])); if (v) return v; }
+  return 0;
+}
+function parseOrders(rows, format) {
+  const map = new Map();
+  if (format === 'new') {
+    for (const r of rows) {
+      const type = r['Transaction Type'];
+      if (type !== 'SALE' && type !== 'REFUNDED') continue;
+      const po = String(r['Walmart.com PO #'] ?? '').trim();
+      if (!po) continue;
+      if (!map.has(po)) {
+        map.set(po, { po, item: r['Partner Item name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Date Time']), saleUnits: 0, refundUnits: 0, netPayable: 0, gross: 0, commission: null });
+      }
+      const g = map.get(po);
+      if (!g.item && r['Partner Item name']) g.item = r['Partner Item name'];
+      if (!g.sku && r['Partner Item Id']) g.sku = String(r['Partner Item Id']).trim();
+      g.netPayable += toNum(r['Payable to Partner from Sale']);
+      // the new layout carries the retail price on SALE rows too; it has no
+      // commission line of its own, so commission stays unknown there
+      if (type === 'SALE') { g.saleUnits++; g.gross += salePrice(r); } else g.refundUnits++;
+    }
+    return [...map.values()];
+  }
+  for (const r of rows) {
+    const po = String(r['Purchase Order #'] ?? '').trim();
+    if (!po) continue;
+    const type = r['Transaction Type'];
+    if (type === 'PaymentSummary') continue;
+    if (!map.has(po)) {
+      map.set(po, { po, item: r['Partner Item Name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Posted Timestamp']), saleUnits: 0, refundUnits: 0, netPayable: 0, gross: 0, commission: 0, note: '' });
+    }
+    const g = map.get(po);
+    if (!g.item && r['Partner Item Name']) g.item = r['Partner Item Name'];
+    if (!g.sku && r['Partner Item Id']) g.sku = String(r['Partner Item Id']).trim();
+    g.netPayable += toNum(r['Amount']);
+    // the statement's own wording for the other lines on a PO — a return
+    // shipping charge, a customer return reversal, a label charge (owner
+    // 2026-10-13: "show the statement wording on those rows")
+    if (type !== 'Sale' && type !== 'Refund') { const d = String(r['Transaction Description'] || '').trim(); if (d && !g.note.includes(d)) g.note = g.note ? `${g.note} · ${d}` : d; }
+    // what the customer paid for the goods and what Walmart kept of it
+    // (owner 2026-10-12: "the avg commission rate for this product")
+    if (type === 'Sale' && r['Amount Type'] === 'Product Price') g.gross += toNum(r['Amount']);
+    if (type === 'Sale' && r['Amount Type'] === 'Commission on Product') g.commission += toNum(r['Amount']);
+    if (r['Amount Type'] === 'Product Price') {
+      const qty = Math.max(1, Math.trunc(Math.abs(Number(r['Ship Qty']))) || 1);
+      if (type === 'Sale') g.saleUnits += qty;
+      else if (type === 'Refund') g.refundUnits += qty;
+    }
+  }
+  return [...map.values()];
+}
+
+// Everything the import needs from one report text, parsed once.
+function parseReport(text) {
+  const parsed = parseRefunds(text);
+  return {
+    ...parsed,
+    payouts: parsePayouts(parsed.rows, parsed.format),
+    ledger: parseLedger(parsed.rows, parsed.format),
+    orders: parseOrders(parsed.rows, parsed.format),
+  };
+}
+
+module.exports = { parseReport, parseRefunds, parsePayouts, parseLedger, parseOrders, parseStatementLines, detectFormat, parseRefundDate, toIsoDay, toNum, SETTLEMENT_RX, NOT_SETTLEMENT_RX };

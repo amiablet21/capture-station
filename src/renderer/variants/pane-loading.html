@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Marketplace pane loading screen — pick A, B or C</title>
+<style>
+  @font-face { font-family: 'Geist'; src: url('file:///C:/Users/ndurs/Capture%20Station/src/renderer/fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('file:///C:/Users/ndurs/Capture%20Station/src/renderer/fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #1E3A66; --accent-soft: #E4EAF4;
+    --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); background: #ECEAE6; padding: 22px; }
+  h1 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .note { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; align-items: start; }
+  .slot { display: flex; flex-direction: column; gap: 8px; }
+  .lbl { font-size: 12.5px; font-weight: 600; }
+  .lbl span { color: var(--muted); font-weight: 400; }
+
+  /* the pane's dock footprint: 480px-ish column, full height */
+  .pane { height: 560px; background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+
+  /* ---- A · Quiet ring ---- */
+  .a-mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+  .ring { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: spin 900ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .a-t { font-size: 13px; color: var(--muted); }
+  .a-d { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+  /* ---- B · Brand tile ---- */
+  .b-mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+  .tile { width: 46px; height: 46px; border-radius: 12px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(47,52,55,.12); animation: breathe 1.5s var(--ease) infinite; }
+  @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(.94); opacity: .75; } }
+  .b-t { font-size: 13px; color: var(--muted); }
+  .b-t i { font-style: normal; display: inline-block; width: 1.1em; text-align: left; animation: dots 1.5s steps(4, end) infinite; }
+  @keyframes dots { 0% { content: ''; } }
+  .b-t i::after { content: ''; animation: dotstep 1.5s steps(1, end) infinite; }
+  @keyframes dotstep { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+  /* ---- C · Page skeleton ---- */
+  .c-band { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .c-dot { width: 10px; height: 10px; border-radius: 50%; background: #E4E2DC; }
+  .c-addr { flex: 1; height: 22px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .c-body { flex: 1; background: var(--surface); padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .sk { border-radius: 6px; background: linear-gradient(90deg, #F1F0EC 25%, #E9E7E2 37%, #F1F0EC 63%); background-size: 400% 100%; animation: sheen 1.4s ease infinite; }
+  @keyframes sheen { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+  .sk.h { height: 26px; width: 55%; }
+  .sk.r1 { height: 13px; width: 90%; } .sk.r2 { height: 13px; width: 82%; } .sk.r3 { height: 13px; width: 70%; }
+  .sk.card { height: 92px; width: 100%; margin-top: 6px; }
+  .c-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface); border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .mini { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: spin 900ms linear infinite; }
+</style>
+</head>
+<body>
+<h1>Marketplace pane — loading screen instead of the black flash</h1>
+<div class="note">Shown in the pane's spot from the moment it opens until the page has actually painted; the web page then swaps in. Same behavior at boot and when a Sent to WFS link opens the pane.</div>
+<div class="row">
+  <div class="slot"><div class="lbl">A · Quiet ring <span>— canvas background, one small spinner</span></div>
+    <div class="pane">
+      <div class="a-mid">
+        <div class="ring"></div>
+        <div class="a-t">Opening Walmart Seller Center</div>
+        <div class="a-d">seller.walmart.com</div>
+      </div>
+    </div>
+  </div>
+  <div class="slot"><div class="lbl">B · Brand tile <span>— the dws tile breathing</span></div>
+    <div class="pane">
+      <div class="b-mid">
+        <div class="tile">dws</div>
+        <div class="b-t">Opening Walmart Seller Center<i></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="slot"><div class="lbl">C · Page skeleton <span>— fake browser chrome + shimmer</span></div>
+    <div class="pane">
+      <div class="c-band"><span class="c-dot"></span><span class="c-dot"></span><span class="c-addr">seller.walmart.com</span></div>
+      <div class="c-body">
+        <div class="sk h"></div>
+        <div class="sk r1"></div><div class="sk r2"></div><div class="sk r3"></div>
+        <div class="sk card"></div><div class="sk card"></div>
+      </div>
+      <div class="c-foot"><span class="mini"></span>Opening Walmart Seller Center…</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

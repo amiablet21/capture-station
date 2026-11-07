@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Settings — organized</title>
+<!--
+  Owner 2026-10-20: "make the settings page more organized". The one long
+  scroll (12 sections) becomes six groups in a sidebar, one group on screen
+  at a time, short labels. Nothing is added or removed, only regrouped:
+    General   — pages, capture-only, Settings PIN, daily CSV folder
+    Linnworks — keys + location, dry run, routing, carrier cutoff
+    Shipping  — UPS accounts, Walmart keys, addresses, printer, test mode
+    Stock     — reorder points, receiving folder + webhook, low-stock webhook
+    Returns   — shared folder + station, Recovery email / webhook / links
+    Advanced  — order and tracking patterns
+  Click the sidebar to move between groups.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #CFCFCB; }
+  .stage { min-height: 100vh; display: grid; place-items: center; padding: 30px; }
+  .set { width: 920px; height: 640px; background: var(--surface); border-radius: 14px; box-shadow: 0 24px 60px rgba(47,52,55,.18); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
+  .nav { grid-row: 1 / 3; background: var(--surface-2); border-right: 1px solid var(--border); padding: 18px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .nav h2 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; padding: 0 10px 14px; }
+  .nav button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+  .nav button svg { width: 16px; height: 16px; flex: none; }
+  .nav button:hover { color: var(--text); background: rgba(0,0,0,.03); }
+  .nav button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+  .nav button.on svg { color: var(--accent); }
+  .nav .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: #2F9E6B; }
+  .nav .dot.off { background: var(--border); }
+  .pane { overflow-y: auto; padding: 22px 26px 10px; }
+  .pane h3 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 16px; }
+  .grp { margin-bottom: 22px; }
+  .grp > .t { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .grp > .t .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; flex-wrap: wrap; }
+  .f { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .f > span { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 0 14px; }
+  .three { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 14px; }
+  .pages { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px 14px; }
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px 4px; }
+  .saved { display: flex; align-items: center; gap: 6px; min-height: 33px; font-size: 12.5px; color: var(--pos-text); }
+  .lnk { border: none; background: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-soft-text); cursor: pointer; }
+  .ok { font-size: 12px; color: var(--pos-text); font-weight: 500; }
+  .path { font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 6px 10px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .addr { display: flex; flex-direction: column; gap: 6px; }
+  .csz { display: grid; grid-template-columns: minmax(0,1fr) 52px 90px; gap: 6px; }
+  .foot { grid-column: 2; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 26px; border-top: 1px solid var(--border); }
+  .input { width: 100%; }
+  .num { width: 90px; }
+  .lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6E6E6A; text-align: center; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="stage"><div>
+<div class="lbl">Settings · six groups in a sidebar, one on screen at a time</div>
+<div class="set">
+  <nav class="nav" id="nav">
+    <h2>Settings</h2>
+    <button data-p="general"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Z"/></svg>General</button>
+    <button data-p="linnworks"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,10A56,56,0,0,1,48.38,128.4L72.5,104.28A56,56,0,0,1,149.31,102a8,8,0,1,1-10.64,12,40,40,0,0,0-54.85,1.63L59.7,139.72a40,40,0,0,0,56.58,56.58l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.32,11.31l9.94-9.94a40,40,0,0,1,56.58,56.58L172.18,140.4A40,40,0,0,1,117.33,142,8,8,0,1,0,106.69,154a56,56,0,0,0,76.81-2.26l24.12-24.12A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>Linnworks<span class="dot"></span></button>
+    <button data-p="shipping"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M255.42,117l-14-35A15.93,15.93,0,0,0,226.58,72H192V64a8,8,0,0,0-8-8H32A16,16,0,0,0,16,72V184a16,16,0,0,0,16,16H49a32,32,0,0,0,62,0h50a32,32,0,0,0,62,0h17a16,16,0,0,0,16-16V120A7.94,7.94,0,0,0,255.42,117ZM192,88h34.58l9.6,24H192ZM32,72H176v64H32ZM80,208a16,16,0,1,1,16-16A16,16,0,0,1,80,208Zm112,0a16,16,0,1,1,16-16A16,16,0,0,1,192,208Zm48-24H223a32.06,32.06,0,0,0-31-24V128h48Z"/></svg>Shipping<span class="dot"></span></button>
+    <button data-p="stock"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44L128,120,47.66,76ZM40,90l80,43.78v85.79L40,175.82Zm96,129.57V133.82L216,90v85.78Z"/></svg>Stock</button>
+    <button data-p="returns"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232,144a64.07,64.07,0,0,1-64,64H80a8,8,0,0,1,0-16h88a48,48,0,0,0,0-96H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,45.66L51.31,80H168A64.07,64.07,0,0,1,232,144Z"/></svg>Returns</button>
+    <button data-p="advanced"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z"/></svg>Advanced</button>
+  </nav>
+
+  <div class="pane" id="pane"></div>
+
+  <div class="foot"><button class="btn btn-ghost">Cancel</button><button class="btn btn-primary">Save</button></div>
+</div>
+</div></div>
+
+<script>
+const saved = '<div class="saved">Saved ✓ · <button class="lnk">Replace</button></div>';
+const input = (v = '', cls = '') => `<input class="input ${cls}" value="${v}" />`;
+const f = (label, inner) => `<label class="f"><span>${label}</span>${inner}</label>`;
+const chk = (label, on) => `<label class="check"><input type="checkbox" ${on ? 'checked' : ''}/> ${label}</label>`;
+const addr = (title, a, extra = '') => `<div class="addr"><div class="t" style="font-size:12px;font-weight:500;color:var(--muted);display:flex">${title}${extra}</div>
+  ${input(a[0])}${input(a[1])}${input(a[2])}${input(a[3])}<div class="csz">${input(a[4])}${input(a[5])}${input(a[6], 'mono')}</div>${input(a[7], 'mono')}</div>`;
+const grp = (title, body, right = '') => `<div class="grp"><div class="t">${title}${right ? `<span class="r">${right}</span>` : ''}</div>${body}</div>`;
+
+const PANES = {
+  general: `<h3>General</h3>
+    ${grp('Pages on this station', `<div class="pages">${[['Overview', 1], ['Stock', 1], ['Pricing', 0], ['History', 1], ['Returns', 1], ['Recovery', 1], ['Listings', 1], ['Wholesale', 0], ['Cost', 0], ['Ship', 1]].map(([n, on]) => chk(n, on)).join('')}</div>`)}
+    ${grp('Mode', `<div class="row">${chk('Capture only (no Linnworks from this station)', 0)}</div>`)}
+    ${grp('Settings PIN', `<div class="row"><input class="input num mono" type="password" placeholder="unchanged" />${chk('Remove PIN', 0)}</div>`, 'also opens Recovery')}
+    ${grp('Daily CSV', `<div class="row"><span class="path">Documents\\Capture Station</span><button class="btn btn-ghost">Change</button></div>`)}`,
+  linnworks: `<h3>Linnworks</h3>
+    ${grp('Connection', `<div class="two">${f('Application ID', input('3f1c…9a2'))}${f('Application secret', saved)}${f('Install token', saved)}${f('Stock location', '<select class="input"><option>Default</option></select>')}</div>
+      <div class="row"><button class="btn btn-secondary">Test</button><span class="ok">Connected</span></div>`)}
+    ${grp('Sync', `<div class="row">${chk('Dry run (log only, nothing written)', 0)}</div>
+      <div class="row">${chk('Move orders with no stock to', 1)}<select class="input" style="width:200px"><option>DropShip</option></select></div>
+      <div class="row"><span style="font-size:12px;color:var(--muted)">Carrier cutoff</span><input class="input num mono" value="16:00" /></div>`)}`,
+  shipping: `<h3>Shipping</h3>
+    ${grp('UPS accounts', `<div class="two">
+      <div class="card">${f('Name', input('Digital World Shop'))}${f('Account #', input('4A7X12', 'mono'))}${f('Client ID', saved)}${f('Client secret', saved)}<div class="row"><button class="btn btn-secondary">Test</button><span class="ok">Connected</span></div></div>
+      <div class="card">${f('Name', input('Company 2'))}${f('Account #', input('9R2W55', 'mono'))}${f('Client ID', saved)}${f('Client secret', saved)}<div class="row"><button class="btn btn-secondary">Test</button><span class="ok">Connected</span></div></div>
+    </div>`)}
+    ${grp('Walmart', `<div class="two">${f('Client ID', saved)}${f('Client secret', saved)}</div><div class="row"><button class="btn btn-secondary">Test</button><span class="ok">Connected</span></div>`)}
+    ${grp('Addresses', `<div class="two">
+      ${addr('Ship-from', ['Digital World Shop', 'Shipping', '324 Ringwood Ave', 'Floor 1', 'Pompton Lakes', 'NJ', '07442', '212-967-3852'])}
+      ${addr('Returns to', ['Digital World Shop', 'Returns', '324 Ringwood Ave', 'Floor 1', 'Pompton Lakes', 'NJ', '07442', '212-967-3852'], '<button class="lnk" style="margin-left:auto">same as ship-from</button>')}
+    </div>`)}
+    ${grp('Printing', `<div class="row"><select class="input" style="width:260px"><option>ZDesigner GK420d</option></select>${chk('Test mode (UPS test servers)', 0)}</div>`)}`,
+  stock: `<h3>Stock</h3>
+    ${grp('Reorder points', `<div class="row">${chk('Suggest minimums from sales', 1)}${chk('Apply them nightly', 0)}</div>
+      <div class="three">${f('Lead time (days)', input('7', 'mono'))}${f('Buy coverage (days)', input('21', 'mono'))}${f('Buy now under (units)', input('5', 'mono'))}</div>`)}
+    ${grp('Receiving', `<div class="row"><span class="path">Documents\\Capture Station\\receiving</span><button class="btn btn-ghost">Change</button></div>${f('Webhook (optional)', input('', 'mono'))}`)}
+    ${grp('Low-stock alerts', f('Webhook (optional)', input('', 'mono')))}`,
+  returns: `<h3>Returns</h3>
+    ${grp('Shared folder', `<div class="row"><span class="path">G:\\My Drive\\DWS Stock</span><button class="btn btn-ghost">Change</button><button class="btn btn-ghost">Turn off</button></div>${f('This station', input('FRONT-DESK', 'mono'))}`)}
+    ${grp('Recovery', `<div class="two">${f('Alert email', input('imran@digitalworldshopus.com'))}${f('Webhook (optional)', input('', 'mono'))}</div>${f('Walmart transaction link', input('https://seller.walmart.com/payments/…{po}', 'mono'))}
+      <div class="row"><span class="path">Documents\\Capture Station\\Walmart Reports</span><button class="btn btn-ghost">Open</button></div>`)}`,
+  advanced: `<h3>Advanced</h3>
+    ${grp('Patterns', `<div class="two">${f('Order numbers', '<textarea class="input mono" rows="5">walmart = ^\\d{15}$\nebay = ^\\d{2}-\\d{5}-\\d{5}$\ntemu = ^PO-\\d{3}-\\d{5,}$</textarea>')}${f('Tracking', '<textarea class="input mono" rows="5">UPS = ^1Z[A-HJ-NP-Z0-9]{16}$\nUSPS = ^9[2345]\\d{20,24}$\nFedEx = ^\\d{12}$</textarea>')}</div>`)}`,
+};
+function show(p) {
+  document.getElementById('pane').innerHTML = PANES[p];
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+}
+document.getElementById('nav').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (b) show(b.dataset.p); });
+show(new URLSearchParams(location.search).get('p') || 'shipping');
+</script>
+</body>
+</html>

@@ -1,13 +1,14 @@
 {
   "name": "capture-station",
-  "version": "1.31.24",
+  "version": "1.32.131",
   "description": "Packing station capture app - orders, tracking, serials -> Linnworks",
   "main": "src/main/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
     "dist": "electron-builder --win nsis",
-    "dist:mac": "electron-builder --mac"
+    "dist:mac": "electron-builder --mac",
+    "lw": "node tools/linnworks/lw.js"
   },
   "keywords": [],
   "author": "Digital World Shop",

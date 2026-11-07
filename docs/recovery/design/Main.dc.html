@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recovery — Reconcile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0;background:#F7F6F3;color:#2F3437;font-family:Geist,'Segoe UI',sans-serif;font-size:13px;line-height:1.55}
+a{color:#1E3A66;text-decoration:none}a:hover{color:#152B4E}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #F7F6F3">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 28px 10px">
+    <div style="width: 30px; height: 30px; border-radius: 8px; background: #1E3A66"></div>
+    <nav style="display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px">
+      <a href="#" style="font-size: 12.5px; font-weight: 500; color: #787774; padding: 5px 14px; border-radius: 8px">Capture</a>
+      <a href="#" style="font-size: 12.5px; font-weight: 500; color: #787774; padding: 5px 14px; border-radius: 8px">Stock</a>
+      <a href="#" style="font-size: 12.5px; font-weight: 500; color: #787774; padding: 5px 14px; border-radius: 8px">Returns</a>
+      <a href="#" style="font-size: 12.5px; font-weight: 600; color: #2F3437; padding: 5px 14px; border-radius: 8px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(47,52,55,0.08)">Recovery</a>
+    </nav>
+    <div style="width: 30px"></div>
+  </header>
+
+  <main style="width: 100%; max-width: 1100px; margin: 0 auto; padding: 28px 28px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px">
+
+    <div style="display: flex; align-items: flex-end; gap: 28px; border-bottom: 1px solid #EAEAEA; padding-bottom: 14px">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.015em">Recovery</h1>
+      <nav style="display: flex; gap: 22px; margin-left: 12px">
+        <a href="#" style="font-size: 13px; font-weight: 600; color: #2F3437; padding-bottom: 14px; margin-bottom: -15px; border-bottom: 2px solid #1E3A66">Reconcile</a>
+        <a href="NotReceived.dc.html" style="font-size: 13px; font-weight: 500; color: #787774; display: flex; align-items: center; gap: 8px">Not received <span style="font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #9F2F2D">3</span></a>
+      </nav>
+      <button style="margin-left: auto; font-family: inherit; font-size: 12.5px; font-weight: 500; background: #1E3A66; color: #FFFFFF; border: 1px solid #1E3A66; border-radius: 6px; padding: 7px 14px; cursor: pointer">Import payment period</button>
+    </div>
+
+    <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 40px; align-items: start">
+      <div style="display: flex; flex-direction: column; gap: 18px">
+        <div>
+          <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #787774">Latest period</div>
+          <div style="font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-top: 4px">Sep 13 – Sep 27, 2026</div>
+          <div style="color: #787774; margin-top: 6px">Imported today at 8:40 AM · 11 refunds checked against 1,204 returns in the log</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; border: 1.5px dashed #D6D2C9; border-radius: 10px; padding: 14px 16px; background: #FFFFFF">
+          <div style="width: 34px; height: 34px; border-radius: 8px; background: #E4EAF4; color: #1E3A66; display: flex; align-items: center; justify-content: center; flex: none">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg>
+          </div>
+          <div style="flex: 1; min-width: 0"><div style="font-weight: 500">Drop the next period's CSV here</div><div style="font-size: 12px; color: #787774">Seller Center → Payments · nothing is written to disk</div></div>
+          <button style="font-family: inherit; font-size: 12.5px; font-weight: 500; background: #FFFFFF; color: #1E3A66; border: 1px solid #EAEAEA; border-radius: 6px; padding: 5px 12px; cursor: pointer">Browse…</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #787774; margin-bottom: 6px">Earlier periods</div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid rgba(0,0,0,0.06)"><span style="flex: 1">Aug 30 – Sep 13, 2026</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #787774">2 open</span><a href="#" style="font-size: 12px">Excel</a></div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid rgba(0,0,0,0.06)"><span style="flex: 1">Aug 16 – Aug 30, 2026</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #A5A29C">clear</span><a href="#" style="font-size: 12px">Excel</a></div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.06)"><span style="flex: 1">Aug 2 – Aug 16, 2026</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #787774">1 open</span><a href="#" style="font-size: 12px">Excel</a></div>
+        </div>
+      </div>
+
+      <div style="background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 12px; padding: 24px 26px 22px; display: flex; flex-direction: column; gap: 22px">
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+          <div><div style="font-family: 'Geist Mono', monospace; font-size: 36px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; color: #1E3A66">4</div><div style="font-size: 12.5px; margin-top: 8px">received</div><div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #787774">$1,571.51</div></div>
+          <div><div style="font-family: 'Geist Mono', monospace; font-size: 36px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; color: #9F2F2D">5</div><div style="font-size: 12.5px; margin-top: 8px">not received</div><div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #787774">$851.50</div></div>
+          <div><div style="font-family: 'Geist Mono', monospace; font-size: 36px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; color: #956400">2</div><div style="font-size: 12.5px; margin-top: 8px">WFS waiting</div><div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #787774">$738.23</div></div>
+        </div>
+        <div>
+          <div style="display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px">
+            <div style="flex: 1571.51; background: #1E3A66"></div>
+            <div style="flex: 851.5; background: #9F2F2D"></div>
+            <div style="flex: 738.23; background: #D4A531"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11.5px; color: #787774"><span>$3,161.24 refunded this period</span><span>3 need action today</span></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; border-top: 1px solid #EAEAEA; padding-top: 16px">
+          <button style="font-family: inherit; font-size: 12.5px; font-weight: 500; background: #FFFFFF; color: #2F3437; border: 1px solid #EAEAEA; border-radius: 6px; padding: 5px 12px; cursor: pointer">Download Excel</button>
+          <button style="font-family: inherit; font-size: 12.5px; font-weight: 500; background: transparent; color: #787774; border: 1px solid transparent; border-radius: 6px; padding: 5px 8px; cursor: pointer">Remove period</button>
+        </div>
+      </div>
+    </section>
+
+    <section style="background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 12px; overflow: hidden">
+      <div style="display: flex; align-items: center; gap: 26px; padding: 0 24px; border-bottom: 1px solid #EAEAEA">
+        <a href="#" style="font-size: 13px; font-weight: 600; color: #2F3437; padding: 16px 0 14px; border-bottom: 2px solid #1E3A66; margin-bottom: -1px; display: flex; gap: 8px; align-items: baseline">Not received <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #9F2F2D">5</span></a>
+        <a href="#" style="font-size: 13px; font-weight: 500; color: #787774; padding: 16px 0 14px; display: flex; gap: 8px; align-items: baseline">WFS waiting <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px">2</span></a>
+        <a href="#" style="font-size: 13px; font-weight: 500; color: #787774; padding: 16px 0 14px; display: flex; gap: 8px; align-items: baseline">Received <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px">4</span></a>
+        <span style="margin-left: auto; font-size: 12px; color: #A5A29C">sorted: act now first, then biggest refund</span>
+      </div>
+      <div style="overflow-x: auto">
+        <table style="width: 100%; min-width: 900px; border-collapse: collapse">
+          <thead><tr>
+            <th style="text-align: left; padding: 12px 24px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #787774">PO</th>
+            <th style="text-align: left; padding: 12px 12px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #787774">Item</th>
+            <th style="text-align: left; padding: 12px 12px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #787774">Refunded</th>
+            <th style="text-align: right; padding: 12px 12px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #787774">Net refund</th>
+            <th style="text-align: left; padding: 12px 12px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #787774">Reason</th>
+            <th style="text-align: left; padding: 12px 24px 10px 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #787774">What to do</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding: 13px 24px; border-top: 1px solid rgba(0,0,0,0.06)"><div style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500">129011111111112</div><div style="font-size: 11px; color: #787774; margin-top: 2px">WFS</div></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); max-width: 280px">Lenovo Tab P11 2nd Gen 128GB</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="font-family: 'Geist Mono', monospace">Sep 30</span> <span style="color: #787774">· 10 days ago</span></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); font-family: 'Geist Mono', monospace; text-align: right; white-space: nowrap">$219.84</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); color: #787774">Lost in transit</td>
+              <td style="padding: 13px 24px 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #9F2F2D; margin-right: 8px; vertical-align: 1px"></span><span style="font-weight: 600; color: #9F2F2D">Open a case now</span><span style="color: #787774"> — lost per Walmart</span></td>
+            </tr>
+            <tr>
+              <td style="padding: 13px 24px; border-top: 1px solid rgba(0,0,0,0.06)"><div style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500">129010101010101</div><div style="font-size: 11px; color: #787774; margin-top: 2px">Seller</div></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); max-width: 280px">Samsung Galaxy Tab A9 64GB Silver</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="font-family: 'Geist Mono', monospace">Oct 2</span> <span style="color: #787774">· 8 days ago</span></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); font-family: 'Geist Mono', monospace; text-align: right; white-space: nowrap">$153.59</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); color: #787774">Lost after delivery</td>
+              <td style="padding: 13px 24px 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #9F2F2D; margin-right: 8px; vertical-align: 1px"></span><span style="font-weight: 600; color: #9F2F2D">Open a case now</span><span style="color: #787774"> — lost per Walmart</span></td>
+            </tr>
+            <tr>
+              <td style="padding: 13px 24px; border-top: 1px solid rgba(0,0,0,0.06)"><div style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500">129003333333333</div><div style="font-size: 11px; color: #787774; margin-top: 2px">Seller</div></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); max-width: 280px">Lenovo Tab M10 Plus 128GB</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="font-family: 'Geist Mono', monospace">Aug 13</span> <span style="color: #787774">· 58 days ago</span></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); font-family: 'Geist Mono', monospace; text-align: right; white-space: nowrap">$171.84</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); color: #787774">Defective</td>
+              <td style="padding: 13px 24px 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #9F2F2D; margin-right: 8px; vertical-align: 1px"></span><span style="font-weight: 600; color: #9F2F2D">Open a dispute now</span><span style="color: #787774"> — missing over 30 days</span></td>
+            </tr>
+            <tr>
+              <td style="padding: 13px 24px; border-top: 1px solid rgba(0,0,0,0.06)"><div style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500">129002222222222</div><div style="font-size: 11px; color: #787774; margin-top: 2px">Seller</div></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); max-width: 280px">Samsung Galaxy Tab A9+ 64GB Graphite</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="font-family: 'Geist Mono', monospace">Oct 6</span> <span style="color: #787774">· 4 days ago</span></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); font-family: 'Geist Mono', monospace; text-align: right; white-space: nowrap">$211.19</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); color: #787774">No longer wanted</td>
+              <td style="padding: 13px 24px 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #D4A531; margin-right: 8px; vertical-align: 1px"></span><span style="font-weight: 500">Watch for arrival</span><span style="color: #787774"> — 41 days to file</span></td>
+            </tr>
+            <tr>
+              <td style="padding: 13px 24px; border-top: 1px solid rgba(0,0,0,0.06)"><div style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500">129007777777777</div><div style="font-size: 11px; color: #787774; margin-top: 2px">Seller</div></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); max-width: 280px">Onn 10.1 Tablet Pro 32GB</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="font-family: 'Geist Mono', monospace">Oct 3</span> <span style="color: #787774">· 7 days ago</span></td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); font-family: 'Geist Mono', monospace; text-align: right; white-space: nowrap">$95.04</td>
+              <td style="padding: 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); color: #787774">Defective</td>
+              <td style="padding: 13px 24px 13px 12px; border-top: 1px solid rgba(0,0,0,0.06); white-space: nowrap"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #D4A531; margin-right: 8px; vertical-align: 1px"></span><span style="font-weight: 500">Watch for arrival</span><span style="color: #787774"> — 38 days to file</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding: 12px 24px; border-top: 1px solid #EAEAEA; font-size: 12px; color: #787774">Every one of these is already on the <a href="NotReceived.dc.html">Not received</a> list, where you open cases and track payouts.</div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1020}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

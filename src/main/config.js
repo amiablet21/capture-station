@@ -20,6 +20,28 @@ function encryptCreds(linnworks) {
   }
 }
 
+// the UPS client IDs and secrets ride the same OS-key encryption, one
+// blob for both accounts (upsEnc)
+function encryptUps(ups) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    const secrets = ((ups && ups.accounts) || []).map(a => ({ clientId: a.clientId || '', clientSecret: a.clientSecret || '' }));
+    return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
+// the Walmart key pair too (walmartEnc)
+function encryptWalmart(w) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    return safeStorage.encryptString(JSON.stringify({ clientId: (w && w.clientId) || '', clientSecret: (w && w.clientSecret) || '' })).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
 function decryptCreds(b64) {
   try {
     return JSON.parse(safeStorage.decryptString(Buffer.from(b64, 'base64')));
@@ -54,6 +76,11 @@ const DEFAULTS = {
     locationName: '',
   },
   dryRun: true,
+  // Carrier (as detected from the tracking number) -> Linnworks shipping
+  // method set on the order at Process: { UPS: { id, name }, ... }. The
+  // marketplace learns the carrier from the method, so labels bought outside
+  // Walmart/Temu need the right one or the despatch never shows there.
+  carrierServices: {},
   // Route open orders the primary location can't cover to a fallback
   // (dropship) location; move them back when the primary is replenished.
   stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' },
@@ -74,7 +101,36 @@ const DEFAULTS = {
   // all of these and shows Capture alone. (Receiving lives inside the Stock
   // page; the third tab is Returns.)
   // (Pricing is opt-in — off until ticked in Settings, owner 2026-09-18.)
-  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false },
+  // (Recovery is opt-in too and needs Returns, since it reads the Returns log.)
+  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false, recovery: false, ship: false },
+  // Ship tab (owner 2026-10-19): UPS labels on either company's account.
+  // Each account is its own UPS developer app (client ID + secret) billed to
+  // its shipper number; name is what the Ship tab shows. shipFrom is the
+  // warehouse (and the Shipper on every label); returnTo is where return
+  // labels send the parcel. test = UPS's test servers (no charge, labels
+  // not valid). printer: '' = ask with the print dialog every time.
+  ups: {
+    test: false,
+    printer: '',
+    accounts: [
+      { id: 'a', name: '', accountNumber: '', clientId: '', clientSecret: '' },
+      { id: 'b', name: '', accountNumber: '', clientId: '', clientSecret: '' },
+    ],
+    shipFrom: { name: '', company: '', phone: '', email: '', line1: '', line2: '', city: '', state: '', zip: '' },
+    returnTo: { name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', zip: '' },
+    boxes: [
+      { name: 'Phone box', length: 8, width: 6, height: 4 },
+      { name: 'Tablet box', length: 13, width: 10, height: 4 },
+      { name: '2-phone box', length: 10, width: 8, height: 5 },
+    ],
+  },
+  // Ship with Walmart (owner 2026-10-20): the seller's own Walmart key pair
+  // (Seller Center → API Key Management) for Walmart's label rates on
+  // Walmart orders. Empty = Walmart rates simply don't show.
+  walmart: { clientId: '', clientSecret: '' },
+  // Browser access (owner 2026-10-20): the whole app at http://localhost:<port>
+  // on this computer only, opened with a private key (the link in Settings)
+  web: { enabled: false, port: 47391, key: '' },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
@@ -91,6 +147,11 @@ const DEFAULTS = {
   // shared returns across desktops: a file-synced folder (Google Drive /
   // OneDrive / network share) + this station's name. Both empty = sync off.
   returnsSync: { folder: '', station: '' },
+  // Recovery page: the alert email for "Email me this list", the make.com
+  // webhook the dispute digest POSTs to, and the digest's last-sent memory
+  // (so the same set of cases is not re-sent within 20 hours)
+  // (the tab itself is unlocked with the Settings PIN — no code of its own)
+  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0 },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {
@@ -117,6 +178,13 @@ const DEFAULTS = {
     ebay: '',
     temu: '',
   },
+  // Recovery's PO# menu (owner 2026-10-12: "order page or transaction
+  // page"): its second entry opens the PO in Seller Center's payments
+  // transactions. {po} is replaced; editable in Settings → Recovery.
+  txnUrlTemplates: {
+    // the PO search form (owner 2026-10-13), not the free-text searchTerm
+    walmart: 'https://seller.walmart.com/payments/transactions?searchType=poNo&searchValue={po}',
+  },
   // Click a channel SKU in the Stock popup -> open that listing on the
   // marketplace, searched by the channel SKU. {sku} is replaced.
   // Walmart: the legacy manage-items URL now redirects into the new Catalog
@@ -133,35 +201,6 @@ const DEFAULTS = {
   // SKUs deliberately excluded from the "needs marketplace listings"
   // machinery (claim bins, fakes, write-offs — never to be listed)
   unlistedIgnore: [],
-  // eBay lister: per-model spec cards (copied once from a live NEW listing or
-  // typed once by hand) + the business-policy names the CSV references
-  ebayModelCards: {},
-
-  // Linnworks-native eBay publishing: which configurator lists each
-  // condition (configurators carry the eBay condition), + the account
-  ebayLw: { subSource: '', byCond: {} }, // byCond: { new|openbox|used|scrap: configId }
-  // owner's live policy names (renamed on eBay 2026-08-12) — the CSV
-  // references business policies by exact name
-  ebayProfiles: {
-    shipping: 'FREE SHIPPING',
-    returns: '30-Day Returns - Buyer Pays',
-    payment: 'eBay Managed Payments - Immediate',
-    location: 'Fairfield, NJ',
-    dispatchDays: 1,
-  },
-  // Temu lister: the seller-downloaded upload template lives in userData
-  // (temu-template.xlsx); these name what the export references
-  temuProfiles: {
-    shippingTemplate: 'FREE SHIPPING',
-    handlingTime: '1 Day',
-    // listing names build themselves from the SKU; the owner types a title
-    // once per model at most (learned into temuTitles) — Linnworks item
-    // titles are deliberately empty in this account
-    titleTemplate: '{brand} {model} {storage} {color} {type} - Brand New Sealed',
-  },
-  temuTemplate: null, // { name, savedAt } once a template file is picked
-  temuPackages: {}, // per model family: { weightLb, lenIn, widIn, heiIn }
-  temuTitles: {}, // per model family: learned title with {storage}/{color} tokens
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',
@@ -191,6 +230,10 @@ const DEFAULTS = {
   browserPane: { visible: false, width: 480, zoom: 1 },
   csvFolder: '', // empty = Documents\Capture Station
   clipboardPollMs: 300,
+  // List on Walmart (owner 2026-10-22): the offer's default shipping weight
+  // in lb — Walmart requires one on every offer. The API keys are the Ship
+  // with Walmart ones (walmart.clientId / clientSecret).
+  walmartListing: { shipWeightLb: 1, feePct: 8 }, // feePct: Walmart's referral fee for the Pricing tab's break-even
   lastSync: null, // { at, synced, failed, dryRun }
 };
 
@@ -213,6 +256,23 @@ function load() {
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
   }
+  // the Recovery tab's own access code retired (owner 2026-10-20): the
+  // Settings PIN unlocks it, so an old saved code is dropped
+  if (stored.recovery) delete stored.recovery.codeHash;
+  if (stored.upsEnc) {
+    let secrets = null;
+    try { secrets = JSON.parse(safeStorage.decryptString(Buffer.from(stored.upsEnc, 'base64'))); } catch { /* other machine */ }
+    if (Array.isArray(secrets) && stored.ups && Array.isArray(stored.ups.accounts)) {
+      stored.ups.accounts.forEach((a, i) => { if (a && secrets[i]) Object.assign(a, secrets[i]); });
+    }
+    delete stored.upsEnc;
+  }
+  if (stored.walmartEnc) {
+    let w = null;
+    try { w = JSON.parse(safeStorage.decryptString(Buffer.from(stored.walmartEnc, 'base64'))); } catch { /* other machine */ }
+    if (w) stored.walmart = { ...(stored.walmart || {}), ...w };
+    delete stored.walmartEnc;
+  }
   // migration: Temu shipped with no order URL; fill in the real one for
   // configs saved before it was known (a blank means "never set", not
   // "deliberately cleared" — clearing it just makes the PO# copy instead)
@@ -232,14 +292,11 @@ function load() {
       && stored.listingUrlTemplates.walmart === 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}') {
     stored.listingUrlTemplates.walmart = DEFAULTS.listingUrlTemplates.walmart;
   }
-  // migration: eBay lister profiles saved before the real policy names were
-  // set on eBay hold empty strings — empty means "never configured", so the
-  // owner's live policy names take over
-  if (stored.ebayProfiles
-      && !String(stored.ebayProfiles.shipping || '').trim()
-      && !String(stored.ebayProfiles.returns || '').trim()
-      && !String(stored.ebayProfiles.payment || '').trim()) {
-    stored.ebayProfiles = structuredClone(DEFAULTS.ebayProfiles);
+  // migration: the Transaction page link moves from the free-text search to
+  // Seller Center's PO search (owner 2026-10-13)
+  if (stored.txnUrlTemplates
+      && stored.txnUrlTemplates.walmart === 'https://seller.walmart.com/payments/transactions?searchTerm={po}') {
+    stored.txnUrlTemplates.walmart = DEFAULTS.txnUrlTemplates.walmart;
   }
   // migration: the Receiving tab became Returns (receiving moved into Stock)
   if (stored.pages && stored.pages.returns === undefined && stored.pages.receiving !== undefined) {
@@ -255,6 +312,9 @@ function load() {
     }
   }
   cached = deepMerge(structuredClone(DEFAULTS), stored);
+  // the Ship tab always has its two account slots, whatever was saved
+  const accts = Array.isArray(cached.ups.accounts) ? cached.ups.accounts : [];
+  cached.ups.accounts = DEFAULTS.ups.accounts.map((def, i) => ({ ...def, ...(accts[i] || {}), id: def.id }));
   return cached;
 }
 
@@ -275,6 +335,16 @@ function save(patch) {
   if (enc) {
     persisted.linnworksEnc = enc;
     for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
+  }
+  const upsEnc = encryptUps(cfg.ups);
+  if (upsEnc && persisted.ups && Array.isArray(persisted.ups.accounts)) {
+    persisted.upsEnc = upsEnc;
+    for (const a of persisted.ups.accounts) { a.clientId = ''; a.clientSecret = ''; }
+  }
+  const wEnc = encryptWalmart(cfg.walmart);
+  if (wEnc) {
+    persisted.walmartEnc = wEnc;
+    persisted.walmart = { ...(persisted.walmart || {}), clientId: '', clientSecret: '' };
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');

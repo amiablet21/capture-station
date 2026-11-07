@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · Pricing (barebones) — mockup</title>
+<!--
+  Owner 2026-10-23: "make it more barebones ... super barebones and then
+  build on top of that". The starting point for Walmart → Pricing: one
+  table of Walmart listings with the price (editable) and Buy Box status,
+  a filter box and a Save button. Repricer, incentives, suggested price,
+  summary tiles and the item drawer (variants/walmart-pricing.html) are
+  left for later layers.
+  Built on the real styles.css. Mockup only — nothing here is wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 1280px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 1000px; line-height: 1.5; }
+  .win { width: 1280px; margin: 8px auto 26px; background: var(--canvas); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); }
+  .win .topbar { padding: 14px 24px 6px; }
+  .win .wlp { padding: 8px 24px 18px; }
+  .win .wlp-card { max-width: none; }
+
+  .pb-bar { display: flex; align-items: center; gap: 10px; padding: 0 20px 12px; }
+  .pb-bar .input { width: 300px; }
+  .pb-bar .cnt { font-size: 12px; color: var(--muted); }
+  .pb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pb-table th { text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .pb-table td { padding: 10px 20px; border-bottom: 1px solid var(--border-soft, #EEEDE9); vertical-align: middle; }
+  .pb-table .sku { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .pb-table .ttl { color: var(--muted); }
+  .pb-table .w-price { width: 160px; }
+  .pb-table .w-bb { width: 260px; }
+  .pb-price { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+  .pb-price.is-chg { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pb-was { display: block; font-size: 10.5px; color: var(--faint); margin-top: 3px; }
+  .bb { font-size: 12.5px; }
+  .bb-pill { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; margin-right: 8px; }
+  .bb-pill.is-win { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .bb-pill.is-lose { background: var(--badge-red-bg); color: var(--badge-red-text); }
+  .bb .p { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bb .p b { color: var(--text); }
+  .pb-foot { display: flex; align-items: center; gap: 10px; padding: 12px 20px; font-size: 12.5px; }
+  .pb-foot .btn:first-of-type { margin-left: auto; }
+</style></head>
+<body>
+
+<div class="note">
+  <h2>Walmart → Pricing · barebones</h2>
+  <p>Just the basics: every Walmart listing with its price and whether you have the Buy Box (and the winning price when you don't). Click a price to change it; changed prices go to Walmart when you press Save. Everything else (repricer, incentives, Walmart's suggested price) gets added on top later.</p>
+</div>
+<div class="win">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs"><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab is-active">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Ship</button></nav>
+  </header>
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab is-on">Pricing</button></div>
+    </div>
+    <div class="pb-bar">
+      <input class="input" placeholder="Filter by SKU or title…" />
+      <span class="cnt">52 listings</span>
+    </div>
+    <table class="pb-table">
+      <thead><tr><th>SKU</th><th>Title</th><th class="w-price">Price</th><th class="w-bb">Buy Box</th></tr></thead>
+      <tbody>
+        <tr><td class="sku">S25-128GB-NAVY</td><td class="ttl">Samsung Galaxy S25 128GB Unlocked, Navy</td>
+          <td><input class="input mono pb-price is-chg" value="679.00" /><span class="pb-was">was $699.00</span></td>
+          <td class="bb"><span class="bb-pill is-lose">Losing</span><span class="p">to <b>$684.99</b></span></td></tr>
+        <tr><td class="sku">S23-128GB-CREAM</td><td class="ttl">Samsung Galaxy S23 128GB Unlocked, Cream</td>
+          <td><input class="input mono pb-price" value="449.00" /></td>
+          <td class="bb"><span class="bb-pill is-win">Winning</span></td></tr>
+        <tr><td class="sku">X110-64GB-GRAY</td><td class="ttl">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi, Graphite</td>
+          <td><input class="input mono pb-price" value="124.99" /></td>
+          <td class="bb"><span class="bb-pill is-lose">Losing</span><span class="p">to <b>$119.00</b></span></td></tr>
+        <tr><td class="sku">OPEN-BOX-S24-256GB-BLACK</td><td class="ttl">Samsung Galaxy S24 256GB Unlocked, Onyx Black</td>
+          <td><input class="input mono pb-price" value="529.00" /></td>
+          <td class="bb"><span class="bb-pill is-lose">Losing</span><span class="p">to <b>$519.95</b></span></td></tr>
+        <tr><td class="sku">A15-128GB-BLACK</td><td class="ttl">Samsung Galaxy A15 128GB Unlocked, Black</td>
+          <td><input class="input mono pb-price" value="142.00" /></td>
+          <td class="bb"><span class="bb-pill is-win">Winning</span></td></tr>
+        <tr><td class="sku">USED-X110-64GB-GRAY</td><td class="ttl">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi, Graphite</td>
+          <td><input class="input mono pb-price" value="89.00" /></td>
+          <td class="bb"><span class="bb-pill is-lose">Losing</span><span class="p">to <b>$84.50</b></span></td></tr>
+        <tr><td class="sku">S24FE-128GB-MINT</td><td class="ttl">Samsung Galaxy S24 FE 128GB Unlocked, Mint</td>
+          <td><input class="input mono pb-price" value="409.00" /></td>
+          <td class="bb"><span class="bb-pill is-win">Winning</span></td></tr>
+      </tbody>
+    </table>
+    <div class="pb-foot">
+      <span>1 price changed</span>
+      <button class="btn btn-ghost">Undo</button><button class="btn btn-primary">Save to Walmart</button>
+    </div>
+  </div></section>
+</div>
+
+</body>
+</html>

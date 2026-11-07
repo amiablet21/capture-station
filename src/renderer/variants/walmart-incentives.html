@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · Incentives — mockup</title>
+<!--
+  Owner 2026-10-23: "an incentive page where you look at it, and you press
+  join incentive for a list of the items they are recommending ... like
+  exactly what I would see on Walmart". Mirrors Seller Center → Pricing →
+  Incentives (marketplacelearn "reduced referral fee incentives: manage item
+  enrollment"): program tabs, Ready to enroll / Active, tick items, Enroll.
+  Columns are the fields Walmart's Get incentive items API returns: product
+  name, SKU, item ID, current price, target price, base / reduced referral
+  fee, inventory count, expiration date. Enrolling moves the price to the
+  target price (Walmart's rule), so the price column shows that move.
+  Built on the real styles.css. Not wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .win { width: 1280px; margin: 26px auto; background: var(--canvas); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); }
+  .win .topbar { padding: 14px 24px 6px; }
+  .win .wlp { padding: 8px 24px 18px; }
+  .win .wlp-card { max-width: none; }
+
+  .in-prog { display: flex; gap: 26px; padding: 0 20px; border-bottom: 1px solid var(--border); }
+  .in-prog button { font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); background: none; border: none; padding: 10px 0 11px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .in-prog button.is-on { color: var(--text); border-bottom-color: var(--accent); }
+  .in-bar { display: flex; align-items: center; gap: 8px; padding: 14px 20px; }
+  .in-bar .chip-filter.is-active { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .in-bar .n { font-weight: 700; margin-left: 5px; }
+  .in-bar .btn-primary { margin-left: auto; }
+
+  .it { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .it th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 9px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  .it td { padding: 11px 12px; border-bottom: 1px solid var(--border-soft, #EEEDE9); vertical-align: middle; }
+  .it tr.is-on td { background: #F3F6FB; }
+  .it .ck { width: 36px; padding-left: 20px; }
+  .it .ck input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .it .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .item { display: flex; align-items: center; gap: 12px; }
+  .ph { width: 38px; height: 38px; border-radius: 8px; background: #F1F0EC; flex: none; display: grid; place-items: center; color: var(--faint); font-size: 9px; }
+  .item b { display: block; font-weight: 600; max-width: 330px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .item span span { display: inline; margin: 0; }
+  .item .mono { font-family: var(--mono); }
+  .item a { color: var(--accent); text-decoration: none; }
+  .was { color: var(--faint); text-decoration: line-through; margin-right: 6px; }
+  .tgt { font-weight: 700; }
+  .fee { white-space: nowrap; }
+  .fee .old { color: var(--faint); text-decoration: line-through; margin-right: 6px; }
+  .fee .new { font-weight: 700; color: var(--badge-green-text); }
+  .exp { color: var(--muted); white-space: nowrap; }
+  .exp.soon { color: var(--badge-red-text); font-weight: 600; }
+  .act { text-align: right; padding-right: 20px !important; }
+  .enroll { font: inherit; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 5px 14px; cursor: pointer; }
+</style></head>
+<body>
+
+<div class="win">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs"><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab is-active">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Ship</button></nav>
+  </header>
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab">Pricing</button><button class="wlp-tab is-on">Incentives</button></div>
+    </div>
+    <div class="in-prog">
+      <button class="is-on">Reduced referral fees</button>
+      <button>Walmart-funded</button>
+    </div>
+    <div class="in-bar">
+      <button class="chip-filter is-active">Ready to enroll<span class="n">6</span></button>
+      <button class="chip-filter">Active<span class="n">4</span></button>
+      <button class="btn btn-primary">Enroll 3 selected</button>
+    </div>
+    <table class="it">
+      <thead><tr>
+        <th class="ck"><input type="checkbox" /></th><th>Item</th><th class="num">Price</th><th class="num">Referral fee</th><th class="num">Inventory</th><th>Expires</th><th class="act"></th>
+      </tr></thead>
+      <tbody>
+        <tr class="is-on"><td class="ck"><input type="checkbox" checked /></td>
+          <td><div class="item"><div class="ph">IMG</div><div><b>Samsung Galaxy S25 128GB Unlocked, Navy</b><span><span class="mono">S25-128GB-NAVY</span> · <a href="#">5310492875</a></span></div></div></td>
+          <td class="num"><span class="was">$699.00</span><span class="tgt">$689.00</span></td>
+          <td class="num fee"><span class="old">8%</span><span class="new">6%</span></td>
+          <td class="num">12</td><td class="exp">Nov 30</td>
+          <td class="act"><button class="enroll">Enroll</button></td></tr>
+        <tr class="is-on"><td class="ck"><input type="checkbox" checked /></td>
+          <td><div class="item"><div class="ph">IMG</div><div><b>Samsung Galaxy A15 128GB Unlocked, Black</b><span><span class="mono">A15-128GB-BLACK</span> · <a href="#">7720419386</a></span></div></div></td>
+          <td class="num"><span class="tgt">$142.00</span></td>
+          <td class="num fee"><span class="old">8%</span><span class="new">5%</span></td>
+          <td class="num">31</td><td class="exp">Nov 30</td>
+          <td class="act"><button class="enroll">Enroll</button></td></tr>
+        <tr class="is-on"><td class="ck"><input type="checkbox" checked /></td>
+          <td><div class="item"><div class="ph">IMG</div><div><b>Samsung Galaxy Tab A9+ 11" 128GB Wi-Fi, Silver</b><span><span class="mono">X210-128GB-SILVER</span> · <a href="#">2204918833</a></span></div></div></td>
+          <td class="num"><span class="was">$219.00</span><span class="tgt">$215.00</span></td>
+          <td class="num fee"><span class="old">15%</span><span class="new">12%</span></td>
+          <td class="num">7</td><td class="exp">Dec 15</td>
+          <td class="act"><button class="enroll">Enroll</button></td></tr>
+        <tr><td class="ck"><input type="checkbox" /></td>
+          <td><div class="item"><div class="ph">IMG</div><div><b>Samsung Galaxy S23 256GB Unlocked, Phantom Black</b><span><span class="mono">OPEN-BOX-S23-256GB-BLACK</span> · <a href="#">1150387724</a></span></div></div></td>
+          <td class="num"><span class="tgt">$419.00</span></td>
+          <td class="num fee"><span class="old">8%</span><span class="new">6%</span></td>
+          <td class="num">3</td><td class="exp soon">in 2 days</td>
+          <td class="act"><button class="enroll">Enroll</button></td></tr>
+        <tr><td class="ck"><input type="checkbox" /></td>
+          <td><div class="item"><div class="ph">IMG</div><div><b>Samsung Galaxy Buds3 Pro, Silver</b><span><span class="mono">BUDS3-PRO-SILVER</span> · <a href="#">6640271195</a></span></div></div></td>
+          <td class="num"><span class="was">$189.00</span><span class="tgt">$184.00</span></td>
+          <td class="num fee"><span class="old">8%</span><span class="new">6%</span></td>
+          <td class="num">22</td><td class="exp">Nov 30</td>
+          <td class="act"><button class="enroll">Enroll</button></td></tr>
+        <tr><td class="ck"><input type="checkbox" /></td>
+          <td><div class="item"><div class="ph">IMG</div><div><b>Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi, Graphite</b><span><span class="mono">X110-64GB-GRAY</span> · <a href="#">1735902284</a></span></div></div></td>
+          <td class="num"><span class="was">$124.99</span><span class="tgt">$121.00</span></td>
+          <td class="num fee"><span class="old">15%</span><span class="new">12%</span></td>
+          <td class="num">31</td><td class="exp">Dec 15</td>
+          <td class="act"><button class="enroll">Enroll</button></td></tr>
+      </tbody>
+    </table>
+  </div></section>
+</div>
+
+</body>
+</html>

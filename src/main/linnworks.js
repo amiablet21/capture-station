@@ -65,6 +65,58 @@ function orderNetCharge(totalCharge, tax) {
   return Math.round(Math.max(0, total - Math.min(t, total)) * 100) / 100;
 }
 
+// an order (open or full processed shape — both carry CustomerInfo,
+// TotalsInfo and Items) as the Ship tab's party + summary
+// a Linnworks date as a local YYYY-MM-DD; '' when unset (Linnworks fills
+// empty dates with 0001-01-01 or the epoch)
+function dayOf(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2010) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function labelOrder(o, status, ref) {
+  const ci = o.CustomerInfo || {};
+  const gi = o.GeneralInfo || {};
+  // the marketplace's delivery window, when the channel sends one (Amazon,
+  // Walmart and eBay scheduled/estimated delivery); the despatch-by date always
+  const sd = gi.ScheduledDelivery || {};
+  const a = ci.Address || {};
+  const t = (v) => String(v || '').trim();
+  const items = (o.Items || []).filter(it => !it.IsService).map(it => ({
+    sku: it.SKU || it.ItemNumber || '',
+    title: it.Title || '',
+    quantity: it.Quantity || 1,
+    // what the line sold for (the Ship drawer shows it beside the item)
+    lineTotal: Math.round((Number(it.CostIncTax) > 0 ? Number(it.CostIncTax) : (Number(it.PricePerUnit) || 0) * (it.Quantity || 1)) * 100) / 100,
+  }));
+  return {
+    reference: o.GeneralInfo ? t(o.GeneralInfo.ReferenceNum) || ref : ref,
+    source: o.GeneralInfo ? t(o.GeneralInfo.Source) : '',
+    status,
+    orderedOn: dayOf(gi.ReceivedDate),
+    deliverBy: dayOf(sd.To) || dayOf(sd.From),
+    shipBy: dayOf(gi.DespatchByDate),
+    // what the buyer paid before sales tax — the label's declared value
+    // starts here and the owner can change it
+    total: orderNetCharge(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge), o.TotalsInfo && o.TotalsInfo.Tax),
+    items,
+    party: {
+      name: t(a.FullName || ci.ChannelBuyerName),
+      company: t(a.Company),
+      line1: t(a.Address1),
+      line2: [t(a.Address2), t(a.Address3)].filter(Boolean).join(', '),
+      city: t(a.Town),
+      state: t(a.Region),
+      zip: t(a.PostCode),
+      country: t(a.Country),
+      phone: t(a.PhoneNumber),
+      email: t(a.EmailAddress || ci.EmailAddress),
+    },
+  };
+}
+
 class LinnworksClient {
   constructor({ applicationId, applicationSecret, token }) {
     this.creds = { applicationId, applicationSecret, token };
@@ -191,13 +243,17 @@ class LinnworksClient {
     };
   }
 
-  // Preserve existing shipping fields; only replace the tracking number.
-  async setTracking(orderId, existingShippingInfo, trackingNumber) {
+  // Preserve existing shipping fields; only replace the tracking number -
+  // and the shipping method when postalServiceId is given. Linnworks tells
+  // the marketplace the carrier from the shipping method, so a label bought
+  // off-channel (own UPS account) under the channel's default method reaches
+  // Walmart/Temu with the wrong carrier and the despatch is rejected there.
+  async setTracking(orderId, existingShippingInfo, trackingNumber, postalServiceId) {
     const s = existingShippingInfo || {};
     return this.call('Orders/SetOrderShippingInfo', {
       orderId,
       info: {
-        PostalServiceId: s.PostalServiceId || '00000000-0000-0000-0000-000000000000',
+        PostalServiceId: postalServiceId || s.PostalServiceId || '00000000-0000-0000-0000-000000000000',
         TotalWeight: s.TotalWeight || 0,
         ItemWeight: s.ItemWeight || 0,
         PostageCost: s.PostageCost || 0,
@@ -271,6 +327,34 @@ class LinnworksClient {
       fieldName: 'SKU',
       fieldValue: String(newSku).trim().toUpperCase(),
     });
+  }
+
+  // List on Walmart saves the proven UPC as the item's barcode. The field
+  // name is not confirmed in Linnworks' docs: 'Barcode' first, then the
+  // GetStockItemsFull spelling. The caller treats a failure as a note.
+  async setBarcode(stockItemId, code) {
+    let last = null;
+    for (const fieldName of ['Barcode', 'BarcodeNumber']) {
+      try {
+        await this.call('Inventory/UpdateInventoryItemField', { inventoryItemId: stockItemId, fieldName, fieldValue: String(code) });
+        return;
+      } catch (e) { last = e; }
+    }
+    throw last;
+  }
+
+  // The item's title (owner 2026-10-22, the rename dialog edits it too).
+  // 'Title' is the documented field name; 'ItemTitle' is the spelling
+  // GetStockItemsFull answers with, tried if the first is refused.
+  async setTitle(stockItemId, title) {
+    let last = null;
+    for (const fieldName of ['Title', 'ItemTitle']) {
+      try {
+        await this.call('Inventory/UpdateInventoryItemField', { inventoryItemId: stockItemId, fieldName, fieldValue: String(title) });
+        return;
+      } catch (e) { last = e; }
+    }
+    throw last;
   }
 
   // The item's cost (owner 2026-10-05): the Linnworks purchase price, so it
@@ -370,7 +454,10 @@ class LinnworksClient {
       try {
         items = await this.call('Stock/GetStockItemsFull', {
           keyword: '',
-          loadCompositeParents: false,
+          // composite parents (a listing that draws from other items) are
+          // real inventory rows too (owner 2026-10-14: the case listing
+          // vanished from the Stock page the moment it became a composite)
+          loadCompositeParents: true,
           loadVariationParents: false,
           entriesPerPage: 200,
           pageNumber: page,
@@ -396,6 +483,7 @@ class LinnworksClient {
           title: it.ItemTitle || '',
           barcode: it.BarcodeNumber || '',
           category: it.CategoryName || '',
+          isComposite: !!it.IsComposite,
           purchasePrice: it.PurchasePrice || 0,
           retailPrice: it.RetailPrice || 0,
           image: img ? (img.Source || img.FullSource || '') : '',
@@ -548,7 +636,7 @@ class LinnworksClient {
     try {
       items = await this.call('Stock/GetStockItemsFull', {
         keyword: String(sku).trim(),
-        loadCompositeParents: false,
+        loadCompositeParents: true,
         loadVariationParents: false,
         entriesPerPage: 50,
         pageNumber: 1,
@@ -645,43 +733,6 @@ class LinnworksClient {
     }
   }
 
-  // eBay lister: attach a BATCH of listing photos to the condition SKU's item
-  // and hand back their hosted URLs — Linnworks is the public host eBay's
-  // CSV upload fetches PicURL from. First photo becomes the main image.
-  async addItemImages(stockItemId, files) {
-    if (!this.session) await this.auth();
-    const ids = [];
-    for (const f of files) {
-      await this.throttle();
-      const form = new FormData();
-      form.append('file', new Blob([f.buffer], { type: f.mime || 'image/jpeg' }), f.name || 'photo.jpg');
-      const res = await fetch(`${this.session.server}/api/Uploader/UploadFile?type=Image&expiredInHours=24`, {
-        method: 'POST',
-        headers: { Authorization: this.session.token },
-        body: form,
-      });
-      const body = await res.text();
-      if (!res.ok) throw new LinnworksError(`UploadFile failed (${res.status}): ${trim(body)}`, { status: res.status, endpoint: 'Uploader/UploadFile' });
-      const up = JSON.parse(body);
-      const fileId = ((Array.isArray(up) ? up[0] : up) || {}).FileId;
-      if (!fileId) throw new LinnworksError('UploadFile returned no FileId');
-      ids.push(fileId);
-    }
-    if (!ids.length) return [];
-    const before = await this.call(`Inventory/GetInventoryItemImages?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }).catch(() => []) || [];
-    await this.call('Inventory/UploadImagesToInventoryItem', { inventoryItemId: stockItemId, imageIds: ids });
-    const after = await this.call(`Inventory/GetInventoryItemImages?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }) || [];
-    const seen = new Set(before.map(i => i.pkRowId));
-    const fresh = after.filter(i => !seen.has(i.pkRowId));
-    // first of the batch = the gallery/main photo
-    try {
-      if (fresh[0] && fresh[0].pkRowId) {
-        await this.call('Inventory/SetInventoryItemImageAsMain', { inventoryItemId: stockItemId, mainImageId: fresh[0].pkRowId });
-      }
-    } catch { /* main-flag is cosmetic */ }
-    return fresh.map(i => i.FullSource || i.Source).filter(Boolean);
-  }
-
   // Find a PROCESSED order by its channel reference (for returns): search,
   // then pull the full order for its item lines.
   // opts.light: skip the per-order items fetch (the sync's already-processed
@@ -727,6 +778,33 @@ class LinnworksClient {
       }));
     } catch { /* items stay empty; the UI lets the user pick the SKU */ }
     return out;
+  }
+
+  // Ship tab (owner 2026-10-19): one order by its channel reference, open
+  // or already processed, with the ship-to address split into fields and
+  // the order's value — everything a UPS label needs. Open orders are
+  // looked up at each of the station's locations in turn (Linnworks only
+  // searches "Default" without one — the dropship location holds orders
+  // too); a processed order is read in full by id.
+  async findOrderForLabel(reference, fulfilmentCenters) {
+    const ref = String(reference || '').trim();
+    if (!ref) return null;
+    const centers = [...new Set((fulfilmentCenters || []).filter(Boolean))];
+    for (const fc of centers.length ? centers : ['00000000-0000-0000-0000-000000000000']) {
+      const open = await this.call('Orders/GetOpenOrders', {
+        entriesPerPage: 10,
+        pageNumber: 1,
+        fulfilmentCenter: fc,
+        filters: { TextFields: [{ FieldCode: 'GENERAL_INFO_REFERENCE_NUMBER', Type: 'Equal', Text: ref }] },
+      });
+      const hit = ((open && open.Data) || []).find(o => o.GeneralInfo && String(o.GeneralInfo.ReferenceNum).trim() === ref);
+      if (hit) return labelOrder(hit, 'open', ref);
+    }
+    const done = await this.findProcessedOrder(ref, { light: true });
+    if (!done || !done.orderId) return null;
+    const full = await this.call('Orders/GetOrdersById', { pkOrderIds: [done.orderId] });
+    const order = (full || [])[0];
+    return order ? labelOrder(order, 'processed', ref) : null;
   }
 
   // Sales page: every processed-order item line in a date window.
@@ -815,6 +893,10 @@ class LinnworksClient {
             // as Cost; failing that, the inc-tax total minus its Tax; failing
             // that, the unit price times quantity.
             revenue: lineExTax(it, qty),
+            // a composite line's children: the items its sale really took
+            // from the shelf (owner 2026-10-14) — readers credit their
+            // pace from this, never as lines of their own
+            children: (it.CompositeSubItems || []).map(c => ({ sku: c.SKU || c.ItemNumber || '', qty: (c.Quantity || 1) })).filter(c => c.sku),
           });
         }
       }
@@ -878,64 +960,6 @@ class LinnworksClient {
       ignoreSync: !!c.IgnoreSync,
       refId: String(c.ChannelReferenceId || c.ChannelReferenceID || '').trim(), // eBay item number etc.
     }));
-  }
-
-  /* ---------- eBay listing tools (Linnworks' configurator pipeline) ----------
-     Modeled on the official LinnworksNetSDK Listings controller. The flow is
-     Linnworks' own: fetch the account's configurators (each carries the
-     shared listing settings INCLUDING the eBay condition, category and
-     policies), build a template for an inventory item through one, overlay
-     the form's title / price / qty / specifics / description, then ask
-     Linnworks to push the template to eBay with its stored channel
-     authorization. NOT yet verified against a live account — errors from
-     Linnworks surface verbatim to the caller. */
-
-  async getEbayConfigurators() {
-    const data = await this.call('Listings/GeteBayConfigurators', {});
-    return (data || []).map(c => ({
-      id: c.pkConfigId,
-      name: c.ConfigName || '',
-      account: c.EbayAccount || '',
-      site: c.Site || '',
-      condition: (c.Condition && (c.Condition.Value != null ? c.Condition.Value : c.Condition.Key)) || '',
-      listingType: c.ListingType || '',
-    }));
-  }
-
-  // returns the raw EbayListing templates (PagedResult.Items) — callers
-  // amend fields on the raw objects and hand them back to process
-  async createEbayTemplates({ configId, subSource, inventoryItemIds }) {
-    const data = await this.call('Listings/CreateEbayTemplates', {
-      parameters: {
-        Source: 'EBAY',
-        SubSource: subSource,
-        ConfigId: configId,
-        InventoryItemIds: inventoryItemIds,
-        Token: globalThis.crypto.randomUUID(),
-        TemplatesType: 'Simple',
-      },
-    });
-    return (data && data.Items) || [];
-  }
-
-  async processEbayListings(items, action = 'Create') {
-    await this.call('Listings/ProcesseBayListings', { items, force: true, action });
-  }
-
-  async getEbayTemplates({ templateIds, subSource }) {
-    const data = await this.call('Listings/GeteBayTemplates', {
-      parameters: {
-        TemplateIds: templateIds || null,
-        Source: 'EBAY',
-        SubSource: subSource,
-        TemplatesType: 'Both',
-        OnlyWithErrors: false,
-        PageNumber: 1,
-        EntriesPerPage: 50,
-        Token: globalThis.crypto.randomUUID(),
-      },
-    });
-    return (data && data.Items) || [];
   }
 
   // Channel prices stored in Linnworks for a stock item (Listing Descriptions:
@@ -1021,6 +1045,20 @@ class LinnworksClient {
       },
     });
     return { stockItemId };
+  }
+
+  // Shipping methods ("postal services") for the carrier -> method mapping
+  // in Settings. [{ id, name, vendor }]
+  async getPostalServices() {
+    const data = await this.call('PostalServices/GetPostalServices', {});
+    return (Array.isArray(data) ? data : [])
+      .map(p => ({
+        id: p.pkPostalServiceId || p.id || '',
+        name: p.PostalServiceName || '',
+        vendor: p.Vendor || '',
+      }))
+      .filter(p => p.id && p.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async getLocations() {

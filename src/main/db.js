@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { CONDITION_SUFFIX, CONDITION_PREFIX, conditionOfSku } = require('./skucond');
 
 let db = null;
 
@@ -221,6 +222,59 @@ function open() {
       pace REAL NOT NULL DEFAULT 0
     );
   `);
+  // Recovery (2026-10-11): imported Walmart payment periods, their refunds /
+  // payouts / ledger, the not-received tracker and its manual markers —
+  // wm_runs, wm_refunds, wm_payouts, wm_ledger, wm_items, wm_marks,
+  // wm_tombstones (docs/recovery/SPEC.md §10.1)
+  require('./recovery/store').ensureSchema(db);
+  // Ship tab (owner 2026-10-19): every UPS label bought here, with its GIF
+  // so it can be reprinted, and the address book for labels with no PO#
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ship_labels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      day TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'ship',
+      reference TEXT NOT NULL DEFAULT '',
+      from_po INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT '',
+      account_id TEXT NOT NULL DEFAULT '',
+      account_name TEXT NOT NULL DEFAULT '',
+      service_code TEXT NOT NULL DEFAULT '',
+      service_name TEXT NOT NULL DEFAULT '',
+      tracking TEXT NOT NULL DEFAULT '',
+      shipment_id TEXT NOT NULL DEFAULT '',
+      cost REAL,
+      value REAL NOT NULL DEFAULT 0,
+      weight REAL NOT NULL DEFAULT 0,
+      dims TEXT NOT NULL DEFAULT '',
+      party_name TEXT NOT NULL DEFAULT '',
+      party TEXT NOT NULL DEFAULT '{}',
+      label_gif TEXT NOT NULL DEFAULT '',
+      test INTEGER NOT NULL DEFAULT 0,
+      voided_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_ship_labels_day ON ship_labels(day);
+    CREATE TABLE IF NOT EXISTS ship_addresses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      company TEXT NOT NULL DEFAULT '',
+      line1 TEXT NOT NULL DEFAULT '',
+      line2 TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      zip TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      used_at TEXT NOT NULL
+    );
+  `);
+  // labels made from an Orders line (owner 2026-10-20) remember the row
+  // they filled and the carrier (Walmart voids by carrier + tracking)
+  const shipCols = db.prepare('PRAGMA table_info(ship_labels)').all().map(c => c.name);
+  if (!shipCols.includes('carrier')) db.exec(`ALTER TABLE ship_labels ADD COLUMN carrier TEXT NOT NULL DEFAULT ''`);
+  if (!shipCols.includes('row_id')) db.exec(`ALTER TABLE ship_labels ADD COLUMN row_id INTEGER NOT NULL DEFAULT 0`);
   return db;
 }
 
@@ -543,6 +597,10 @@ function markWfsReceived(id, received) {
   open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?')
     .run(received ? new Date().toISOString() : '', id);
 }
+// the received stamp as given (a mark synced from another desktop keeps its time)
+function setWfsReceivedAt(id, iso) {
+  open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?').run(String(iso || ''), Number(id));
+}
 
 function setWfsIgnore(sku, days, pace) {
   const until = new Date(Date.now() + days * 86400000).toISOString();
@@ -624,27 +682,9 @@ function deleteConditionMapping(baseSku, condition) {
 }
 
 // The single condition-mapping engine: manual picks (condition_map) beat
-// auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention.
+// auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention
+// (the naming rule itself lives in skucond.js, shared with Recovery).
 // Pure given an inventory SKU list, so it is testable offline.
-const CONDITION_SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' };
-// preferred naming since 2026-08-06: prefix listings (OPEN-BOX-<SKU> …);
-// suffix names keep auto-deriving so existing listings never unmap
-const CONDITION_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
-
-// The condition a SKU's own NAME carries (OPEN-BOX-X = openbox), plus the
-// core sku with that affix stripped. null = a plain sold SKU.
-function conditionOfSku(sku) {
-  const s = String(sku || '');
-  const up = s.toUpperCase();
-  for (const [cond, pre] of Object.entries(CONDITION_PREFIX)) {
-    if (up.startsWith(pre) && up.length > pre.length) return { cond, core: s.slice(pre.length) };
-  }
-  for (const [cond, suf] of Object.entries(CONDITION_SUFFIX)) {
-    if (up.endsWith(suf) && up.length > suf.length) return { cond, core: s.slice(0, s.length - suf.length) };
-  }
-  return null;
-}
-
 function resolveConditionTargets(baseSku, inventorySkus) {
   const bySkuUpper = new Map((inventorySkus || []).map(s => [String(s).toUpperCase(), s]));
   const saved = getConditionMap()[baseSku] || {};
@@ -1186,11 +1226,96 @@ function backup() {
   return { dest, healthy: true, detail: 'ok' };
 }
 
+/* ---------- Ship tab: UPS labels + address book ---------- */
+
+const SHIP_ADDR_FIELDS = ['name', 'company', 'line1', 'line2', 'city', 'state', 'zip', 'phone', 'email'];
+const shipStr = (v, n) => String(v ?? '').trim().slice(0, n);
+
+function shipLabelAdd(rec) {
+  const now = new Date();
+  const r = open().prepare(`INSERT INTO ship_labels (created_at, day, kind, reference, from_po, source, account_id, account_name,
+      service_code, service_name, tracking, shipment_id, cost, value, weight, dims, party_name, party, label_gif, test, carrier, row_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    now.toISOString(), localDay(now), rec.kind === 'return' ? 'return' : 'ship', shipStr(rec.reference, 60), rec.fromPo ? 1 : 0,
+    shipStr(rec.source, 40), shipStr(rec.accountId, 8), shipStr(rec.accountName, 60), shipStr(rec.serviceCode, 4),
+    shipStr(rec.serviceName, 60), shipStr(rec.tracking, 40), shipStr(rec.shipmentId, 40),
+    Number.isFinite(rec.cost) ? rec.cost : null, Math.max(0, Number(rec.value) || 0), Math.max(0, Number(rec.weight) || 0),
+    shipStr(rec.dims, 40), shipStr(rec.partyName, 120), JSON.stringify(rec.party || {}), String(rec.labelGif || ''), rec.test ? 1 : 0,
+    shipStr(rec.carrier, 20), Number(rec.rowId) || 0);
+  return shipLabelGet(Number(r.lastInsertRowid));
+}
+// the list never carries the label images (tens of KB each)
+const SHIP_LIST_COLS = 'id, created_at, day, kind, reference, from_po, source, account_id, account_name, service_code, service_name, tracking, shipment_id, cost, value, weight, dims, party_name, test, voided_at, carrier, row_id';
+function shipLabelList({ sinceDay = '', limit = 300 } = {}) {
+  return open().prepare(`SELECT ${SHIP_LIST_COLS} FROM ship_labels WHERE day >= ? ORDER BY id DESC LIMIT ?`).all(String(sinceDay || ''), limit);
+}
+function shipLabelGet(id) {
+  const r = open().prepare('SELECT * FROM ship_labels WHERE id = ?').get(Number(id));
+  if (!r) return null;
+  let party = {};
+  try { party = JSON.parse(r.party || '{}'); } catch { /* keep {} */ }
+  return { ...r, party };
+}
+// read-only: the newest live (not voided) label for a tracking number or a
+// reference (PO#), for the browser's Download PDF
+function shipLabelFind({ tracking = '', reference = '' } = {}) {
+  const t = String(tracking || '').trim().toUpperCase();
+  const r = String(reference || '').trim();
+  if (!t && !r) return null;
+  const row = t
+    ? open().prepare(`SELECT id FROM ship_labels WHERE UPPER(tracking) = ? AND (voided_at IS NULL OR voided_at = '') ORDER BY id DESC LIMIT 1`).get(t)
+    : open().prepare(`SELECT id FROM ship_labels WHERE reference = ? AND (voided_at IS NULL OR voided_at = '') ORDER BY id DESC LIMIT 1`).get(r);
+  return row ? shipLabelGet(row.id) : null;
+}
+// read-only: live labels made from an Orders line in the last 30 days
+function shipLabelsForRows() {
+  const since = localDay(new Date(Date.now() - 30 * 86400000));
+  return open().prepare(`SELECT id, row_id, tracking FROM ship_labels WHERE row_id > 0 AND (voided_at IS NULL OR voided_at = '') AND day >= ? ORDER BY id`).all(since);
+}
+// a Walmart label's image can arrive after the purchase
+function shipLabelSetImage(id, b64) {
+  open().prepare('UPDATE ship_labels SET label_gif = ? WHERE id = ?').run(String(b64 || ''), Number(id));
+}
+function shipLabelVoid(id) {
+  open().prepare('UPDATE ship_labels SET voided_at = ? WHERE id = ?').run(new Date().toISOString(), Number(id));
+  return shipLabelGet(id);
+}
+
+function shipAddrList() {
+  return open().prepare('SELECT * FROM ship_addresses ORDER BY used_at DESC LIMIT 200').all();
+}
+// one entry per name + street + ZIP: saving the same place again refreshes
+// it (and bumps it to the front) instead of stacking copies
+function shipAddrSave(a) {
+  const d = open();
+  const rec = {};
+  for (const f of SHIP_ADDR_FIELDS) rec[f] = shipStr(a && a[f], f === 'email' ? 160 : 120);
+  rec.state = rec.state.toUpperCase();
+  if (!(rec.name || rec.company) || !rec.line1 || !rec.zip) return null;
+  const now = new Date().toISOString();
+  const hit = d.prepare(`SELECT id FROM ship_addresses WHERE lower(name) = lower(?) AND lower(company) = lower(?)
+    AND lower(line1) = lower(?) AND zip = ?`).get(rec.name, rec.company, rec.line1, rec.zip);
+  if (hit) {
+    d.prepare(`UPDATE ship_addresses SET line2 = ?, city = ?, state = ?, phone = ?, email = ?, used_at = ? WHERE id = ?`)
+      .run(rec.line2, rec.city, rec.state, rec.phone, rec.email, now, hit.id);
+    return hit.id;
+  }
+  const r = d.prepare(`INSERT INTO ship_addresses (${SHIP_ADDR_FIELDS.join(', ')}, created_at, used_at) VALUES (${SHIP_ADDR_FIELDS.map(() => '?').join(', ')}, ?, ?)`)
+    .run(...SHIP_ADDR_FIELDS.map(f => rec[f]), now, now);
+  return Number(r.lastInsertRowid);
+}
+function shipAddrTouch(id) {
+  open().prepare('UPDATE ship_addresses SET used_at = ? WHERE id = ?').run(new Date().toISOString(), Number(id));
+}
+function shipAddrDelete(id) {
+  open().prepare('DELETE FROM ship_addresses WHERE id = ?').run(Number(id));
+}
+
 module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
-  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
+  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsReceivedAt, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
   lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, rowsInDays, stockRowsFromBulkEntry, stockLogOwnRows,
@@ -1199,4 +1324,5 @@ module.exports = {
   wsGid, wsUpsertCustomer, wsListCustomers, wsGetCustomer, wsUpsertInvoice, wsListInvoices, wsGetInvoice, wsNextNumber, wsCleanLines,
   wsUpsertSerial, wsListSerials, wsGetSerial, wsSerialCounts, wsOwnRows,
   costUpsert, costsAll, costGet, costOwnRows, costLogRows,
+  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelFind, shipLabelsForRows, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
 };

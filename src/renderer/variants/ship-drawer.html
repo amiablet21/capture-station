@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Orders — Ship drawer</title>
+<!--
+  Owner 2026-10-20: picked F (side drawer) from ship-open-styles.html, and
+  wants the customer, the item and its picture in it, looking nicer. Ship
+  on a line slides the drawer in from the right; the list stays put behind
+  it. Esc, ×, or a click on the dimmed list closes it. Customer = what
+  Linnworks has (name, company, ship-to, phone); items = title, SKU, qty,
+  sold-for and the stock photo. Sample data only.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: var(--canvas); }
+  .pg { max-width: 1180px; margin: 0 auto; padding: 22px 24px 60px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  table.ot { border-collapse: collapse; width: 100%; }
+  .ot th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); text-align: left; padding: 8px 16px; border-bottom: 1px solid var(--border); }
+  .ot td { padding: 11px 16px; border-bottom: 1px solid #EFEEEC; vertical-align: middle; }
+  .ot tr.open > td { background: var(--accent-soft); }
+  .gut { color: var(--faint); font-size: 12px; width: 40px; }
+  .po { font-family: var(--mono); font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .sku { font-family: var(--mono); font-size: 12.5px; }
+  .mk { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-right: 8px; }
+  .mk.walmart { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .mk.ebay { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .act { text-align: right; white-space: nowrap; }
+  .proc { font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 3px 12px; }
+
+  /* the drawer */
+  .scrim { position: fixed; inset: 0; background: rgba(47,52,55,.2); opacity: 0; pointer-events: none; z-index: 20; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .dw { position: fixed; top: 0; right: 0; bottom: 0; width: min(880px, 94vw); background: var(--canvas); box-shadow: -24px 0 60px rgba(47,52,55,.16); transform: translateX(104%); transition: transform 260ms cubic-bezier(.2,.8,.2,1); will-change: transform; z-index: 21; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .dw.on { transform: none; }
+
+  .dw-h { display: flex; align-items: center; gap: 10px; padding: 16px 22px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .dw-h .po { font-size: 17px; letter-spacing: -.01em; }
+  .dw-h .mk { font-size: 10.5px; padding: 2px 9px; margin-right: 0; }
+  .due { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 9px; border-radius: 999px; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .ic { border: none; background: none; color: var(--faint); cursor: pointer; padding: 4px; border-radius: 6px; display: inline-grid; place-items: center; }
+  .ic:hover { color: var(--text); background: var(--surface-2); }
+  .ic svg { width: 15px; height: 15px; }
+  .dw-h .x { margin-left: auto; }
+  .dw-h .x svg { width: 18px; height: 18px; }
+  .ago { font-size: 12px; color: var(--faint); }
+
+  .dw-b { overflow-y: auto; padding: 18px 22px 22px; display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-content: start; }
+  .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .bx { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+  .bx-t { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .bx-t .r { margin-left: auto; text-transform: none; letter-spacing: 0; }
+
+  /* customer */
+  .who { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: var(--accent-soft-text); background: var(--accent-soft); flex: none; }
+  .who b { font-size: 15px; display: block; letter-spacing: -.01em; }
+  .who span { font-size: 12px; color: var(--muted); }
+  .ln { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border-soft); font-size: 13px; line-height: 1.5; }
+  .ln > svg { width: 15px; height: 15px; color: var(--faint); flex: none; margin-top: 2px; }
+  .ln .v { flex: 1; min-width: 0; }
+  .ln .ic { opacity: 0; margin-top: -2px; }
+  .ln:hover .ic { opacity: 1; }
+  .mono { font-family: var(--mono); }
+
+  /* items */
+  .it { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border-soft); }
+  .bx-t + .it { border-top: none; padding-top: 0; }
+  .ph { width: 64px; height: 64px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border-soft); display: grid; place-items: center; flex: none; overflow: hidden; }
+  .ph svg { width: 44px; height: 44px; }
+  .it-t { font-size: 13px; font-weight: 500; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .it-s { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .it-r { margin-left: auto; text-align: right; flex: none; }
+  .it-r .q { font-size: 11px; font-weight: 700; color: var(--muted); }
+  .it-r .p { font-family: var(--mono); font-weight: 700; font-size: 13.5px; }
+
+  /* package */
+  .pk { display: grid; grid-template-columns: minmax(0, 1.4fr) 90px 100px; gap: 10px; }
+  .pf { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .pf > span { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .pf .input { width: 100%; }
+  .dims { display: flex; align-items: center; gap: 4px; }
+  .dims .input { text-align: center; padding-left: 4px; padding-right: 4px; }
+  .dims b { color: var(--faint); font-weight: 400; font-size: 11px; }
+  .pk2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+  .lock { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 7px 10px; }
+  .lock svg { width: 13px; height: 13px; color: var(--faint); }
+  .pk-save { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font); font-size: 11.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 4px 11px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+  .pk-save:hover { background: #DCE4F1; }
+  .pk-save:disabled { opacity: .45; cursor: default; }
+  .pk-save svg, .pk-ok svg { width: 13px; height: 13px; }
+  .pk-ok { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--pos-text); text-transform: none; letter-spacing: 0; }
+
+  /* rates */
+  .rates { display: flex; flex-direction: column; gap: 6px; }
+  .rt { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+  .rt:hover { border-color: #C9D5E8; }
+  .rt.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  .rd { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; display: grid; place-items: center; }
+  .rt.on .rd { border-color: var(--accent); }
+  .rt.on .rd::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .sv { font-size: 13px; font-weight: 600; }
+  .eta { font-size: 11.5px; color: var(--muted); }
+  .pr { margin-left: auto; font-family: var(--mono); font-weight: 700; font-size: 14px; }
+  .star { width: 14px; height: 14px; color: #E3A008; vertical-align: -2px; margin-right: 5px; }
+
+  .dw-f { display: flex; align-items: center; gap: 14px; padding: 14px 22px; background: var(--surface); border-top: 1px solid var(--border); }
+  .pick-sum { font-size: 13px; color: var(--muted); }
+  .pick-sum b { color: var(--text); }
+  .pick-sum .mono { color: var(--text); font-weight: 700; margin-left: 6px; }
+  .dw-f .btn { margin-left: auto; padding: 11px 26px; font-size: 14px; font-weight: 600; }
+
+</style>
+</head>
+<body>
+<div class="pg">
+  <div class="card">
+    <table class="ot">
+      <thead><tr><th>#</th><th>Order #</th><th>Items</th><th>Tracking</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+<div class="scrim" id="scrim"></div>
+<aside class="dw" id="dw" aria-hidden="true"></aside>
+
+<script>
+const IC = {
+  x: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>',
+  copy: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg>',
+  pin: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,31.4,14.51,64.68,42,96.25a254.19,254.19,0,0,0,41.45,38.3,8,8,0,0,0,9.18,0A254.19,254.19,0,0,0,174,200.25c27.45-31.57,42-64.85,42-96.25A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,161.23,144.53,209,128,222Z"/></svg>',
+  phone: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46ZM176,208A128.14,128.14,0,0,1,48,80,40.2,40.2,0,0,1,82.87,40a.61.61,0,0,0,0,.12l21,47L83.2,111.86a6.13,6.13,0,0,0-.57.77,16,16,0,0,0-1,15.7c9.06,18.53,27.73,37.06,46.46,46.11a16,16,0,0,0,15.75-1.14,8.44,8.44,0,0,0,.74-.56L168.89,152l47,21.05h0s.08,0,.11,0A40.21,40.21,0,0,1,176,208Z"/></svg>',
+  bookmark: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M184,32H72A16,16,0,0,0,56,48V224a8,8,0,0,0,12.24,6.78L128,193.43l59.77,37.35A8,8,0,0,0,200,224V48A16,16,0,0,0,184,32Zm0,177.57-51.77-32.35a8,8,0,0,0-8.48,0L72,209.57V48H184Z"/></svg>',
+  check: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>',
+  lock: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/></svg>',
+  star: '<svg class="star" viewBox="0 0 256 256" fill="currentColor"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>',
+};
+// stand-in product photos (the real drawer uses the Linnworks stock image)
+const PHOTO = (body, cam) => `<svg viewBox="0 0 64 64"><defs><linearGradient id="g${body}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${body}"/><stop offset="1" stop-color="#1C1F23"/></linearGradient></defs>
+  <rect x="17" y="4" width="30" height="56" rx="6" fill="url(#g${body})"/><rect x="19.5" y="8" width="25" height="46" rx="3.5" fill="#0E1116" opacity=".85"/>
+  <circle cx="${cam}" cy="12" r="2.6" fill="#2A2F36" stroke="#4A515A" stroke-width=".8"/><rect x="27" y="56" width="10" height="1.4" rx=".7" fill="#4A515A"/></svg>`;
+const ORDERS = [
+  { po: '108829451230774', ch: 'walmart', due: true, ago: 'Captured 9:41 AM',
+    cust: { name: 'Cara Cross', company: '', addr: ['1200 W Fullerton Ave, Apt 4B', 'Chicago, IL 60614'], phone: '(312) 555-0147' },
+    items: [{ title: 'Samsung Galaxy S25 128GB Navy, Unlocked, Renewed', sku: 'S25-128GB-NAVY', qty: 1, price: 189.99, photo: PHOTO('#2B3A63', 32) }], value: 189.99 },
+  { po: '108829451230812', ch: 'walmart', due: false, ago: 'Captured 10:15 AM',
+    cust: { name: 'Dee Ramos', company: 'Ramos Dental', addr: ['500 Congress Ave, Suite 210', 'Austin, TX 78701'], phone: '(512) 555-0193' },
+    items: [{ title: 'Samsung Galaxy A15 64GB Black, Unlocked', sku: 'A15-64GB-BLACK', qty: 2, price: 179.98, photo: PHOTO('#2E2F33', 32) },
+            { title: 'Fast Charger USB-C 25W Wall Adapter', sku: 'CHG-25W-USBC', qty: 1, price: 12.99, photo: '<svg viewBox="0 0 64 64"><rect x="18" y="16" width="28" height="30" rx="6" fill="#F4F4F2" stroke="#C9C8C3"/><rect x="27" y="46" width="10" height="10" rx="2" fill="#9A9893"/><rect x="26" y="8" width="3" height="9" rx="1" fill="#9A9893"/><rect x="35" y="8" width="3" height="9" rx="1" fill="#9A9893"/></svg>' }], value: 192.97 },
+  { po: '12-11873-40921', ch: 'ebay', due: true, ago: 'Captured 10:52 AM',
+    cust: { name: 'Sam Patel', company: '', addr: ['77 Wood Ave S', 'Edison, NJ 08817'], phone: '(732) 555-0110' },
+    items: [{ title: 'Google Pixel 8 128GB Obsidian, Unlocked', sku: 'P8-128GB-OBSIDIAN', qty: 1, price: 129.00, photo: PHOTO('#34373C', 24) }], value: 129.00 },
+];
+const RATES = {
+  walmart: [
+    { tag: 'Walmart', cls: 'os-via-wm', name: 'UPS Ground', eta: 'Thu, Oct 23 · 3 days', pr: 8.40, best: true },
+    { tag: 'DWS', cls: '', name: 'UPS Ground', eta: 'Thu, Oct 23 · 3 days', pr: 9.12 },
+    { tag: 'Co 2', cls: 'os-via-b', name: 'UPS Ground', eta: 'Thu, Oct 23 · 3 days', pr: 9.38 },
+    { tag: 'Walmart', cls: 'os-via-wm', name: 'FedEx 2Day', eta: 'Wed, Oct 22 · 2 days', pr: 14.20 },
+    { tag: 'DWS', cls: '', name: 'UPS 2nd Day Air', eta: 'Wed, Oct 22 · 2 days', pr: 18.95 },
+  ],
+  ebay: [
+    { tag: 'DWS', cls: '', name: 'UPS Ground', eta: 'Thu, Oct 23 · 3 days', pr: 9.12, best: true },
+    { tag: 'Co 2', cls: 'os-via-b', name: 'UPS Ground', eta: 'Thu, Oct 23 · 3 days', pr: 9.38 },
+    { tag: 'DWS', cls: '', name: 'UPS 2nd Day Air', eta: 'Wed, Oct 22 · 2 days', pr: 18.95 },
+  ],
+};
+// what was saved, by item (or by the exact mix of items on a multi-item order);
+// the real app keeps it on the Linnworks item, so every computer has it
+const SAVED = { 'S25-128GB-NAVY': { box: '0', wt: '1.1', d: ['9', '6', '3'] } };
+const BOXES = [{ name: 'Phone box', d: ['9', '6', '3'] }, { name: 'Tablet box', d: ['12', '9', '3'] }];
+const pkKey = (o) => o.items.map(it => `${it.sku}${it.qty > 1 ? `×${it.qty}` : ''}`).sort().join(' + ');
+const $ = (id) => document.getElementById(id);
+const money = (n) => `$${n.toFixed(2)}`;
+let openPo = '';
+
+function renderRows() {
+  $('rows').innerHTML = ORDERS.map((o, i) => `<tr data-po="${o.po}">
+    <td class="gut">${ORDERS.length - i}</td>
+    <td><span class="mk ${o.ch}">${o.ch}</span><span class="po">${o.po}</span></td>
+    <td class="sku">${o.items.map(it => `${it.sku}${it.qty > 1 ? ` ×${it.qty}` : ''}`).join(', ')}</td>
+    <td style="color:var(--faint);font-size:12px">—</td>
+    <td class="act"><button class="os-btn" type="button">Ship</button><button class="proc" type="button">Process</button></td>
+  </tr>`).join('');
+}
+
+function drawer(o) {
+  const c = o.cust;
+  const ini = c.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('');
+  const rates = RATES[o.ch];
+  const chips = o.ch === 'walmart' ? ['All', 'Walmart', 'DWS', 'Co 2'] : ['All', 'DWS', 'Co 2'];
+  return `
+  <div class="dw-h">
+    <span class="mk ${o.ch}">${o.ch}</span>
+    <span class="po">${o.po}</span><button class="ic" title="Copy">${IC.copy}</button>
+    ${o.due ? '<span class="due">Due today</span>' : ''}
+    <span class="ago">${o.ago}</span>
+    <button class="ic x" id="dwX" title="Close (Esc)">${IC.x}</button>
+  </div>
+  <div class="dw-b">
+    <div class="col">
+      <section class="bx">
+        <div class="bx-t">Customer</div>
+        <div class="who"><div class="av">${ini}</div><div><b>${c.name}</b>${c.company ? `<span>${c.company}</span>` : ''}</div></div>
+        <div class="ln">${IC.pin}<div class="v">${c.addr.join('<br>')}</div><button class="ic" title="Copy">${IC.copy}</button></div>
+        <div class="ln">${IC.phone}<div class="v mono">${c.phone}</div><button class="ic" title="Copy">${IC.copy}</button></div>
+      </section>
+      <section class="bx">
+        <div class="bx-t">${o.items.length > 1 ? `Items · ${o.items.reduce((n, it) => n + it.qty, 0)}` : 'Item'}</div>
+        ${o.items.map(it => `<div class="it"><div class="ph">${it.photo}</div><div style="min-width:0"><div class="it-t">${it.title}</div><div class="it-s">${it.sku}</div></div>
+          <div class="it-r">${it.qty > 1 ? `<div class="q">×${it.qty}</div>` : ''}<div class="p">${money(it.price)}</div></div></div>`).join('')}
+      </section>
+    </div>
+    <div class="col">
+      <section class="bx">
+        <div class="bx-t">Package <span class="r" id="pkTag"></span></div>
+        <div class="pk">
+          <label class="pf"><span>Box</span><select class="input" data-k="box">${BOXES.map((b, i) => `<option value="${i}">${b.name} · ${b.d.join(' × ')}</option>`).join('')}<option value="custom">Custom size</option></select></label>
+          <label class="pf"><span>Weight (lb)</span><input class="input mono" data-k="wt" placeholder="0.0" /></label>
+          <label class="pf"><span>Value</span><input class="input mono" value="${o.value.toFixed(2)}" /></label>
+        </div>
+        <div class="pk2">
+          <div class="pf"><span>Dimensions (in)</span><div class="dims"><input class="input mono" data-k="d0" /><b>×</b><input class="input mono" data-k="d1" /><b>×</b><input class="input mono" data-k="d2" /></div></div>
+          <div class="pf"><span>Reference #1</span><div class="lock">${IC.lock}${o.po}</div></div>
+        </div>
+      </section>
+      <section class="bx">
+        <div class="bx-t">Rates <span class="r os-chips">${chips.map((x, i) => `<button class="${i ? '' : 'is-on'}">${x}</button>`).join('')}</span></div>
+        <div class="rates">${rates.map((r, i) => `<div class="rt ${r.best ? 'on' : ''}" data-i="${i}"><span class="rd"></span>
+          <div><div class="sv">${r.best ? IC.star : ''}${r.name}<span class="os-via ${r.cls}">${r.tag}</span></div><div class="eta">${r.eta}</div></div>
+          <span class="pr">${money(r.pr)}</span></div>`).join('')}</div>
+      </section>
+    </div>
+  </div>
+  <div class="dw-f">
+    <div class="pick-sum" id="sum"></div>
+    <button class="btn btn-primary" type="button">Create label</button>
+  </div>`;
+}
+
+// Package: fills from what was saved for these items; Save appears when
+// there is nothing saved yet or the numbers differ from it
+function pkSetup(o) {
+  const key = pkKey(o);
+  const many = o.items.length > 1 || o.items[0].qty > 1;
+  const f = (k) => $('dw').querySelector(`[data-k="${k}"]`);
+  const read = () => ({ box: f('box').value, wt: f('wt').value.trim(), d: [f('d0').value.trim(), f('d1').value.trim(), f('d2').value.trim()] });
+  const fill = (v) => { f('box').value = v.box; f('wt').value = v.wt; v.d.forEach((x, i) => { f(`d${i}`).value = x; }); };
+  fill(SAVED[key] || { box: '0', wt: '', d: BOXES[0].d });
+  const what = many ? 'these items' : 'this item';
+  const tag = () => {
+    const now = read(), was = SAVED[key];
+    const same = was && JSON.stringify(now) === JSON.stringify(was);
+    if (same) { $('pkTag').innerHTML = `<span class="pk-ok">${IC.check}Saved for ${what}</span>`; return; }
+    $('pkTag').innerHTML = `<button class="pk-save" type="button" ${Number(now.wt) > 0 ? '' : 'disabled'}>${IC.bookmark}${was ? 'Update saved' : `Save for ${what}`}</button>`;
+    $('pkTag').querySelector('button').onclick = () => { SAVED[key] = read(); tag(); };
+  };
+  f('box').addEventListener('change', () => { const b = BOXES[Number(f('box').value)]; if (b) b.d.forEach((x, i) => { f(`d${i}`).value = x; }); tag(); });
+  for (const k of ['wt', 'd0', 'd1', 'd2']) f(k).addEventListener('input', () => { if (k !== 'wt') f('box').value = 'custom'; tag(); });
+  tag();
+}
+
+function summary(o, i) {
+  const r = RATES[o.ch][i];
+  $('sum').innerHTML = `<b>${r.name}</b> · ${r.tag}<span class="mono">${money(r.pr)}</span>`;
+}
+
+function open(po) {
+  const o = ORDERS.find(x => x.po === po);
+  openPo = po;
+  document.querySelector(`tr[data-po="${po}"]`).classList.add('open');
+  document.querySelector(`tr[data-po="${po}"] .os-btn`).classList.add('is-on');
+  $('dw').innerHTML = drawer(o);
+  summary(o, RATES[o.ch].findIndex(r => r.best));
+  $('dwX').addEventListener('click', close);
+  $('dw').querySelector('.rates').addEventListener('click', (e) => {
+    const r = e.target.closest('.rt'); if (!r) return;
+    $('dw').querySelectorAll('.rt').forEach(x => x.classList.toggle('on', x === r));
+    summary(o, Number(r.dataset.i));
+  });
+  pkSetup(o);
+  $('dw').classList.add('on'); $('scrim').classList.add('on');
+}
+function close() {
+  if (!openPo) return;
+  const tr = document.querySelector(`tr[data-po="${openPo}"]`);
+  tr.classList.remove('open'); tr.querySelector('.os-btn').classList.remove('is-on');
+  $('dw').classList.remove('on'); $('scrim').classList.remove('on');
+  openPo = '';
+}
+$('rows').addEventListener('click', (e) => {
+  const b = e.target.closest('.os-btn'); if (!b) return;
+  const po = b.closest('tr').dataset.po;
+  if (openPo === po) { close(); return; }
+  if (openPo) { close(); setTimeout(() => open(po), 300); } else open(po);
+});
+$('scrim').addEventListener('click', close);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+renderRows();
+const q = new URLSearchParams(location.search).get('open');
+if (q) open(ORDERS[Number(q)].po);
+</script>
+</body>
+</html>
