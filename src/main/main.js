@@ -4652,18 +4652,50 @@ exit 1
   // create the inbound shipment at Walmart, then take the units off the
   // warehouse (the WFS Shipments path); Walmart splits the order into one
   // or more shipments, each to a warehouse it picks
-  ipcMain.handle('wfsx:create', async (_e, p = {}) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (!IS_DEMO && !wmKeys()) return { ok: false, error: 'Add the Walmart API keys first (Settings › Shipping).' };
+  // the popup's Packing -> the inbound order (the preview and the create
+  // send the same one)
+  const wfsxGtin = new Map(); // channel SKU -> the GTIN Walmart has on it
+  async function wfsxOrder(cfg, p) {
     const box = p.box || {};
     const line = { sku: String(p.channelSku || '').trim(), gtin: String(p.gtin || ''), desc: String(p.desc || ''), qty: Number(p.qty), perBox: Number(p.perBox),
       prep: walmart.WFS_PREP.includes(p.prep) ? p.prep : '', box: { l: Number(box.l), w: Number(box.w), h: Number(box.h), lb: Number(box.lb) } };
     // the GTIN Walmart has on the listing beats the Linnworks barcode
     if (!IS_DEMO && line.sku) {
-      try { const facts = await wmClient().itemFacts(line.sku); if (facts.gtin) line.gtin = facts.gtin; if (!line.desc) line.desc = facts.productName; } catch { /* the barcode it is */ }
+      try {
+        if (!wfsxGtin.has(line.sku)) { const facts = await wmClient().itemFacts(line.sku); wfsxGtin.set(line.sku, { gtin: facts.gtin, name: facts.productName }); }
+        const f = wfsxGtin.get(line.sku);
+        if (f.gtin) line.gtin = f.gtin;
+        if (!line.desc) line.desc = f.name;
+      } catch { /* the barcode it is */ }
     }
-    const order = { orderId: `DWS-${Date.now()}`, returnTo: wfsxReturnTo(cfg), arriveBy: String(p.arriveBy || ''), its: !!p.its, lines: [line] };
+    return { line, order: { orderId: `DWS-${Date.now()}`, returnTo: wfsxReturnTo(cfg), arriveBy: String(p.arriveBy || ''), its: !!p.its, lines: [line] } };
+  }
+  // Distribution: Walmart's own estimate of both routes before anything is
+  // made (Fetch Inbound Preview) - the ITS fee and where self-distribution
+  // would send the units
+  ipcMain.handle('wfsx:preview', async (_e, p = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (IS_DEMO) {
+      const q = Number(p.qty) || 0;
+      return { ok: true, its: { fee: Math.round(q * 25) / 100, to: 'LAX2T · Chino, CA', units: q }, self: [{ to: 'PHL5s · Greencastle, PA', units: q }] };
+    }
+    if (!wmKeys()) return { ok: false, error: 'Add the Walmart API keys first (Settings › Shipping).' };
+    const { order } = await wfsxOrder(cfg, p);
+    const problems = walmart.inboundProblems(order);
+    if (problems.length) return { ok: false, error: problems.join(' ') };
+    try {
+      return { ok: true, ...(await wmClient().inboundPreview(order)) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('wfsx:create', async (_e, p = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!IS_DEMO && !wmKeys()) return { ok: false, error: 'Add the Walmart API keys first (Settings › Shipping).' };
+    const { line, order } = await wfsxOrder(cfg, p);
     const problems = walmart.inboundProblems(order);
     if (problems.length) return { ok: false, error: problems.join(' ') };
     // the next shipment of this model starts from these boxes
@@ -4674,7 +4706,7 @@ exit 1
     let shipments;
     try {
       shipments = IS_DEMO
-        ? [{ id: '4420001WFB', shipTo: 'LAX2 · Perris, CA', address: '', eta: order.arriveBy, items: [{ sku: line.sku, qty: line.qty }] }]
+        ? [{ id: '4420001WFB', shipTo: 'NJ3T · Pedricktown, NJ', address: '7 Sorbello Rd, Pedricktown NJ 08067', to: { name: 'NJ3T', line1: '7 Sorbello Rd', city: 'Pedricktown', state: 'NJ', zip: '08067' }, eta: order.arriveBy, items: [{ sku: line.sku, qty: line.qty }] }]
         : await wmClient().createInboundShipment(order);
     } catch (e) {
       let more = [];
@@ -4703,34 +4735,54 @@ exit 1
      carrier's labels come back as a PDF; or the seller's own carrier's
      tracking goes to Walmart. */
   const wfsxFrom = (cfg) => (cfg.ups && cfg.ups.shipFrom) || {};
+  const wfsxQuoted = new Map(); // shipmentId -> { p, quote }: what Accept books
   ipcMain.handle('wfsx:quote', async (_e, p = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const problems = walmart.quoteProblems(p);
+    const req = { ...p, shipFrom: wfsxFrom(cfg), shipTo: p.to || {} };
+    const problems = walmart.quoteProblems(req);
     if (problems.length) return { ok: false, error: problems.join(' ') };
-    if (IS_DEMO) return { ok: true, quote: { carrier: p.mode === 'PARCEL' ? 'FedEx Ground' : 'Walmart LTL', total: p.mode === 'PARCEL' ? 38.4 : 212.5, transit: '3 business days', expires: 'Nov 14' } };
     try {
-      return { ok: true, quote: await wmClient().carrierQuote({ ...p, shipFrom: wfsxFrom(cfg) }) };
+      const quote = IS_DEMO
+        ? { quoteId: 'DEMO', carrier: p.mode === 'PARCEL' ? 'FedEx' : 'Walmart LTL', total: p.mode === 'PARCEL' ? 38.4 : 212.5, eta: '', expires: '' }
+        : await wmClient().carrierQuote(req);
+      wfsxQuoted.set(String(p.shipmentId), { p: req, quote, at: Date.now() });
+      return { ok: true, quote };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('wfsx:book', async (_e, { shipmentId, mode, quote } = {}) => {
+  // Accept: books the quote this window was shown (Walmart bills the seller)
+  ipcMain.handle('wfsx:book', async (_e, { shipmentId } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (IS_DEMO) return { ok: true, carrier: (quote && quote.carrier) || '' };
+    const q = wfsxQuoted.get(String(shipmentId || ''));
+    if (!q) return { ok: false, error: 'Get a quote first.' };
+    if (IS_DEMO) return { ok: true, carrier: q.quote.carrier };
     try {
-      const r = await wmClient().carrierBook(String(shipmentId || ''), { mode, quote });
-      return { ok: true, carrier: r.carrier || (quote && quote.carrier) || '' };
+      const r = await wmClient().carrierBook(q.p, q.quote);
+      return { ok: true, carrier: r.carrier || q.quote.carrier || '' };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('wfsx:carrierLabels', async (_e, { shipmentId } = {}) => {
+  // undo a booking (Walmart allows 24 hours for a parcel, 1 for pallets)
+  ipcMain.handle('wfsx:cancelBooking', async (_e, { shipmentId, mode } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (IS_DEMO) return { ok: true };
+    try {
+      await wmClient().cancelCarrierBooking(String(shipmentId || ''), String(mode || ''));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('wfsx:carrierLabels', async (_e, { shipmentId, mode } = {}) => {
     if (IS_DEMO) return { ok: false, error: 'Labels are not drawn in the demo.' };
     try {
-      const pdf = await wmClient().carrierLabels(String(shipmentId || ''));
-      const file = path.join(os.tmpdir(), `WFS-carrier-${String(shipmentId).replace(/[^\w-]/g, '')}.pdf`);
+      const pdf = await wmClient().carrierLabels(String(shipmentId || ''), String(mode || 'PARCEL'));
+      const file = path.join(os.tmpdir(), `WFS-${mode === 'LTL' || mode === 'FTL' ? 'BOL' : 'carrier'}-${String(shipmentId).replace(/[^\w-]/g, '')}.pdf`);
       fs.writeFileSync(file, pdf);
       const err = await shell.openPath(file);
       return err ? { ok: false, error: err } : { ok: true };

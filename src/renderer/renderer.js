@@ -11163,6 +11163,25 @@ function wxPack() {
   <div class="wfsx-foot"><button class="btn btn-ghost" data-wx="back">Back</button><span class="wfsx-grow"></span>
     <button class="btn btn-primary" data-wx="toDist">Continue</button></div>`;
 }
+// the order as it stands -> Walmart's preview of both routes (asked again
+// only when the packing changed)
+function wxOrderPayload() {
+  return { sku: WX.sku, channelSku: WX.pick, gtin: WX.barcode, desc: WX.title, qty: WX.units, perBox: WX.perBox, arriveBy: WX.arrive,
+    its: WX.its, prep: WX.prep, box: { l: Number(WX.box.l), w: Number(WX.box.w), h: Number(WX.box.h), lb: Number(WX.box.lb) } };
+}
+async function wxLoadPreview() {
+  const me = WX;
+  const body = wxOrderPayload();
+  const key = JSON.stringify({ ...body, its: 0 });
+  if (me.preview && me.previewKey === key && !me.preview.error) return;
+  me.previewKey = key;
+  me.preview = { loading: true };
+  let r;
+  try { r = await api.wfsxPreview(body); } catch (e) { r = { ok: false, error: e.message }; }
+  if (WX !== me || me.previewKey !== key) return;
+  me.preview = r && r.ok ? { its: r.its, self: r.self || [] } : { error: (r && r.error) || 'Walmart did not answer.' };
+  if (me.step === 'dist') wxRender();
+}
 // Distribution: Walmart's two choices, then the shipment is made
 function wxDist() {
   const n = wxBoxes();
@@ -11171,17 +11190,31 @@ function wxDist() {
       <span class="wfsx-dm"><b>${title}${tag ? `<span class="wfsx-tag">${tag}</span>` : ''}</b>
         <span class="wfsx-dpic${its ? ' is-its' : ''}" aria-hidden="true">${its ? '<i class="is-you"></i><em></em><i class="is-hub"></i><em class="is-fan"></em><i class="is-fc"></i><i class="is-fc"></i><i class="is-fc"></i>' : '<i class="is-you"></i><em class="is-fan"></em><i class="is-fc"></i><i class="is-fc"></i><i class="is-fc"></i>'}</span>
         ${lines.map(([k, v]) => `<span class="wfsx-dl"><span>${k}</span><span>${v}</span></span>`).join('')}</span></button>`;
+  // Walmart's own estimate of both (Fetch Inbound Preview), as Seller
+  // Center shows it: how many shipments and where, and the ITS price
+  const pv = WX.preview || { loading: true };
+  const wait = '<span class="wfsx-dots">…</span>';
+  const self = pv.self || [];
+  const its = pv.its;
+  const fee = its && its.fee != null ? `<b class="mono">${wxMoney(its.fee)}</b>${WX.units > 0 ? `<small>${wxMoney(its.fee / WX.units)}/unit</small>` : ''}` : (pv.loading ? wait : 'per unit');
+  const fcs = self.map(x => String(x.to).split(' · ')[0]).filter(Boolean);
   return `${wxSteps('dist')}<div class="wfsx-body">
-    <div class="wfsx-q"><b>How should Walmart spread it?</b></div>
+    <div class="wfsx-q"><b>How should Walmart spread it?</b>${pv.loading ? '<span>Asking Walmart…</span>' : pv.error ? '' : '<span>Walmart’s estimate</span>'}</div>
     <div class="wfsx-dgrid">
-      ${opt(false, 'Distribute it yourself', [['Shipments', 'one or more'], ['Warehouses', 'Walmart picks'], ['Delivery', 'standard 2-day'], ['Fee', 'none']])}
-      ${opt(true, 'Inventory Transfer Service', [['Shipments', '1'], ['Warehouses', 'up to 10'], ['Delivery', 'better next-day'], ['Fee', 'per unit']], 'ITS')}
+      ${opt(false, 'Distribute it yourself', [
+        ['Shipments', pv.loading ? wait : self.length ? `${self.length}` : 'one or more'],
+        ['Warehouses', pv.loading ? wait : fcs.length ? `<span class="mono" title="${esc(self.map(x => `${x.to}: ${x.units}`).join('\n'))}">${esc(fcs.join(', '))}</span>` : 'Walmart picks'],
+        ['Delivery', 'standard 2-day'], ['Fee', 'none']])}
+      ${opt(true, 'Inventory Transfer Service', [
+        ['Shipments', '1'],
+        ['Warehouses', its && its.to ? `up to 10 <small title="${esc(its.to)}">via ${esc(String(its.to).split(' · ')[0])}</small>` : 'up to 10'],
+        ['Delivery', 'better next-day'], ['Fee', fee]], 'ITS')}
     </div>
-    <p class="wfsx-hint">${WX.its ? 'One shipment to Walmart\'s transfer station; Walmart moves the units on to its warehouses and charges a fee per unit.' : 'Walmart may split the order into a shipment per warehouse; each gets its own boxes and labels.'}</p>
+    <p class="wfsx-hint">${pv.error ? `Walmart's estimate: ${esc(pv.error)}` : WX.its ? 'One shipment to Walmart’s transfer station; Walmart moves the units on to its warehouses. The final fee is set when the shipment is created.' : self.length > 1 ? `Walmart splits it into ${self.length} shipments, each with its own boxes and labels.` : 'Walmart may split the order into a shipment per warehouse; each gets its own boxes and labels.'}</p>
     <div class="wfsx-sum">
       <div><span>Units</span><b class="mono">${WX.units}</b></div>
       <div><span>Boxes</span><b class="mono">${Number.isInteger(n) ? n : '—'}</b><small>of ${WX.perBox}</small></div>
-      <div><span>Each box</span><b class="mono">${esc(wxBoxText())}</b><small>${esc(String(WX.box.lb))} lb</small></div>
+      <div><span>Each box</span><b class="mono">${esc(wxBoxText().replace(/ in$/, ''))}</b><small>in · ${esc(String(WX.box.lb))} lb</small></div>
       <div><span>Arrives by</span><b>${esc(wxDay(WX.arrive) || WX.arrive)}</b></div>
     </div>
     ${WX.confirm ? `<p class="wfsx-confirm">This creates the shipment at Walmart${WX.its ? ' with Inventory Transfer Service' : ''} and takes <b>${WX.units}</b> units off the warehouse in Linnworks.</p>` : ''}
@@ -11212,6 +11245,7 @@ function wxCarrierState(s) {
     WX.ship[s.id] = {
       mode: 'PARCEL', boxes: [{ n, l: WX.box.l, w: WX.box.w, h: WX.box.h, lb: WX.box.lb }],
       pallets: 1, stackable: true, ready: wxYmd(new Date(Date.now() + 86400000)),
+      pl: 48, pw: 40, ph: '', plb: Math.round(n * (Number(WX.box.lb) || 0) + 40) || '', value: '',
       contact: { name: c.name || '', phone: c.phone || '', email: c.email || '' },
       quote: null, booked: null, carrier: 'UPS', tracking: '',
     };
@@ -11256,7 +11290,11 @@ function wxCarrier() {
       ${st.boxes.map((b, i) => `<div class="wfsx-btr">${inp(`n.${i}`, b.n, 'w3')}<span class="wfsx-ig">${inp(`l.${i}`, b.l, 'w3')}<span>in</span></span><span class="wfsx-ig">${inp(`w.${i}`, b.w, 'w3')}<span>in</span></span><span class="wfsx-ig">${inp(`h.${i}`, b.h, 'w3')}<span>in</span></span><span class="wfsx-ig">${inp(`lb.${i}`, b.lb, 'w3')}<span>lb</span></span></div>`).join('')}
     </div>
     ${pallet ? `<div class="wfsx-form wfsx-mt">
-      <div class="wfsx-fr"><span>Pallets</span><input class="mono wfsx-sm" data-wxsf="pallets" value="${esc(st.pallets)}" inputmode="numeric" /></div>
+      <div class="wfsx-fr"><span>Pallets</span><span class="wfsx-fvr"><input class="mono wfsx-sm" data-wxsf="pallets" value="${esc(st.pallets)}" inputmode="numeric" />
+        <span class="wfsx-seg"><button type="button" class="${st.stackable ? 'is-on' : ''}" data-wxstack="1">Stackable</button><button type="button" class="${st.stackable ? '' : 'is-on'}" data-wxstack="0">Not</button></span></span></div>
+      <div class="wfsx-fr"><span>Each pallet</span><span class="wfsx-ig">${inp('pl', st.pl, 'w3')}<span class="wfsx-x">×</span>${inp('pw', st.pw, 'w3')}<span class="wfsx-x">×</span>${inp('ph', st.ph, 'w3')}<span>in</span></span></div>
+      <div class="wfsx-fr"><span>Pallet weight<small>boxes and pallet</small></span><span class="wfsx-ig">${inp('plb', st.plb, 'w4')}<span>lb</span></span></div>
+      <div class="wfsx-fr"><span>Value of the goods<small>for the carrier's cover</small></span><span class="wfsx-ig"><span class="wfsx-pre">$</span>${inp('value', st.value, 'w5')}</span></div>
       <div class="wfsx-fr"><span>Ready for pickup</span><input type="date" class="wfsx-date" data-wxsf="ready" value="${esc(st.ready)}" /></div>
       <div class="wfsx-fr"><span>Contact</span><span class="wfsx-fvr"><input class="wfsx-in wfsx-c1" data-wxsf="contact.name" value="${esc(st.contact.name)}" placeholder="Name" /><input class="wfsx-in mono wfsx-c2" data-wxsf="contact.phone" value="${esc(st.contact.phone)}" placeholder="Phone" /></span></div>
       <div class="wfsx-fr"><span>Contact email</span><input class="wfsx-in wfsx-c3" data-wxsf="contact.email" value="${esc(st.contact.email)}" placeholder="name@…" /></div>
@@ -11290,24 +11328,25 @@ function wxReview() {
       <div class="wfsx-qh"><span>${esc(q.carrier || 'Walmart preferred carrier')}<small>${esc(mode[1])}</small></span><b class="mono">${wxMoney(q.total)}</b></div>
       <div class="wfsx-ql"><span>Cases</span><span class="mono">${cases} · ${Math.round(lbs * 10) / 10} lb</span></div>
       ${pallet ? `<div class="wfsx-ql"><span>Pallets</span><span class="mono">${esc(st.pallets)}</span></div><div class="wfsx-ql"><span>Pickup</span><span>${esc(wxDay(st.ready))}${st.contact.name ? ` · ${esc(st.contact.name)}` : ''}</span></div>` : ''}
-      ${q.transit ? `<div class="wfsx-ql"><span>Transit</span><span>${esc(q.transit)}</span></div>` : ''}
-      ${q.expires ? `<div class="wfsx-ql"><span>Quote good until</span><span>${esc(q.expires)}</span></div>` : ''}
+      ${q.eta ? `<div class="wfsx-ql"><span>Delivers about</span><span>${esc(wxDay(q.eta))}</span></div>` : ''}
+      ${q.expires ? `<div class="wfsx-ql"><span>Quote good until</span><span>${esc(wxDay(q.expires))}</span></div>` : ''}
     </div>
-    ${st.booked ? `<div class="wfsx-ok wfsx-mt">${ICONS.checkSmall}<div><b>Booked${st.booked.carrier ? ` with ${esc(st.booked.carrier)}` : ''}</b><span>Print the carrier labels and put one on each box, next to its receiving label.</span></div></div>`
+    ${st.booked ? `<div class="wfsx-ok wfsx-mt">${ICONS.checkSmall}<div><b>Booked${st.booked.carrier ? ` with ${esc(st.booked.carrier)}` : ''}</b><span>${pallet ? 'Print the bill of lading for the driver; every box keeps its receiving label.' : 'Print the carrier labels and put one on each box, next to its receiving label.'} Walmart lets you cancel within ${pallet ? 'an hour' : '24 hours'}.</span></div></div>`
       : WX.confirm ? `<p class="wfsx-confirm">Book it? Walmart bills <b>${wxMoney(q.total)}</b> to your seller account.</p>` : ''}
     ${WX.msg ? `<p class="wfsx-msg${WX.msgOk ? '' : ' is-bad'}">${esc(WX.msg)}</p>` : ''}
   </div>
-  <div class="wfsx-foot">${st.booked ? `<button class="btn btn-ghost" data-wx="carrierLabels"${WX.busy ? ' disabled' : ''}>Carrier labels</button>` : '<button class="btn btn-ghost" data-wx="toCarrier">Back</button>'}<span class="wfsx-grow"></span>
+  <div class="wfsx-foot">${st.booked ? `<button class="btn btn-ghost" data-wx="cancelBooking"${WX.busy ? ' disabled' : ''}>${WX.confirm ? 'Yes, cancel the booking' : 'Cancel booking'}</button>
+      <button class="btn btn-ghost" data-wx="carrierLabels"${WX.busy ? ' disabled' : ''}>${pallet ? 'Bill of lading' : 'Carrier labels'}</button>` : '<button class="btn btn-ghost" data-wx="toCarrier">Back</button>'}<span class="wfsx-grow"></span>
     ${st.booked ? (wxAllBooked() ? '<button class="btn btn-primary" data-wx="close">Done</button>' : '<button class="btn btn-primary" data-wx="nextShipment">Next shipment</button>')
       : `<button class="btn btn-primary" data-wx="book"${WX.busy ? ' disabled' : ''}>${WX.busy ? 'Booking…' : WX.confirm ? `Yes, book for ${wxMoney(q.total)}` : 'Accept and book'}</button>`}</div>`;
 }
 // the shipment's form -> what main sends to Walmart for a quote
 function wxQuotePayload(s, st) {
   return {
-    shipmentId: s.id, mode: st.mode,
+    shipmentId: s.id, mode: st.mode, to: s.to || null,
     boxes: st.boxes.map(b => ({ n: Number(b.n), l: Number(b.l), w: Number(b.w), h: Number(b.h), lb: Number(b.lb) })),
-    pallets: Number(st.pallets) || 1, stackable: st.stackable, ready: st.ready, contact: st.contact,
-    units: wxUnitsOf(s), sku: WX.pick,
+    pallets: Number(st.pallets) || 1, stackable: st.stackable, pl: Number(st.pl), pw: Number(st.pw), ph: Number(st.ph), plb: Number(st.plb),
+    value: Number(st.value) || 0, ready: st.ready, contact: st.contact,
   };
 }
 
@@ -11383,6 +11422,8 @@ $('wfsxDialog').addEventListener('click', async (e) => {
   if (tab) { WX.tab = Number(tab.dataset.wxtab) || 0; WX.step = 'carrier'; WX.msg = ''; WX.confirm = false; wxRender(); return; }
   const mode = e.target.closest('[data-wxmode]');
   if (mode && WX.result) { const st = wxCarrierState(wxShipment()); st.mode = mode.dataset.wxmode; st.quote = null; WX.msg = ''; wxRender(); return; }
+  const stack = e.target.closest('[data-wxstack]');
+  if (stack && WX.result) { const st = wxCarrierState(wxShipment()); st.stackable = stack.dataset.wxstack === '1'; st.quote = null; wxRender(); return; }
   const prep = e.target.closest('[data-wxprep]');
   if (prep) { WX.prep = prep.dataset.wxprep; wxRender(); return; }
   const its = e.target.closest('[data-wxits]');
@@ -11408,7 +11449,7 @@ $('wfsxDialog').addEventListener('click', async (e) => {
   if (act === 'toDist') {
     const p = wxPackProblems();
     WX.msg = p.join(' ');
-    if (!p.length) { WX.step = 'dist'; WX.confirm = false; }
+    if (!p.length) { WX.step = 'dist'; WX.confirm = false; wxLoadPreview(); }
     wxRender();
     return;
   }
@@ -11455,8 +11496,7 @@ $('wfsxDialog').addEventListener('click', async (e) => {
   if (act === 'create') {
     if (!WX.confirm) { WX.confirm = true; WX.msg = ''; wxRender(); return; }
     WX.busy = true; WX.msg = ''; wxRender();
-    const r = await api.wfsxCreate({ sku: WX.sku, channelSku: WX.pick, gtin: WX.barcode, desc: WX.title, qty: WX.units, perBox: WX.perBox, arriveBy: WX.arrive,
-      its: WX.its, prep: WX.prep, box: { l: Number(WX.box.l), w: Number(WX.box.w), h: Number(WX.box.h), lb: Number(WX.box.lb) } })
+    const r = await api.wfsxCreate(wxOrderPayload())
       .catch(err => ({ ok: false, error: err.message }));
     WX.busy = false;
     WX.confirm = false;
@@ -11494,7 +11534,7 @@ $('wfsxDialog').addEventListener('click', async (e) => {
     const s = wxShipment();
     const st = wxCarrierState(s);
     WX.busy = true; WX.msg = ''; wxRender();
-    const r = await api.wfsxBook({ shipmentId: s.id, mode: st.mode, quote: st.quote }).catch(err => ({ ok: false, error: err.message }));
+    const r = await api.wfsxBook({ shipmentId: s.id }).catch(err => ({ ok: false, error: err.message }));
     WX.busy = false;
     WX.confirm = false;
     if (!r.ok) { WX.msg = r.error || 'Walmart did not book it.'; wxRender(); return; }
@@ -11505,9 +11545,26 @@ $('wfsxDialog').addEventListener('click', async (e) => {
   if (act === 'carrierLabels') {
     const s = wxShipment();
     WX.busy = true; WX.msg = ''; wxRender();
-    const r = await api.wfsxCarrierLabels(s.id).catch(err => ({ ok: false, error: err.message }));
+    const r = await api.wfsxCarrierLabels(s.id, wxCarrierState(s).mode).catch(err => ({ ok: false, error: err.message }));
     WX.busy = false;
     if (!r.ok) WX.msg = r.error || 'Walmart did not send the carrier labels.';
+    wxRender();
+    return;
+  }
+  if (act === 'cancelBooking') {
+    if (!WX.confirm) { WX.confirm = true; wxRender(); return; }
+    const s = wxShipment();
+    const st = wxCarrierState(s);
+    WX.busy = true; WX.msg = ''; wxRender();
+    const r = await api.wfsxCancelBooking(s.id, st.mode).catch(err => ({ ok: false, error: err.message }));
+    WX.busy = false;
+    WX.confirm = false;
+    if (!r.ok) { WX.msg = r.error || 'Walmart did not cancel the booking.'; wxRender(); return; }
+    st.booked = null;
+    st.quote = null;
+    WX.step = 'carrier';
+    WX.msg = 'Booking cancelled. Pick another way to ship it.';
+    WX.msgOk = true;
     wxRender();
     return;
   }

@@ -6372,8 +6372,8 @@ tr.os-open > td { background: var(--accent-soft); }
 .dlg-wfsx[open] { animation: dlgin 160ms var(--ease); }
 .dlg-wfsx::before { content: ''; position: absolute; top: -7px; left: var(--wx-caret, -100px); width: 12px; height: 12px; background: var(--surface); border-left: 1px solid rgba(47, 52, 55, 0.10); border-top: 1px solid rgba(47, 52, 55, 0.10); border-radius: 3px 0 0 0; transform: rotate(45deg); }
 .wfsx-cols { display: grid; grid-template-columns: minmax(0, 1fr) 440px; max-height: calc(100vh - 16px); }
-.wfsx-l { padding: 18px 20px 18px; background: #FBFBFA; border-right: 1px solid var(--border); border-radius: 14px 0 0 14px; min-width: 0; overflow-y: auto; }
-.wfsx-r { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.wfsx-l { padding: 18px 20px 18px; background: #FBFBFA; border-right: 1px solid var(--border); border-radius: 14px 0 0 14px; min-width: 0; max-height: calc(100vh - 18px); overflow-y: auto; }
+.wfsx-r { display: flex; flex-direction: column; min-width: 0; min-height: 0; max-height: calc(100vh - 18px); overflow: hidden; }
 .wfsx-r .wfsx-body { overflow-y: auto; min-height: 0; }
 .wfsx-wait { display: grid; place-items: center; padding: 30px 0; }
 
@@ -6615,3 +6615,7 @@ tr.os-open > td { background: var(--accent-soft); }
 .wfsx-qh b { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
 .wfsx-ql { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; color: var(--muted); }
 .wfsx-ql span:last-child { color: var(--text); }
+.wfsx-dots { color: var(--faint); letter-spacing: .1em; }
+.wfsx-dl small { font-weight: 400; color: var(--faint); margin-left: 4px; }
+.wfsx-dl b { font-weight: 600; }
+.wfsx-pre { font-size: 11px; color: var(--faint); padding: 0 0 0 8px !important; }

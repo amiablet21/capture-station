@@ -214,17 +214,17 @@ class WalmartClient {
   }
 
   // accept: 'application/json' answers parsed JSON; anything else a Buffer
-  async call(method, pathname, payload, { accept = 'application/json', retried = false, waited = 0 } = {}) {
+  async call(method, pathname, payload, { accept = 'application/json', retried = false, waited = 0, extra = null } = {}) {
     const token = await this.token();
     const res = await fetch(`${this.host}${pathname}`, {
       method,
-      headers: this.headers({ 'WM_SEC.ACCESS_TOKEN': token, Accept: accept, 'Content-Type': 'application/json' }),
+      headers: this.headers({ 'WM_SEC.ACCESS_TOKEN': token, Accept: accept, 'Content-Type': 'application/json', ...(extra || {}) }),
       body: payload ? JSON.stringify(payload) : undefined,
       signal: AbortSignal.timeout(45000),
     });
     if (res.status === 401 && !retried) {
       WalmartClient.tokens.clear();
-      return this.call(method, pathname, payload, { accept, retried: true, waited });
+      return this.call(method, pathname, payload, { accept, retried: true, waited, extra });
     }
     // over Walmart's per-API request limit (owner 2026-10-23, Pricing: "You
     // have exceeded your API calls threshold"): wait for the next refill
@@ -235,7 +235,7 @@ class WalmartClient {
       const ms = Number.isFinite(next) && next > Date.now() ? next - Date.now() : Number.isFinite(after) && after > 0 ? after * 1000 : 3000 * (waited + 1);
       if (waited < 2 && ms <= 20000) {
         await new Promise(r => setTimeout(r, ms + 250));
-        return this.call(method, pathname, payload, { accept, retried, waited: waited + 1 });
+        return this.call(method, pathname, payload, { accept, retried, waited: waited + 1, extra });
       }
       const err = new WalmartError(`Walmart's limit on requests was reached. ${ms > 90000 ? `Try again after ${new Date(Date.now() + ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}.` : 'Try again in a minute.'}`);
       err.rateLimited = true;
@@ -1232,6 +1232,7 @@ function parseInboundCreate(body) {
       id: clip(s.shipmentId || s.id, 40),
       shipTo: clip([a.fcName, [a.city, a.stateCode].filter(Boolean).join(', ')].filter(Boolean).join(' · '), 90),
       address: [a.addressLine1, a.addressLine2, [a.city, a.stateCode, a.postalCode].filter(Boolean).join(' ')].filter(Boolean).map(x => clip(x, 80)).join(', '),
+      to: { name: clip(a.fcName, 60), line1: clip(a.addressLine1, 60), line2: clip(a.addressLine2, 60), city: clip(a.city, 40), state: clip(a.stateCode, 2), zip: String(a.postalCode || '').trim() },
       eta: dayOf(s.expectedDeliveryDate),
       items: arr(s.shipmentItems).map(i => ({ sku: clip(i.vendorSku || i.sku, 80), qty: Number(i.itemQty) || 0 })).filter(i => i.sku),
     };
@@ -1381,27 +1382,6 @@ WalmartClient.prototype.cancelInboundOrder = async function (orderId) {
   if (body && String(body.status || '').toUpperCase() === 'FAIL') throw new WalmartError(errorText(body, 400));
   return true;
 };
-// what a carrier quote still needs: [] when it can be asked for
-function quoteProblems(p) {
-  const out = [];
-  if (!p || !p.shipmentId) return ['No shipment picked.'];
-  if (!['PARCEL', 'LTL', 'FTL'].includes(p.mode)) out.push('Pick small parcel, LTL or FTL.');
-  const boxes = arr(p.boxes);
-  if (!boxes.length) out.push('Enter the boxes.');
-  for (const bx of boxes) {
-    if (!(Number.isInteger(Number(bx.n)) && Number(bx.n) > 0)) { out.push('Enter how many cases.'); break; }
-    if (!['l', 'w', 'h', 'lb'].every(k => Number(bx[k]) > 0)) { out.push('Enter each case\'s size and weight.'); break; }
-    if (p.mode === 'PARCEL' && Number(bx.lb) > 150) { out.push('A small parcel case can weigh 150 lb at most; use LTL.'); break; }
-  }
-  if (p.mode === 'LTL' || p.mode === 'FTL') {
-    if (!(Number(p.pallets) >= 1)) out.push('Enter the pallets.');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.ready || ''))) out.push('Pick the pickup day.');
-    const c = p.contact || {};
-    if (!c.name || !c.phone || !c.email) out.push('Enter the pickup contact\'s name, phone and email.');
-  }
-  return out;
-}
-
 // the receiving labels for one shipment's boxes (a 4x6 PDF, one per box)
 WalmartClient.prototype.shipmentLabels = async function (shipmentId, boxes) {
   const body = { shipmentId: String(shipmentId), labelSize: 'X4_6', labelFormat: 'PDF', loadTypes: [{ loadType: 'SINGLE SKU', count: Math.max(1, Math.round(Number(boxes) || 1)) }] };
@@ -1418,13 +1398,6 @@ WalmartClient.prototype.wfsInventoryFor = async function (sku) {
   if (!row) return null;
   return arr(row.shipNodes).reduce((t, n) => t + Math.max(0, Number(n && n.onHandQty) || 0), 0);
 };
-// Walmart's preferred carrier: quote, book, labels; and an own carrier's
-// tracking. Request shapes are being confirmed against Walmart's reference
-// before these go live.
-WalmartClient.prototype.carrierQuote = async function () { throw new WalmartError('Carrier quotes are not switched on yet. Book the carrier in Seller Center for now.'); };
-WalmartClient.prototype.carrierBook = async function () { throw new WalmartError('Booking is not switched on yet. Book the carrier in Seller Center for now.'); };
-WalmartClient.prototype.carrierLabels = async function () { throw new WalmartError('Carrier labels are not switched on yet.'); };
-WalmartClient.prototype.shipmentTracking = async function () { throw new WalmartError('Sending tracking is not switched on yet.'); };
 WalmartClient.prototype.itemFacts = async function (sku) {
   return parseItemFacts(await this.call('GET', `/v3/items/${encodeURIComponent(String(sku))}`));
 };
@@ -1434,9 +1407,292 @@ WalmartClient.prototype.submitConvertFeed = async function (form) {
   return String(body.feedId);
 };
 
+/* ---------- WFS inbound: preview, Walmart's preferred carrier, tracking
+   (owner 2026-11-07: "I want the same exact thing from Walmart on here" -
+   Seller Center's Distribution, Shipping, Contact and Review steps). Shapes
+   from Walmart's API reference (developer.walmart.com, us-marketplace:
+   inboundpreview, createquote, submitbookingquotes, generatelabel,
+   downloadlabel, printbilloflading, voidcarrierratequotes,
+   updateshipmenttrackingdetails). Where the reference and its own examples
+   disagree, the examples are followed (they are real requests). ---------- */
+
+// the carrier calls ("New" in Walmart's docs) name the API version and market
+const WPC_HEADERS = { WM_GLOBAL_VERSION: '3.1', WM_MARKET: 'US' };
+const WPC_TYPE = { PARCEL: 'Parcel', LTL: 'LTL', FTL: 'FTL' };
+const digits = (v) => String(v || '').replace(/\D/g, '');
+
+// Fetch Inbound Preview: the same order as Create Inbound Shipment, wrapped
+function buildInboundPreview(order, countryCode = 'US') {
+  const o = buildInboundOrder(order, countryCode);
+  return {
+    header: { headerAttributes: { buId: '0', martId: '0' } },
+    payload: { inboundOrderId: clip(o.inboundOrderId, 50), returnAddress: o.returnAddress, orderItems: o.orderItems },
+  };
+}
+// the preview -> { its: { fee, to, units } | null, self: [{ to, units }] }:
+// "inbound" is the ITS route (one transfer station and its fee),
+// "selfMirroring" the split Walmart makes when you distribute it yourself
+function parseInboundPreview(body) {
+  const failed = body && String(body.status || '').toUpperCase() === 'FAIL';
+  if (failed) throw new WalmartError(errorText(body, 400));
+  const out = { its: null, self: [] };
+  const where = (p) => {
+    const a = p.shipToAddress || {};
+    return clip([a.fcName, [a.city, a.stateCode].filter(Boolean).join(', ')].filter(Boolean).join(' · '), 80);
+  };
+  const units = (p) => arr(p.shipmentItems).reduce((t, i) => t + (Number(i.itemQty) || 0), 0);
+  for (const o of arr(body && body.payload)) {
+    for (const pv of arr(o && o.previews)) {
+      const list = arr(pv && pv.preview);
+      if (/^inbound$/i.test(String(pv.previewType || ''))) {
+        const fee = list.reduce((t, p) => t + (Number(p.totalNetTransferCharge) || 0), 0);
+        out.its = { fee: Math.round(fee * 100) / 100, to: list.map(where).filter(Boolean).join(', '), units: list.reduce((t, p) => t + units(p), 0) };
+      } else if (/self/i.test(String(pv.previewType || ''))) {
+        out.self = list.map(p => ({ to: where(p), units: units(p) }));
+      }
+    }
+  }
+  return out;
+}
+
+// an address in the carrier calls' spelling
+function wpcPlace(a, kind) {
+  a = a || {};
+  const o = {
+    addressLine1: clip(a.line1, 60),
+    addressLine2: clip(a.line2 || '', 60),
+    city: clip(a.city, 40),
+    stateOrProvince: clip(a.state, 2).toUpperCase(),
+    country: 'US',
+    postalCode: String(a.zip || '').trim().slice(0, 10),
+    locationType: kind === 'origin' ? 'VNDR' : 'DC',
+  };
+  if (kind === 'origin') {
+    if (digits(a.phone)) o.phone = digits(a.phone).slice(-10);
+    o.locationName = clip(a.company || a.name || '', 60);
+  } else if (a.name) o.locationName = clip(a.name, 60);
+  return o;
+}
+// the booking's spelling of the same address
+function wpcBookPlace(a, kind) {
+  a = a || {};
+  const o = {
+    locationType: kind === 'origin' ? 'VNDR' : 'DC',
+    addressLine1: clip(a.line1, 60),
+    addressLine2: clip(a.line2 || '', 60),
+    city: clip(a.city, 40),
+    state: clip(a.state, 2).toUpperCase(),
+    countryCode: 'US',
+    postalCode: String(a.zip || '').trim().slice(0, 10),
+    locationName: clip(kind === 'origin' ? (a.company || a.name || '') : (a.name || ''), 60),
+  };
+  // the warehouse's dock hours: weekdays 8 to 5
+  if (kind === 'origin') o.operationHours = [1, 2, 3, 4, 5].map(d => ({ dayOfWeekCode: d, operationType: 'OPR', openStrTime: '08:00:00', closeStrTime: '17:00:00' }));
+  return o;
+}
+const boxCount = (boxes) => arr(boxes).reduce((t, b) => t + (Number(b.n) || 0), 0);
+// one entry per box for a parcel quote (Walmart takes no count there)
+function parcelPackages(boxes) {
+  const out = [];
+  for (const b of arr(boxes)) {
+    for (let i = 0; i < Number(b.n); i++) {
+      out.push({ packageSequenceNumber: out.length + 1, weight: r2(b.lb), weightUOM: 'lb', length: r2(b.l), width: r2(b.w), height: r2(b.h), lengthUOM: 'in', packageType: 'SINGLE SKU' });
+    }
+  }
+  return out;
+}
+// pallets: one line per pallet for LTL, one counted line for FTL
+function palletPackages(p, counted) {
+  const n = Math.max(1, Math.round(Number(p.pallets) || 1));
+  const one = { isStackable: p.stackable !== false, length: r2(p.pl || 48), width: r2(p.pw || 40), height: r2(p.ph), weight: r2(p.plb), weightUOM: 'lb', lengthUOM: 'in', packageType: 'PALLET' };
+  if (counted) return [{ ...one, noOfPackages: n, packageSequenceNumber: 1 }];
+  return Array.from({ length: n }, (_, i) => ({ ...one, packageSequenceNumber: i + 1, noOfPackages: 1 }));
+}
+// the pickup day's window, 8 to 5 on the warehouse's clock
+const pickupTs = (day, hh) => new Date(`${day}T${hh}:00:00`).toISOString();
+const splitName = (n) => { const w = String(n || '').trim().split(/\s+/).filter(Boolean); return { firstName: w[0] || '', lastName: w.slice(1).join(' ') || w[0] || '' }; };
+
+// what a carrier quote still needs: [] when it can be asked for
+function quoteProblems(p) {
+  const out = [];
+  if (!p || !p.shipmentId) return ['No shipment picked.'];
+  if (!WPC_TYPE[p.mode]) out.push('Pick small parcel, LTL or FTL.');
+  const boxes = arr(p.boxes);
+  if (!boxes.length) out.push('Enter the boxes.');
+  for (const bx of boxes) {
+    if (!(Number.isInteger(Number(bx.n)) && Number(bx.n) > 0)) { out.push('Enter how many cases.'); break; }
+    if (!['l', 'w', 'h', 'lb'].every(k => Number(bx[k]) > 0)) { out.push('Enter each case\'s size and weight.'); break; }
+    if (p.mode === 'PARCEL' && Number(bx.lb) > 150) { out.push('A small parcel case can weigh 150 lb at most; use LTL.'); break; }
+  }
+  if (p.mode === 'PARCEL' && boxCount(boxes) > 500) out.push('Small parcel takes 500 cases at most; use LTL.');
+  const f = p.shipFrom || {};
+  if (!f.line1 || !f.city || !f.state || !f.zip) out.push('Set the ship-from address (Settings › Shipping).');
+  if (p.mode === 'LTL' || p.mode === 'FTL') {
+    if (!(Number(p.pallets) >= 1)) out.push('Enter the pallets.');
+    if (!(Number(p.ph) > 0) || !(Number(p.plb) > 0)) out.push('Enter each pallet\'s height and weight.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.ready || ''))) out.push('Pick the pickup day.');
+    const c = p.contact || {};
+    if (!c.name || digits(c.phone).length < 10 || !/@/.test(String(c.email || ''))) out.push('Enter the pickup contact\'s name, phone and email.');
+    const t = p.shipTo || {};
+    if (!t.line1 || !t.zip) out.push('Walmart sent no address for this warehouse; book it in Seller Center.');
+  }
+  return out;
+}
+
+// Create Carrier Rate Quote (New): POST /v3/fulfillment/inbound-shipments-quote
+function buildCarrierQuote(p) {
+  const type = WPC_TYPE[p.mode];
+  const origin = wpcPlace(p.shipFrom, 'origin');
+  const to = p.shipTo && p.shipTo.line1 ? wpcPlace(p.shipTo, 'destination') : null;
+  if (type === 'Parcel') {
+    const unit = { origin, unitDetails: { shipmentPackages: parcelPackages(p.boxes) } };
+    if (to) unit.destination = to;
+    return { payload: { shipmentId: String(p.shipmentId), quoteType: type, units: [unit] } };
+  }
+  const c = p.contact || {};
+  const nm = splitName(c.name);
+  const unitDetails = {
+    declaredValue: r2(p.value || 0),
+    noOfSingleSkuBoxes: boxCount(p.boxes),
+    noOfMixedSkuBoxes: 0,
+    totalPalletCount: Math.max(1, Math.round(Number(p.pallets) || 1)),
+    shipmentPackages: palletPackages(p, type === 'FTL'),
+  };
+  const body = {
+    payload: {
+      shipmentId: String(p.shipmentId), quoteType: type,
+      pickUpFromDate: pickupTs(p.ready, '08'), pickUpToDate: pickupTs(p.ready, '17'),
+      contactDetails: { FirstName: nm.firstName, LastName: nm.lastName, email: String(c.email || '').trim(), phoneNo: digits(c.phone).slice(-10) },
+      units: [{ origin, destination: to, unitDetails }],
+    },
+  };
+  if (type === 'FTL') {
+    body.payload.equipmentDetails = [{ length: { unitOfMeasure: 'FT', measurementValue: 53 }, protectionLevel: 'Dry', type: 'VAN53' }];
+    Object.assign(body.payload.units[0], { sequenceNbr: 1, mode: 'TL', serviceLevel: 'WFS' });
+    unitDetails.freightClass = 50;
+  }
+  return body;
+}
+const num2 = (...vals) => { for (const v of vals) { const n = Number(v); if (v !== null && v !== undefined && v !== '' && Number.isFinite(n)) return Math.round(n * 100) / 100; } return null; };
+// the quote answer -> { quoteId, carrier, total, eta, expires, schedule }
+function parseCarrierQuote(body) {
+  const failed = body && (String(body.status || '').toUpperCase() === 'ERROR' || String(body.status || '').toUpperCase() === 'FAIL' || (arr(body.errors).length && !body.payload));
+  if (failed) throw new WalmartError(errorText(body, 400));
+  const p = (body && body.payload) || {};
+  const q = arr(p.rateQuotes)[0] || null;
+  if (q) {
+    return {
+      quoteId: String(q.quoteId || ''),
+      carrier: clip((q.carrier && (q.carrier.carrierName || q.carrier.carrierId)) || '', 60),
+      total: num2(q.netCharge, q.totalCharge, p.netCharge),
+      eta: dayOf(q.estimatedDeliveryDateTime || q.transitTime),
+      expires: dayOf(q.expiryDate),
+      schedule: null,
+    };
+  }
+  // a full truckload answers in its own shape
+  const ag = arr(p.aggregates)[0] || {};
+  const sc = arr(p.schedule)[0] || null;
+  if (!p.quoteId && !ag.totalCharge && p.netCharge == null) throw new WalmartError('Walmart sent back no quote for this shipment.');
+  return {
+    quoteId: String(p.quoteId || ''),
+    carrier: 'Walmart truckload',
+    total: num2(p.netCharge, ag.totalCharge && ag.totalCharge.measurementValue),
+    eta: dayOf(sc && sc.maxDueTs),
+    expires: dayOf(p.expiryDate),
+    schedule: sc,
+  };
+}
+
+// Create Booking (New): accepting the quote's charges
+function buildCarrierBooking(p, quote, at = new Date()) {
+  const type = WPC_TYPE[p.mode];
+  const base = { termsAcceptedTime: at.toISOString(), quoteType: type, quoteId: String((quote && quote.quoteId) || '') };
+  if (type === 'Parcel') {
+    return { payload: { shipmentId: String(p.shipmentId), bookingDetails: { ...base, unitDetails: [{ noOfSingleSkuBoxes: boxCount(p.boxes), noOfMixedSkuBoxes: 0 }] } } };
+  }
+  const c = p.contact || {};
+  const nm = splitName(c.name);
+  const f = p.shipFrom || {};
+  const details = {
+    ...base,
+    pickupDetails: type === 'LTL'
+      ? { businessLocationName: clip(f.company || f.name || '', 60), pickupDateInfo: [{ pickupDate: String(p.ready), readyTime: '08:00:00', closeTime: '17:00:00', priority: 1 }] }
+      : { businessLocationName: clip(f.company || f.name || '', 60), pickUpWindow: 'Morning 8 AM to 12 PM' },
+    shipperInfo: {
+      contactInfo: { primaryContactPhoneNumber: digits(c.phone).slice(-10), primaryContactEmailAddress: String(c.email || '').trim() },
+      name: clip(c.name, 60), firstName: nm.firstName, lastName: nm.lastName, requesterType: 'IWFS',
+    },
+    locations: { origin: wpcBookPlace(f, 'origin'), destination: wpcBookPlace(p.shipTo, 'destination') },
+    unitDetails: [{
+      declaredValue: r2(p.value || 0),
+      totalPalletCount: Math.max(1, Math.round(Number(p.pallets) || 1)),
+      noOfSingleSkuBoxes: boxCount(p.boxes),
+      noOfMixedSkuBoxes: 0,
+      shipmentPackages: palletPackages(p, type === 'FTL'),
+    }],
+  };
+  if (type === 'FTL') {
+    if (quote && quote.schedule) details.schedule = quote.schedule;
+    Object.assign(details.unitDetails[0], { equipmentCode: 'VAN53', equipmentType: 'DRYV', length: 53, protectionLevel: 'DRY' });
+  }
+  return { payload: { shipmentId: String(p.shipmentId), bookingDetails: details } };
+}
+const okStatus = (body) => {
+  if (body && /^(FAIL|ERROR)$/i.test(String(body.status || ''))) throw new WalmartError(errorText(body, 400));
+  return true;
+};
+
+WalmartClient.prototype.inboundPreview = async function (order) {
+  try {
+    return parseInboundPreview(await this.call('POST', '/v3/fulfillment/inbound-preview', buildInboundPreview(order, 'US')));
+  } catch (e) {
+    if (!/country/i.test(String(e.message))) throw e;
+    return parseInboundPreview(await this.call('POST', '/v3/fulfillment/inbound-preview', buildInboundPreview(order, 'USA')));
+  }
+};
+WalmartClient.prototype.carrierQuote = async function (p) {
+  return parseCarrierQuote(await this.call('POST', '/v3/fulfillment/inbound-shipments-quote', buildCarrierQuote(p), { extra: WPC_HEADERS }));
+};
+WalmartClient.prototype.carrierBook = async function (p, quote) {
+  okStatus(await this.call('POST', '/v3/fulfillment/inbound-shipments-booking', buildCarrierBooking(p, quote), { extra: WPC_HEADERS }));
+  return { carrier: (quote && quote.carrier) || '' };
+};
+WalmartClient.prototype.cancelCarrierBooking = async function (shipmentId, mode) {
+  const q = `shipmentId=${encodeURIComponent(shipmentId)}&mode=${encodeURIComponent(WPC_TYPE[mode] || mode)}`;
+  return okStatus(await this.call('DELETE', `/v3/fulfillment/inbound-shipments-booking?${q}`, null, { extra: WPC_HEADERS }));
+};
+// the carrier's paperwork as a PDF: a parcel's labels (asked for, then
+// fetched once Walmart has drawn them: 202 while it works), a pallet
+// shipment's bill of lading
+WalmartClient.prototype.carrierLabels = async function (shipmentId, mode) {
+  const id = encodeURIComponent(String(shipmentId));
+  if (mode === 'LTL' || mode === 'FTL') {
+    const r = await this.call('GET', `/v3/fulfillment/inbound-shipments-bol?shipmentId=${id}&mode=${WPC_TYPE[mode]}`, null, { accept: 'application/pdf', extra: WPC_HEADERS });
+    if (!r || !r.buffer || r.buffer.length < 100) throw new WalmartError('Walmart has no bill of lading for this shipment yet. Try again in a few minutes.');
+    return r.buffer;
+  }
+  const gen = (labelType) => this.call('POST', '/v3/fulfillment/generate-label', { payload: { shipmentId: String(shipmentId), labelType, shipDate: new Date().toISOString() } }, { extra: WPC_HEADERS });
+  try { await gen('Carrier'); } catch (e) {
+    if (!/label ?type/i.test(String(e.message))) throw e;
+    await gen('Parcel');
+  }
+  for (let i = 0; i < 10; i++) {
+    const r = await this.call('GET', `/v3/fulfillment/download-label?shipmentId=${id}&labelType=Carrier&labelSize=X4_6`, null, { accept: 'application/pdf', extra: WPC_HEADERS });
+    if (r && r.status === 200 && r.buffer && r.buffer.length > 100) return r.buffer;
+    await new Promise(res => setTimeout(res, 3000));
+  }
+  throw new WalmartError('Walmart is still drawing the labels. Try again in a minute.');
+};
+// your own carrier: the tracking numbers go on the shipment
+WalmartClient.prototype.shipmentTracking = async function (shipmentId, carrierName, numbers) {
+  return okStatus(await this.call('POST', '/v3/fulfillment/shipment-tracking', { shipmentId: String(shipmentId), carrierName: clip(carrierName, 40), trackingInfo: arr(numbers).slice(0, 100).map(String) }));
+};
+
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
-  buildInboundOrder, inboundProblems, parseInboundCreate, parseInboundErrors, WFS_PREP, quoteProblems,
+  buildInboundOrder, inboundProblems, parseInboundCreate, parseInboundErrors, WFS_PREP,
+  quoteProblems, buildInboundPreview, parseInboundPreview, buildCarrierQuote, parseCarrierQuote, buildCarrierBooking,
   buildConvertFeed, convertProblems, parseItemFacts, OMNI_WFS_VERSION, WFS_PRODUCT_TYPES, WFS_CONDITIONS,
   parseInboundShipments, parseInboundItems,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,

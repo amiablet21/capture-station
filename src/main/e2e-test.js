@@ -1869,7 +1869,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
         let body = '';
         req.on('data', c => { body += c; });
         req.on('end', () => {
-          upsSeen.push({ url: req.url, method: req.method, body });
+          upsSeen.push({ url: req.url, method: req.method, body, version: req.headers.wm_global_version || '' });
           res.setHeader('Content-Type', 'application/json');
           if (req.url === '/security/v1/oauth/token') {
             const id = Buffer.from(String(req.headers.authorization || '').replace(/^Basic /, ''), 'base64').toString();
@@ -1924,6 +1924,14 @@ module.exports = async function run({ app, win, db, clipboard }) {
           }
           if (req.url === '/v3/fulfillment/inbound-shipments' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK', payload: [
             { shipmentId: '4400777WFB', shipToAddress: { fcName: 'LAX2', addressLine1: '2500 Fleet Way', city: 'Perris', stateCode: 'CA', postalCode: '92571' }, shipmentItems: [{ vendorSku: 'WX-WFS', itemQty: 30 }], expectedDeliveryDate: '2026-11-20T00:00:00.000Z' }] }));
+          // Send to WFS: the preview of both routes, and Walmart's preferred carrier
+          if (req.url === '/v3/fulfillment/inbound-preview' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK', payload: [{ inboundOrderId: 'x', previews: [
+            { previewType: 'inbound', preview: [{ shipToAddress: { fcName: 'LAX2T', city: 'Chino', stateCode: 'CA' }, totalNetTransferCharge: 7.5, currencyUnit: 'USD', shipmentItems: [{ vendorSku: 'wxconv', itemQty: 30, netTransferCharge: 7.5 }] }] },
+            { previewType: 'selfMirroring', preview: [{ shipToAddress: { fcName: 'PHL5s', city: 'Greencastle', stateCode: 'PA' }, shipmentItems: [{ vendorSku: 'wxconv', itemQty: 20 }] }, { shipToAddress: { fcName: 'IND3', city: 'Mccordsville', stateCode: 'IN' }, shipmentItems: [{ vendorSku: 'wxconv', itemQty: 10 }] }] }] }] }));
+          if (req.url === '/v3/fulfillment/inbound-shipments-quote' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK', payload: { shipmentId: '4400777WFB',
+            rateQuotes: [{ quoteId: 'Q-777', carrier: { carrierId: 'FEDEX', carrierName: 'FedEx' }, currency: 'USD', netCharge: 31.84, totalCharge: 44.1, estimatedDeliveryDateTime: '2026-11-13T00:00:00Z' }], netCharge: 31.84, eligibleForITS: true } }));
+          if (req.url === '/v3/fulfillment/inbound-shipments-booking' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK' }));
+          if (req.url === '/v3/fulfillment/shipment-tracking' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK' }));
           if (req.url.startsWith('/v3/items/WX-') || req.url.startsWith('/v3/items/wx')) return res.end(JSON.stringify({ ItemResponse: [{ sku: decodeURIComponent(req.url.split('/')[3]), productName: 'Galaxy Tab Test 64GB', brand: 'SAMSUNG', gtin: '00195949183522', price: { amount: 129 }, productType: 'Tablet Computers', condition: 'New' }] }));
           if (req.url === '/v3/feeds?feedType=OMNI_WFS' && req.method === 'POST') return res.end(JSON.stringify({ feedId: 'FEEDWFS1' }));
           if (req.url.startsWith('/v3/feeds/FEEDWFS1')) return res.end(JSON.stringify({ feedStatus: 'PROCESSED', itemsReceived: 1, itemsSucceeded: 1, itemDetails: { itemIngestionStatus: [{ sku: 'wxconv', ingestionStatus: 'SUCCESS' }] } }));
@@ -2261,9 +2269,13 @@ module.exports = async function run({ app, win, db, clipboard }) {
               await sleep(100);
               await exec(`document.querySelector('#wfsxRight [data-wxits="1"]').click()`);
               await sleep(100);
-              const dist = await exec(`({ step: WX.step, its: WX.its, on: (document.querySelector('#wfsxRight .wfsx-dopt.is-on b') || {}).textContent || '' })`);
+              for (let i = 0; i < 20 && await exec(`!!(WX.preview && WX.preview.loading)`); i++) await sleep(150);
+              const dist = await exec(`({ step: WX.step, its: WX.its, on: (document.querySelector('#wfsxRight .wfsx-dopt.is-on b') || {}).textContent || '',
+                text: document.querySelector('#wfsxRight .wfsx-dgrid').textContent.replace(/\\s+/g, ' ') })`);
               check('wfs packing: Continue holds until the box size and weight are in, then Distribution offers ITS',
                 packMsg.step === 'pack' && /box size/i.test(packMsg.msg) && dist.step === 'dist' && dist.its === true && /Inventory Transfer/.test(dist.on), { packMsg, dist });
+              check('wfs distribution: Walmart\'s preview shows the ITS price and where self-distribution would send it',
+                /\$7\.50/.test(dist.text) && /\$0\.25\/unit/.test(dist.text) && /PHL5s, IND3/.test(dist.text) && /Shipments\s*2/.test(dist.text), dist.text);
               if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-dist.png'), (await win.webContents.capturePage()).toPNG());
               await exec(`document.querySelector('#wfsxRight [data-wx="create"]').click()`);
               await sleep(150);
@@ -2274,7 +2286,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
               await sleep(1800);
               const posted = upsSeen.slice(before).find(x => x.url === '/v3/fulfillment/inbound-shipments' && x.method === 'POST');
               let order = null; try { order = JSON.parse(posted.body); } catch { /* checked below */ }
-              const done = await exec(`({ step: WX && WX.step, ids: [...document.querySelectorAll('#wfsxRight .wfsx-made b')].map(b => b.textContent) })`);
+              const done = await exec(`({ step: WX && WX.step, ids: [...document.querySelectorAll('#wfsxRight .wfsx-sch b')].map(b => b.textContent) })`);
               check('wfs send: the inbound order goes to Walmart for the picked listing, the shipment Walmart made is shown',
                 !!order && order.orderItems[0].sku === 'wxconv' && order.orderItems[0].itemQty === 30 && order.orderItems[0].vendorPackQty === 3
                 && order.orderItems[0].productId === '00195949183522' && /^\d{5}/.test(order.returnAddress.postalCode) && done.step === 'carrier' && done.ids.join(',') === '4400777WFB', { order, done });
@@ -2285,6 +2297,39 @@ module.exports = async function run({ app, win, db, clipboard }) {
               check('wfs send: the units come off the warehouse in Linnworks under the item\'s own SKU',
                 moved.some(m => m.sku === 'WX-TAB' && m.delta === -30), moved);
               if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-done.png'), (await win.webContents.capturePage()).toPNG());
+              if (process.env.CAPTURE_E2E_SHOT) {
+                await exec(`document.querySelector('#wfsxRight [data-wxmode="LTL"]').click()`);
+                await sleep(150);
+                fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-ltl.png'), (await win.webContents.capturePage()).toPNG());
+                await exec(`document.querySelector('#wfsxRight [data-wxmode="PARCEL"]').click()`);
+                await sleep(100);
+              }
+              // Shipping: a small parcel quote for the boxes from Packing, then Review and book
+              const q0 = upsSeen.length;
+              await exec(`document.querySelector('#wfsxRight [data-wx="getQuote"]').click()`);
+              for (let i = 0; i < 20 && await exec(`WX.step !== 'review'`); i++) await sleep(150);
+              const qPost = upsSeen.slice(q0).find(x => x.url === '/v3/fulfillment/inbound-shipments-quote');
+              let qBody = null; try { qBody = JSON.parse(qPost.body); } catch { /* checked below */ }
+              const rv = await exec(`({ step: WX.step, price: (document.querySelector('#wfsxRight .wfsx-qh b') || {}).textContent, carrier: (document.querySelector('#wfsxRight .wfsx-qh span') || {}).textContent })`);
+              const pk = qBody && qBody.payload.units[0].unitDetails.shipmentPackages;
+              check('wfs shipping: a small parcel quote sends one package per box with the packed size and weight, and Review shows Walmart\'s price',
+                !!pk && qBody.payload.quoteType === 'Parcel' && qPost.version === '3.1' && pk.length === 3 && pk[2].packageSequenceNumber === 3 && pk[0].weight === 24.5 && pk[0].length === 17
+                && qBody.payload.units[0].destination.postalCode === '92571' && rv.step === 'review' && rv.price === '$31.84' && /FedEx/.test(rv.carrier), { qBody, rv });
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-review.png'), (await win.webContents.capturePage()).toPNG());
+              const b0 = upsSeen.length;
+              await exec(`document.querySelector('#wfsxRight [data-wx="book"]').click()`);
+              await sleep(100);
+              const bookAsk = await exec(`({ confirm: (document.querySelector('#wfsxRight .wfsx-confirm') || {}).textContent || '', sent: 0 })`);
+              const early = upsSeen.slice(b0).some(x => x.url === '/v3/fulfillment/inbound-shipments-booking');
+              await exec(`document.querySelector('#wfsxRight [data-wx="book"]').click()`);
+              for (let i = 0; i < 20 && await exec(`!(WX.ship['4400777WFB'] && WX.ship['4400777WFB'].booked)`); i++) await sleep(150);
+              const bPost = upsSeen.slice(b0).find(x => x.url === '/v3/fulfillment/inbound-shipments-booking');
+              let bBody = null; try { bBody = JSON.parse(bPost.body); } catch { /* checked below */ }
+              const booked = await exec(`({ ok: (document.querySelector('#wfsxRight .wfsx-ok b') || {}).textContent || '', labels: !!document.querySelector('#wfsxRight [data-wx="carrierLabels"]') })`);
+              check('wfs review: Accept asks once with the price, then books the quote it showed',
+                !early && /\$31\.84/.test(bookAsk.confirm) && !!bBody && bBody.payload.bookingDetails.quoteId === 'Q-777' && bBody.payload.bookingDetails.quoteType === 'Parcel'
+                && bBody.payload.bookingDetails.unitDetails[0].noOfSingleSkuBoxes === 3 && /Booked with FedEx/.test(booked.ok) && booked.labels, { bookAsk, bBody, booked });
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-booked.png'), (await win.webContents.capturePage()).toPNG());
               await exec(`document.getElementById('wfsxDialog').close()`);
             } finally {
               Object.assign(lwMod.LinnworksClient.prototype, { getChannelSkus: keep.gcs, getMappingChannels: keep.gmc, getChannelItems: keep.gci, changeStockLevels: keep.csl });
