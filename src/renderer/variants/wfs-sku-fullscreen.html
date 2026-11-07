@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SKU WFS Screen</title>
+<!--
+  Owner 2026-11-07: "instead of a popup like this what if it overtook the
+  entire screen, like not like a dropdown popup". Clicking the Walmart spark
+  on a Stock row (variants/wfs-send-from-stock.html) opens this full-window
+  view for that SKU instead of the popover:
+    top bar    Back to Stock (Esc)
+    header     the item, and its counts as tiles
+    left       every WFS shipment for the SKU (Walmart shipment, warehouse,
+               carrier + tracking, received / sent, status); a pending
+               conversion sits on top in amber
+    right      Send to WFS as one form: the Walmart listing (always picked,
+               even with one), then the shipment, or the convert fields when
+               the listing isn't on WFS yet
+  Mockup only, sample data. Nothing here talks to Walmart.
+-->
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06);
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#1E3A66; --accent-hover:#152B4E; --accent-soft:#E4EAF4; --accent-soft-text:#1E3A66;
+    --pos-bg:#EDF3EC; --pos-text:#346538; --neg-bg:#FDEBEC; --neg-text:#9F2F2D;
+    --blue-bg:#E1F3FE; --blue:#1F6C9F; --yellow-bg:#FBF3DB; --yellow:#956400; --wm:#2E86D9; --spark:#FFC220;
+    --font:'Geist','Segoe UI Variable','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace;
+    --ease:cubic-bezier(0.16,1,0.3,1); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:#ECEBE7; color:var(--text); padding:22px 26px 50px; }
+  button { font-family:inherit; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  /* page chrome (not part of the app) */
+  .pg-h { font-size:16px; font-weight:600; letter-spacing:-0.02em; }
+  .pg-sub { font-size:12px; color:var(--muted); margin:2px 0 12px; max-width:1280px; }
+  .steps { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .step { display:flex; align-items:center; gap:7px; border:1px solid var(--border); background:var(--surface); color:var(--muted); border-radius:999px; padding:4px 12px 4px 5px; font-size:12px; font-weight:500; cursor:pointer; }
+  .step i { font-style:normal; width:19px; height:19px; border-radius:50%; display:grid; place-items:center; background:var(--surface-2); border:1px solid var(--border); font-size:10.5px; font-weight:600; font-family:var(--mono); }
+  .step.on { color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .step.on i { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  /* the app window, taken over by the SKU's WFS screen */
+  .win { width:1280px; height:800px; background:var(--canvas); border-radius:12px; overflow:hidden; box-shadow:0 20px 60px rgba(30,42,66,0.18), 0 0 0 1px rgba(0,0,0,0.06); display:flex; flex-direction:column; }
+  .tb { display:flex; align-items:center; gap:10px; padding:12px 24px; background:var(--surface); border-bottom:1px solid var(--border); flex:none; }
+  .back { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12.5px; font-weight:500; padding:6px 12px 6px 10px; border-radius:8px; cursor:pointer; }
+  .back:hover { background:var(--surface-2); }
+  .back svg { width:13px; height:13px; }
+  .crumb { font-size:12.5px; color:var(--faint); margin-left:6px; }
+  .crumb b { color:var(--text); font-weight:600; font-family:var(--mono); }
+  .crumb span { margin:0 6px; }
+  .grow { margin-right:auto; }
+  .kbd { font-family:var(--mono); font-size:10.5px; color:var(--muted); border:1px solid var(--border); border-bottom-width:2px; border-radius:5px; padding:0 6px; background:var(--surface-2); }
+  .kbd-l { font-size:11.5px; color:var(--faint); display:flex; align-items:center; gap:6px; }
+
+  .scroll { flex:1; overflow:auto; padding:22px 24px 24px; }
+  .hero { display:flex; align-items:center; gap:16px; margin-bottom:18px; }
+  .h-img { width:60px; height:60px; border-radius:12px; background:var(--surface); border:1px solid var(--border); display:grid; place-items:center; flex:none; }
+  .thumb { width:30px; height:38px; border-radius:5px; background:linear-gradient(160deg,#2b3036 0 18%,#5fd3a0 60%,#2b3036 100%); border:2px solid #2b3036; }
+  .thumb.p { width:44px; height:30px; background:linear-gradient(120deg,#f47fa1,#a07cf0 60%,#f2b37c); border-color:#2b3036; }
+  .h-k { display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:var(--muted); }
+  .h-k svg { width:14px; height:14px; color:var(--spark); }
+  .h-sku { font-family:var(--mono); font-size:22px; font-weight:600; letter-spacing:-0.02em; line-height:1.25; }
+  .h-t { font-size:12.5px; color:var(--muted); }
+  .tiles { margin-left:auto; display:flex; gap:10px; }
+  .tile { min-width:118px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:9px 14px; }
+  .tile span { display:block; font-size:11px; color:var(--faint); }
+  .tile b { font-family:var(--mono); font-size:20px; font-weight:600; letter-spacing:-0.02em; }
+  .tile.in b { color:var(--blue); }
+
+  .main { display:grid; grid-template-columns:1fr 400px; gap:18px; align-items:start; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; }
+  .card-h { display:flex; align-items:baseline; gap:10px; padding:16px 18px 12px; }
+  .card-h b { font-size:14px; font-weight:600; }
+  .card-h span { font-size:12px; color:var(--faint); }
+  .card-h .mono { color:var(--blue); font-size:11.5px; }
+  .card-h a { margin-left:auto; font-size:12px; color:var(--accent); font-weight:600; cursor:pointer; }
+
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th { text-align:left; font-size:10.5px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--faint); padding:8px 12px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; }
+  th:first-child, td:first-child { padding-left:18px; }
+  th:last-child, td:last-child { padding-right:18px; }
+  td { padding:12px 12px; border-bottom:1px solid var(--border-soft); white-space:nowrap; vertical-align:middle; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover td { background:var(--surface-2); }
+  tbody tr:last-child td { border-bottom:none; }
+  .r { text-align:right; }
+  .d { font-weight:600; }
+  .sub { display:block; font-size:11px; color:var(--faint); font-weight:400; }
+  .idc { font-family:var(--mono); font-size:12px; }
+  .trk { font-family:var(--mono); font-size:11px; color:var(--blue); }
+  .rs { font-family:var(--mono); font-size:13.5px; font-weight:600; }
+  .rs em { font-style:normal; font-weight:400; color:var(--faint); font-size:12px; }
+  .bar { height:4px; width:90px; border-radius:2px; background:#EEECE8; overflow:hidden; margin:5px 0 0 auto; }
+  .bar i { display:block; height:100%; background:var(--wm); }
+  .bar.done i { background:#3FA66B; }
+  .bar.short i { background:var(--neg-text); }
+  .chip { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; border-radius:999px; padding:2px 9px; white-space:nowrap; }
+  .chip-ok { background:var(--pos-bg); color:var(--pos-text); }
+  .chip-warn { background:var(--yellow-bg); color:var(--yellow); }
+  .chip-wait { background:var(--blue-bg); color:var(--blue); }
+  .chip-red { background:var(--neg-bg); color:var(--neg-text); }
+  .chip-grey { background:var(--surface-2); color:var(--muted); border:1px solid var(--border); }
+  .empty { padding:56px 18px 64px; text-align:center; border-top:1px solid var(--border); }
+  .empty b { display:block; font-size:13.5px; font-weight:600; margin-bottom:2px; }
+  .empty span { font-size:12px; color:var(--faint); }
+  .conv { display:flex; align-items:center; gap:10px; margin:0 18px 14px; padding:10px 14px; border-radius:10px; background:#FFF8E6; border:1px solid #F3E3B5; font-size:12.5px; color:#5e4100; }
+  .conv .dot { width:8px; height:8px; border-radius:50%; background:#E0A526; animation:pulse 1.6s infinite; flex:none; }
+  .conv b { font-weight:600; } .conv .mono { color:var(--blue); font-weight:600; }
+  .conv small { color:#8a6a1f; font-size:11.5px; }
+  .conv .sbtn { margin-left:auto; }
+  @keyframes pulse { 50% { opacity:.35; } }
+
+  /* right: Send to WFS */
+  .pn { position:sticky; top:0; }
+  .pn-h { display:flex; align-items:center; gap:7px; padding:16px 18px 4px; font-size:14px; font-weight:600; }
+  .pn-h svg { width:15px; height:15px; color:var(--spark); }
+  .pn-b { padding:8px 18px 4px; }
+  .sec { padding:12px 0 14px; }
+  .sec + .sec { border-top:1px solid var(--border-soft); }
+  .sec-t { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; margin-bottom:10px; }
+  .sec-t i { font-style:normal; width:19px; height:19px; border-radius:50%; display:grid; place-items:center; background:var(--accent); color:#fff; font-size:10.5px; font-family:var(--mono); }
+  .sec-t i.off { background:#E2DFD9; color:var(--muted); }
+  .sec-t .tag { margin-left:auto; }
+  .sec.dim { opacity:.45; }
+  .sec.dim .note { font-size:11.5px; color:var(--muted); }
+  .opt { display:grid; grid-template-columns:18px 1fr auto; gap:11px; align-items:center; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+  .opt + .opt { margin-top:8px; }
+  .opt:hover { background:var(--surface-2); }
+  .opt.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); background:#F7F9FD; }
+  .ck { width:18px; height:18px; border-radius:50%; border:1.5px solid #CFCCC5; display:grid; place-items:center; background:var(--surface); }
+  .ck svg { width:10px; height:10px; color:#fff; opacity:0; }
+  .opt.on .ck { background:var(--accent); border-color:var(--accent); } .opt.on .ck svg { opacity:1; }
+  .o-sku { font-family:var(--mono); font-size:12.5px; font-weight:600; color:var(--blue); }
+  .o-meta { font-size:11.5px; color:var(--muted); } .o-meta b { font-family:var(--mono); font-weight:600; color:var(--text); }
+  .st { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .st::before { content:''; width:7px; height:7px; border-radius:50%; }
+  .st.ok { color:var(--pos-text); } .st.ok::before { background:#3FA66B; }
+  .st.no { color:var(--yellow); } .st.no::before { background:#E0A526; }
+  .qty { display:flex; align-items:center; gap:14px; }
+  .stp { display:inline-flex; align-items:center; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .stp button { width:34px; height:42px; border:none; background:var(--surface-2); color:var(--muted); font-size:16px; cursor:pointer; }
+  .stp button:hover { color:var(--text); background:#F1F0EC; }
+  .stp input { width:66px; height:42px; border:none; border-left:1px solid var(--border); border-right:1px solid var(--border); text-align:center; font-family:var(--mono); font-size:21px; font-weight:600; color:var(--text); outline:none; }
+  .qty-r { display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--muted); }
+  .qty-r b { font-family:var(--mono); color:var(--text); font-weight:600; }
+  .ig { display:inline-flex; align-items:center; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+  .ig input { border:none; outline:none; width:44px; padding:6px 8px; font-family:var(--mono); font-size:12px; text-align:right; background:none; color:var(--text); }
+  .ig .x { color:var(--faint); font-size:11px; }
+  .ig .u { font-size:11px; color:var(--faint); padding:0 9px 0 0; }
+  .line { display:flex; align-items:center; justify-content:space-between; margin-top:12px; font-size:12px; color:var(--muted); }
+  .line .ig input { width:112px; text-align:left; font-family:var(--font); }
+  .flows { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+  .flow { padding:8px 12px; border-radius:10px; background:var(--surface-2); }
+  .flow span { display:block; font-size:10.5px; color:var(--faint); }
+  .flow b { font-family:var(--mono); font-size:13.5px; font-weight:500; color:var(--muted); }
+  .flow b em { font-style:normal; color:var(--faint); margin:0 5px; }
+  .flow b strong { color:var(--accent); font-weight:700; }
+  .fl { display:grid; grid-template-columns:80px 1fr; gap:10px 12px; align-items:center; }
+  .fl .l2 { font-size:12px; color:var(--muted); }
+  .seg { display:inline-flex; background:#F1F0EC; border-radius:8px; padding:2px; gap:2px; }
+  .seg span { font-size:11.5px; padding:4px 10px; border-radius:6px; color:var(--muted); cursor:pointer; white-space:nowrap; }
+  .seg span.on { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+  .row2 { display:flex; align-items:center; gap:8px; }
+  .tag { font-size:10px; font-weight:600; background:var(--blue-bg); color:var(--blue); border-radius:999px; padding:1px 8px; }
+  .track { display:flex; align-items:center; margin-top:14px; padding:10px 12px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); }
+  .tk { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--faint); white-space:nowrap; }
+  .tk i { width:16px; height:16px; border-radius:50%; border:1.5px solid #D6D3CC; display:grid; place-items:center; flex:none; }
+  .tk i svg { width:9px; height:9px; color:#fff; }
+  .tk.d { color:var(--text); } .tk.d i { background:#3FA66B; border-color:#3FA66B; }
+  .tk.now { color:var(--text); font-weight:600; } .tk.now i { border-color:var(--wm); box-shadow:0 0 0 3px var(--blue-bg); animation:pulse 1.2s infinite; }
+  .tk-line { flex:1; height:1.5px; background:#E2DFD9; margin:0 8px; min-width:12px; }
+  .tk-line.d { background:#3FA66B; }
+  .pn-f { display:flex; align-items:center; gap:10px; padding:14px 18px 16px; border-top:1px solid var(--border-soft); }
+  .pn-f .sum { margin-right:auto; font-size:12px; color:var(--muted); }
+  .pn-f .sum b { font-family:var(--mono); color:var(--text); }
+  .pbtn { display:inline-flex; align-items:center; gap:6px; border:none; background:var(--accent); color:#fff; font-size:13px; font-weight:600; padding:9px 16px; border-radius:9px; cursor:pointer; box-shadow:0 1px 2px rgba(30,58,102,0.25); white-space:nowrap; }
+  .pbtn:hover:not(:disabled) { background:var(--accent-hover); }
+  .pbtn:disabled { opacity:.45; cursor:default; box-shadow:none; }
+  .pbtn svg { width:13px; height:13px; }
+  .sbtn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; font-weight:500; padding:6px 11px; border-radius:8px; cursor:pointer; white-space:nowrap; }
+  .sbtn:hover { background:var(--surface-2); }
+  .fade { animation:fadein 200ms var(--ease); }
+  @keyframes fadein { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body>
+
+<div class="pg-h">SKU WFS screen (full window instead of a popup)</div>
+<p class="pg-sub">Mockup. Clicking the Walmart spark on a Stock row opens this screen for that SKU: its WFS shipments on the left, Send to WFS on the right. <b>Back to Stock</b> or Esc returns. Click through the states below. Sample data only.</p>
+<div class="steps" id="steps"></div>
+<div class="win" id="win"></div>
+
+<script>
+const IC = {
+  spark: '<svg viewBox="0 0 24 24" fill="currentColor"><defs><path id="pt" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/></defs><use href="#pt"/><use href="#pt" transform="rotate(60 12 12)"/><use href="#pt" transform="rotate(120 12 12)"/><use href="#pt" transform="rotate(180 12 12)"/><use href="#pt" transform="rotate(240 12 12)"/><use href="#pt" transform="rotate(300 12 12)"/></svg>',
+  arrow: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z"/></svg>',
+  left: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M228,128a12,12,0,0,1-12,12H69l51.52,51.51a12,12,0,0,1-17,17l-72-72a12,12,0,0,1,0-17l72-72a12,12,0,0,1,17,17L69,116H216A12,12,0,0,1,228,128Z"/></svg>',
+  check: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg>',
+};
+const SKUS = {
+  'X133-64GB-GRAY': { title: 'Galaxy Tab A9 64GB Gray', th: '', home: 1090, wfs: 260, inb: 50, sold: 84,
+    listings: [{ ch: 'X133-64GB-GRAY-WFS', wfs: true, at: 260, sold: 84 }, { ch: 'x110gray', wfs: false, sold: 12 }],
+    hist: [
+      { d: 'Nov 4', id: '4417190', to: 'Joliet, IL', car: 'UPS', trk: '1Z 9X4 7F0 03 4412 8835', sent: 50, got: null, c: 'chip-wait', t: 'In transit', sub: 'due Nov 12', bar: 35 },
+      { d: 'Oct 3', id: '4398102', to: 'Bethlehem, PA', car: 'FedEx', trk: '7781 2290 4416', sent: 60, got: 60, c: 'chip-ok', t: 'Received', bar: 100, done: true },
+      { d: 'Sep 30', id: '4389915', to: 'Joliet, IL', car: 'FedEx', trk: '7779 0412 2201', sent: 25, got: 24, c: 'chip-red', t: '1 short', bar: 96, short: true },
+      { d: 'Sep 12', id: '', to: '', car: '', trk: '', sent: 30, got: 30, c: 'chip-grey', t: 'Logged by hand', bar: 100, done: true },
+    ] },
+  'X400-128GB-GRAY': { title: 'X400 128GB Gray', th: 'p', home: 315, wfs: 128, inb: 0, sold: 31,
+    listings: [{ ch: 'X400-128GB-GRAY-WFS', wfs: true, at: 128, sold: 31 }], hist: [] },
+};
+const S = { sku: 'X133-64GB-GRAY', pick: 'X133-64GB-GRAY-WFS', pend: false, converting: false, converted: false, units: 60 };
+const STATES = [
+  ['send', 'Shipments + Send to WFS'], ['notwfs', 'Listing not on WFS'], ['pending', 'Conversion pending'], ['empty', 'No shipments yet'],
+];
+function set(k) {
+  Object.assign(S, { sku: 'X133-64GB-GRAY', pick: 'X133-64GB-GRAY-WFS', pend: false, converting: false, converted: false, units: 60, k });
+  if (k === 'notwfs') S.pick = 'x110gray';
+  if (k === 'pending') S.pend = true;
+  if (k === 'empty') { S.sku = 'X400-128GB-GRAY'; S.pick = 'X400-128GB-GRAY-WFS'; }
+  render();
+}
+const $ = (id) => document.getElementById(id);
+const item = () => SKUS[S.sku];
+const listing = () => item().listings.find(l => l.ch === S.pick);
+const onWfs = (l) => l.wfs || (l.ch === 'x110gray' && S.converted);
+
+function heroHtml(it) {
+  return `<div class="hero">
+    <div class="h-img"><div class="thumb ${it.th}"></div></div>
+    <div><div class="h-k">${IC.spark}Walmart WFS</div><div class="h-sku">${S.sku}</div><div class="h-t">${it.title}</div></div>
+    <div class="tiles">
+      <div class="tile"><span>Warehouse</span><b>${it.home.toLocaleString()}</b></div>
+      <div class="tile"><span>At WFS</span><b>${it.wfs}</b></div>
+      <div class="tile in"><span>Inbound</span><b>${it.inb}</b></div>
+      <div class="tile"><span>Sold at WFS · 30 days</span><b>${it.sold}</b></div>
+    </div></div>`;
+}
+function shipmentsHtml(it) {
+  const hs = it.hist;
+  const sent = hs.reduce((a, h) => a + h.sent, 0), got = hs.reduce((a, h) => a + (h.got || 0), 0);
+  const conv = S.pend ? `<div class="conv fade"><span class="dot"></span><span><b>Converting <span class="mono">x110gray</span></b> · reviewing for 2 days <small>· checked 3 min ago</small></span><button class="sbtn">Check now</button></div>` : '';
+  const head = `<div class="card-h"><b>Shipments</b>${hs.length ? `<span>${hs.length} · ${sent} sent · ${got} received · into <span class="mono">${hs[0] && it.listings[0].ch}</span></span>` : ''}<a>All WFS shipments</a></div>`;
+  if (!hs.length) return `<div class="card">${head}<div class="empty"><b>No WFS shipments logged for this SKU</b><span>Anything sent from here shows up in this list.</span></div></div>`;
+  return `<div class="card">${head}${conv}
+    <table><thead><tr><th>Sent</th><th>Walmart shipment</th><th>Carrier</th><th class="r">Received</th><th class="r">Status</th></tr></thead>
+    <tbody>${hs.map(h => `<tr title="Open this shipment">
+      <td class="d">${h.d}</td>
+      <td>${h.id ? `<span class="idc">${h.id}</span><span class="sub">${h.to}</span>` : '<span class="sub">before the API</span>'}</td>
+      <td>${h.car ? `${h.car}<span class="trk sub">${h.trk}</span>` : '<span class="sub">—</span>'}</td>
+      <td class="r"><span class="rs">${h.got == null ? '—' : h.got}<em> / ${h.sent}</em></span><div class="bar${h.done ? ' done' : h.short ? ' short' : ''}"><i style="width:${h.bar}%"></i></div></td>
+      <td class="r"><span class="chip ${h.c}">${h.t}</span>${h.sub ? `<span class="sub">${h.sub}</span>` : ''}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function sendHtml(it) {
+  const l = listing();
+  const ready = onWfs(l);
+  const pendingHere = S.pend && S.pick === 'x110gray';
+  const opts = it.listings.map(o => {
+    const ok = onWfs(o);
+    const st = S.pend && o.ch === 'x110gray' ? '<span class="st no">Converting · 2d</span>' : `<span class="st ${ok ? 'ok' : 'no'}">${ok ? 'On WFS' : 'Not on WFS'}</span>`;
+    const meta = o.ch === 'x110gray' && S.converted ? 'Just converted · <b>0</b> at WFS' : o.wfs ? `<b>${o.at}</b> at WFS · <b>${o.sold}</b> sold in 30 days` : `Fulfilled by you · <b>${o.sold}</b> sold in 30 days`;
+    return `<div class="opt${S.pick === o.ch ? ' on' : ''}" onclick="S.pick='${o.ch}';render()"><span class="ck">${IC.check}</span>
+      <div><div class="o-sku">${o.ch}</div><div class="o-meta">${meta}</div></div>${st}</div>`;
+  }).join('');
+  const tk = (cls, t) => `<span class="tk ${cls}"><i>${cls === 'd' ? IC.check : ''}</i>${t}</span>`;
+  let sec2, foot;
+  if (ready) {
+    const n = S.units, atW = l.wfs ? l.at : 0;
+    sec2 = `<div class="sec fade"><div class="sec-t"><i>2</i>Shipment</div>
+      <div class="qty"><div class="stp"><button onclick="S.units=Math.max(10,S.units-10);render()">−</button><input value="${n}" /><button onclick="S.units+=10;render()">+</button></div>
+        <div class="qty-r"><span class="ig"><input value="10" style="width:34px" /><span class="u">per box</span></span><span><b>${Math.ceil(n / 10)}</b> boxes</span></div></div>
+      <div class="line"><span>Arrive at Walmart by</span><span class="ig"><input value="Nov 18, 2026" /></span></div>
+      <div class="flows"><div class="flow"><span>Warehouse</span><b>${it.home.toLocaleString()}<em>→</em><strong>${(it.home - n).toLocaleString()}</strong></b></div>
+        <div class="flow"><span>At WFS, once received</span><b>${atW}<em>→</em><strong>${atW + n}</strong></b></div></div></div>`;
+    foot = `<span class="sum"><b>${n}</b> units · <b>${Math.ceil(n / 10)}</b> boxes</span><button class="pbtn">Create shipment ${IC.arrow}</button>`;
+  } else if (pendingHere) {
+    sec2 = `<div class="sec fade"><div class="sec-t"><i>2</i>Converting to WFS</div>
+      <div class="track" style="margin-top:0">${tk('d', 'Sent')}<span class="tk-line d"></span>${tk('now', 'Reviewing · 2 days')}<span class="tk-line"></span>${tk('', 'Approved')}</div></div>`;
+    foot = `<span class="sum">Waiting on Walmart</span><button class="pbtn">Check now</button>`;
+  } else {
+    const track = S.converting ? `<div class="track fade">${tk('d', 'Sent')}<span class="tk-line d"></span>${tk('now', 'Reviewing')}<span class="tk-line"></span>${tk('', 'Approved')}</div>` : '';
+    sec2 = `<div class="sec fade"><div class="sec-t"><i>2</i>Convert to WFS<span class="tag">Pre-filled</span></div>
+      <div class="fl">
+        <span class="l2">Size, boxed</span><span><span class="ig"><input value="10.6" /><span class="x">×</span><input value="7.0" /><span class="x">×</span><input value="1.9" /><span class="u">in</span></span></span>
+        <span class="l2">Weight</span><span><span class="ig"><input value="1.3" /><span class="u">lb</span></span></span>
+        <span class="l2">Battery</span><span class="row2"><span class="seg"><span>None</span><span class="on">In device</span><span>Separate</span></span><span class="ig"><input value="19" style="width:30px" /><span class="u">Wh</span></span></span>
+        <span class="l2">Sell in</span><span><span class="seg"><span class="on">All states</span><span>Some states / ZIPs</span></span></span>
+      </div>${track}</div>
+      <div class="sec dim"><div class="sec-t"><i class="off">3</i>Shipment</div><div class="note">Opens once Walmart approves the listing.</div></div>`;
+    foot = `<span class="sum">Walmart reviews it, often at once</span><button class="pbtn" ${S.converting ? 'disabled' : ''} onclick="convert()">${S.converting ? 'Waiting for Walmart…' : 'Convert to WFS'}</button>`;
+  }
+  return `<div class="card pn">
+    <div class="pn-h">${IC.spark}Send to WFS</div>
+    <div class="pn-b"><div class="sec"><div class="sec-t"><i>1</i>Walmart listing</div>${opts}</div>${sec2}</div>
+    <div class="pn-f">${foot}</div></div>`;
+}
+function convert() {
+  S.converting = true; render();
+  setTimeout(() => { S.converting = false; S.converted = true; render(); }, 1200);
+}
+function render() {
+  const it = item();
+  $('steps').innerHTML = STATES.map(([k, t], i) => `<button class="step${S.k === k ? ' on' : ''}" onclick="set('${k}')"><i>${i + 1}</i>${t}</button>`).join('');
+  $('win').innerHTML = `
+    <div class="tb"><button class="back">${IC.left}Back to Stock</button>
+      <span class="crumb">Stock<span>/</span><b>${S.sku}</b><span>/</span>WFS</span><span class="grow"></span>
+      <span class="kbd-l"><span class="kbd">Esc</span>to go back</span></div>
+    <div class="scroll">${heroHtml(it)}<div class="main">${shipmentsHtml(it)}${sendHtml(it)}</div></div>`;
+}
+set(new URLSearchParams(location.search).get('s') || 'send');
+</script>
+</body>
+</html>
