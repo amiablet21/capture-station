@@ -283,13 +283,20 @@
   .pw-l { padding:18px 20px 20px; background:#FBFBFA; border-right:1px solid var(--border); border-radius:14px 0 0 14px; min-width:0; }
   .pw-r { display:flex; flex-direction:column; min-width:0; }
   .pw-r .pb { flex:1; }
-  .lh { display:grid; grid-template-columns:44px 1fr; gap:12px; align-items:center; }
-  .lh .ph-img { background:#fff; }
-  .tiles4 { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:16px 0 18px; }
-  .t4 { background:#fff; border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
-  .t4 span { display:block; font-size:10.5px; color:var(--faint); white-space:nowrap; }
-  .t4 b { font-family:var(--mono); font-size:17px; font-weight:600; letter-spacing:-0.01em; }
-  .t4.in b { color:var(--blue); }
+  /* header + one stock strip: warehouse > inbound > at WFS, then the WFS
+     sales rate set apart (owner 2026-11-07: "make this better as well") */
+  .lh { display:flex; gap:14px; align-items:center; }
+  .lh-img { width:52px; height:52px; border-radius:12px; background:#fff; box-shadow:0 0 0 1px var(--border), 0 1px 3px rgba(47,52,55,.06); display:grid; place-items:center; flex:none; }
+  .lh-sku { font-family:var(--mono); font-size:17px; font-weight:600; letter-spacing:-0.015em; line-height:1.3; }
+  .lh-t { font-size:12.5px; color:var(--muted); }
+  .flow4 { display:grid; grid-template-columns:1fr 14px 1fr 14px 1fr 1.15fr; align-items:stretch; margin:16px 0 20px; background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .f4 { padding:10px 14px 11px; display:flex; flex-direction:column; justify-content:center; }
+  .f4 span { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--faint); white-space:nowrap; }
+  .f4 b { font-family:var(--mono); font-size:19px; font-weight:600; letter-spacing:-0.02em; line-height:1.35; }
+  .f4.in b { color:var(--blue); }
+  .f4-ar { font-style:normal; display:grid; place-items:center; color:#CFCCC5; font-size:18px; }
+  .f4.sold { background:var(--surface-2); border-left:1px solid var(--border); }
+  .f4.sold small { font-size:10.5px; color:var(--faint); white-space:nowrap; }
   .ls-h { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
   .ls-h b { font-size:12.5px; font-weight:600; }
   .ls-h span { font-size:11px; color:var(--faint); }
@@ -583,13 +590,15 @@ function leftCol() {
   const conv = S.pend && S.row === 'X133-64GB-GRAY'
     ? `<div class="conv-row${S.pop === 'pending' ? ' on' : ''}" onclick="openPending()"><span class="st no"></span><span>Converting <span class="mono">x110gray</span></span><span class="chip chip-warn">2 days</span><span class="chev">›</span></div>` : '';
   return `<div class="pw-l">
-    <div class="lh"><div class="ph-img"><div class="thumb ${r.th}"></div></div>
-      <div><div class="pk">${IC.spark}Walmart WFS</div><div class="ph-sku">${r.sku}</div><div class="ph-t">${r.title}</div></div></div>
-    <div class="tiles4">
-      <div class="t4"><span>Warehouse</span><b>${r.home.toLocaleString()}</b></div>
-      <div class="t4"><span>At WFS</span><b>${r.wfs}</b></div>
-      <div class="t4 in"><span>Inbound</span><b>${r.inb || 0}</b></div>
-      <div class="t4"><span>Sold at WFS · 30d</span><b>${r.sold || 0}</b></div>
+    <div class="lh"><div class="lh-img"><div class="thumb ${r.th}"></div></div>
+      <div><div class="lh-sku">${r.sku}</div><div class="lh-t">${r.title}</div></div></div>
+    <div class="flow4">
+      <div class="f4"><span>Warehouse</span><b>${r.home.toLocaleString()}</b></div>
+      <i class="f4-ar">›</i>
+      <div class="f4 in"><span>Inbound</span><b>${r.inb || 0}</b></div>
+      <i class="f4-ar">›</i>
+      <div class="f4"><span>At WFS</span><b>${r.wfs}</b></div>
+      <div class="f4 sold"><span>Sold at WFS</span><b>${r.sold || 0}</b><small>30 days · ${((r.sold || 0) / 30).toFixed(1)}/day</small></div>
     </div>
     <div class="ls-h"><b>Previous shipments</b>${hs.length ? `<span>${hs.length} · ${sent} sent · ${got} received</span>` : ''}</div>
     ${conv}
