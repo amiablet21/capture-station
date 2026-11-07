@@ -245,6 +245,30 @@
   .toast { display:flex; align-items:center; gap:8px; margin-top:12px; padding:8px 12px; border-radius:10px; background:var(--pos-bg); color:var(--pos-text); font-size:11.5px; }
   .toast svg { width:12px; height:12px; }
 
+  /* a conversion still pending (owner 2026-11-07: "what happens if the
+     converting thing is pending 48 hours, how would you be able to tell?").
+     The app is silent by design, so it shows in three places: a tag on the
+     row, a dot on the WFS shipments button and a Conversions list in its
+     dropdown. Past 24 h it turns amber: "taking longer than usual" */
+  .cvt { display:inline-flex; align-items:center; gap:5px; margin-left:10px; font-family:var(--font); font-size:10.5px; font-weight:600; color:var(--yellow); background:var(--yellow-bg); border-radius:999px; padding:1px 8px; cursor:pointer; vertical-align:1px; }
+  .cvt::before { content:''; width:6px; height:6px; border-radius:50%; background:#E0A526; animation:pulse 1.6s infinite; }
+  .cvt.bad { color:var(--neg-text); background:var(--neg-bg); } .cvt.bad::before { background:var(--neg-text); animation:none; }
+  .bi.wm.today::after { background:#E0A526; }
+  .btn-wfs { position:relative; }
+  .btn-wfs .att { position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; background:#E0A526; border:2px solid var(--surface); }
+  .tk.slow { color:var(--yellow); font-weight:600; } .tk.slow i { border-color:#E0A526; box-shadow:0 0 0 3px var(--yellow-bg); animation:pulse 1.2s infinite; }
+  .slowbox { margin-top:12px; padding:10px 12px; border-radius:10px; background:#FFF8E6; border:1px solid #F3E3B5; font-size:11.5px; color:#7a5300; line-height:1.5; }
+  .slowbox b { color:#5e4100; }
+  .slowbox .lnk { font-size:11px; }
+  .slowbox .chk { display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11px; color:#8a6a1f; }
+  .sent { margin-top:10px; padding:9px 12px; border-radius:10px; background:var(--surface-2); font-size:11.5px; color:var(--muted); display:flex; align-items:flex-start; gap:10px; }
+  .sent div { flex:1; }
+  .sent b { display:block; font-size:10.5px; font-weight:600; color:var(--faint); text-transform:uppercase; letter-spacing:.05em; margin-bottom:1px; }
+  .sent a, .lnk { color:var(--accent); font-weight:600; cursor:pointer; white-space:nowrap; font-size:11.5px; }
+  .sent a:hover, .lnk:hover { text-decoration:underline; }
+  .lnk svg { width:11px; height:11px; vertical-align:-1px; margin-left:2px; }
+  .pbtn, .sbtn, .tbtn { white-space:nowrap; }
+
   /* shared with the shipments dropdown */
   .chip { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; border-radius:999px; padding:1px 8px; white-space:nowrap; }
   .chip-ok { background:var(--pos-bg); color:var(--pos-text); }
@@ -346,8 +370,9 @@ const STEPS = [
   { k: 'convert', n: 3, t: 'Convert' },
   { k: 'ship', n: 4, t: 'Shipment' },
   { k: 'one', n: 5, t: 'Only one listing' },
+  { k: 'pending', n: 6, t: 'Pending 2 days' },
   { g: 'B · Toolbar' },
-  { k: 'menu', n: 6, t: 'WFS shipments button' },
+  { k: 'menu', n: 7, t: 'WFS shipments button' },
 ];
 const WHY = {
   pick: `<b>Every row's tray gets a WFS key</b>, styled like its neighbours, next to the chart, history, DS, rename and delete icons. It opens this popup on the row. It always asks <b>which Walmart listing</b> the stock is for, using the Walmart listings linked to this SKU in Linnworks. Each one shows whether it's set up for WFS and how it's selling.`,
@@ -355,13 +380,15 @@ const WHY = {
   convert: `<b>Convert without leaving the page.</b> The size, weight and battery fields fill in from the item's other WFS listing (same tablet), so it's usually just a check and <b>Send to Walmart</b>. Walmart reviews it. Once approved, the app reminds you to tick <b>Ignore</b> on that listing's Linnworks link, as you do today for WFS listings.`,
   ship: `<b>Then the shipment.</b> Units with a − / + stepper (one box at a time), units per box and an arrive-by date; the boxes work themselves out, and the two tiles show the counts before and after. <b>Create shipment</b> opens the WFS shipment with this line already in it, where you can add other SKUs and send it to Walmart (the flow from the first mockup). <b>Add to draft</b> collects lines from several rows into one shipment you send later from the WFS shipments button.`,
   one: `<b>Even with one Walmart listing, the popup still asks you to pick it.</b> It's pre-selected, so it's one click to confirm, but you always see which listing the units go to.`,
-  menu: `<b>A WFS shipments button in the toolbar</b>, next to Actions. The number is how many shipments are still open. It drops down the <b>draft</b> (lines added from rows, not sent yet) and the <b>recent shipments</b> with Walmart's live status. Click one to see sent vs received per SKU. <b>All shipments</b> opens the full dialog. In the WFS view, the blue <b>+N inbound</b> tag beside a count means units are on their way; click it to jump to that shipment.`,
+  pending: `<b>A conversion stuck for 2 days.</b> The app keeps checking Walmart in the background, so nothing depends on keeping the popup open. You can tell from three places: an amber <b>Converting · 2d</b> tag beside the SKU on the Stock page, an amber dot on the <b>WFS shipments</b> button, and a <b>Conversions</b> list in its dropdown. Clicking the tag (or the row's spark) opens this view: when it was sent, how long it's been, when it was last checked, and what was sent. Past 24 hours it turns amber with <b>Taking longer than usual</b>. From here you can check now, open it in Seller Center, or send the stock to the item's WFS listing instead. If Walmart rejects it, the tag turns red with Walmart's reason and a <b>Fix &amp; resend</b> button.`,
+  menu: `<b>A WFS shipments button in the toolbar</b>, next to Actions. The number is how many shipments are still open; the amber dot means a conversion needs a look. It drops down any <b>conversions</b> still waiting on Walmart (or rejected), the <b>draft</b> (lines added from rows, not sent yet) and the <b>recent shipments</b> with Walmart's live status. Click one to see sent vs received per SKU. <b>All shipments</b> opens the full dialog. In the WFS view, the blue <b>+N inbound</b> tag beside a count means units are on their way; click it to jump to that shipment.`,
 };
 
 const $ = (id) => document.getElementById(id);
 function set(k) {
-  Object.assign(S, { menu: false, pop: null });
+  Object.assign(S, { menu: false, pop: null, pend: k === 'pending' || k === 'menu', checked: false });
   if (k === 'menu') { S.menu = true; }
+  else if (k === 'pending') { S.row = 'X133-64GB-GRAY'; S.pick = 'x110gray'; S.converted = false; S.converting = false; S.pop = 'pending'; }
   else if (k === 'one') { S.row = 'X610-128GB-BLACK'; S.pick = 'X610-128GB-BLACK-WFS'; S.pop = 'pick'; }
   else {
     S.row = 'X133-64GB-GRAY';
@@ -393,7 +420,7 @@ function bandHtml() {
     </div>
     <span class="chip-unl">Unlisted · 153</span>
     <div class="band-right">
-      <button class="btn btn-ghost btn-band btn-wfs${S.menu ? ' open' : ''}" id="wfsBtn" onclick="S.menu=!S.menu;S.pop=null;render()">${IC.box}WFS shipments <span class="cnt">3</span></button>
+      <button class="btn btn-ghost btn-band btn-wfs${S.menu ? ' open' : ''}" id="wfsBtn" onclick="S.menu=!S.menu;S.pop=null;render()">${IC.box}WFS shipments <span class="cnt">3</span>${S.pend ? '<span class="att" title="A conversion needs a look"></span>' : ''}</button>
       <button class="btn btn-ghost btn-band">Actions ▾</button>
       <span class="ico-btn">${IC.refresh}</span>
     </div>
@@ -405,7 +432,7 @@ function trayHtml(r) {
     <button class="bi" title="Sales history">${IC.chart}</button>
     <button class="bi${r.today ? ' today' : ''}" title="Stock history">${IC.clock}</button>
     ${TRAY.startsWith('spark')
-      ? `<button class="bi wm${TRAY === 'spark-grey' ? ' grey' : ''}${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">${IC.spark}</button>`
+      ? `<button class="bi wm${TRAY === 'spark-grey' ? ' grey' : ''}${open ? ' on' : ''}${S.pend && r.sku === 'X133-64GB-GRAY' ? ' today' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">${IC.spark}</button>`
       : TRAY === 'icon'
       ? `<button class="bi tray-wfs-i${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">${IC.box}</button>`
       : `<button class="tray-wfs${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">WFS</button>`}
@@ -420,7 +447,7 @@ function tableHtml() {
     <tbody>${ROWS.map((r, i) => `<tr class="${(S.pop && S.row === r.sku) || S.hover === r.sku ? 'open' : ''}">
       <td class="g">${i + 1}</td>
       <td class="img"><div class="thumb ${r.th}"></div></td>
-      <td class="sku">${r.sku}${r.d ? `<span class="delta${r.d === '0%' ? ' z' : ''}">${r.d}</span>` : ''}${trayHtml(r)}</td>
+      <td class="sku">${r.sku}${r.d ? `<span class="delta${r.d === '0%' ? ' z' : ''}">${r.d}</span>` : ''}${S.pend && r.sku === 'X133-64GB-GRAY' ? `<span class="cvt" title="x110gray: waiting on Walmart since Nov 5" onclick="openPending()">Converting · 2d</span>` : ''}${trayHtml(r)}</td>
       <td class="num lvl">${r.inb ? `<span class="inb" title="Units in open WFS shipments" onclick="S.menu=true;S.pop=null;render()">+${r.inb} inbound</span>` : ''}${r.wfs}</td>
       <td class="num home">${r.home.toLocaleString()}</td>
     </tr>`).join('')}</tbody>
@@ -429,7 +456,9 @@ function tableHtml() {
 
 /* ---------- A · the popover (v2) ---------- */
 const CHECK = '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg>';
+function openPending() { S.menu = false; S.row = 'X133-64GB-GRAY'; S.pick = 'x110gray'; S.pop = 'pending'; render(); }
 function openPop(sku) {
+  if (S.pend && sku === 'X133-64GB-GRAY') return openPending();
   S.menu = false; S.row = sku; S.pop = 'pick';
   S.pick = (LISTINGS[sku] || [{ ch: '' }])[0].ch;
   render();
@@ -501,6 +530,25 @@ function popConvert() {
       : `<button class="pbtn" ${S.converting ? 'disabled' : ''} onclick="convert()">${S.converting ? 'Waiting for Walmart…' : 'Send to Walmart'}</button>`}
   </div>`;
 }
+// the same popup, reopened two days later while Walmart still hasn't answered
+function popPending() {
+  const tk = (cls, t) => `<span class="tk ${cls}"><i>${cls === 'd' ? CHECK : ''}</i>${t}</span>`;
+  return `${popHead(1)}<div class="pb">
+    <div class="cv-h">Converting <span class="mono">x110gray</span> to WFS</div>
+    <div class="cv-s">Sent Nov 5 at 2:10 PM · 2 days ago</div>
+    <div class="track" style="margin-top:0">
+      ${tk('d', 'Sent')}<span class="tk-line d"></span>
+      ${tk('slow', 'Walmart reviewing · 2 days')}<span class="tk-line"></span>
+      ${tk('', 'Approved')}</div>
+    <div class="slowbox"><b>Taking longer than usual.</b> Walmart hasn't approved or rejected it yet. Items with batteries can be held for an extra review, which can take a few days. You don't need to resend it.
+      <div class="chk">${S.checked ? 'Checked just now · still reviewing' : 'Last checked 3 min ago'} · checks every 15 min · <a class="lnk">Seller Center<svg viewBox="0 0 256 256" fill="currentColor"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.51a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg></a></div></div>
+    <div class="sent"><div><b>What you sent</b>10.6 × 7.0 × 1.9 in · 1.3 lb · lithium-ion in device, 19 Wh · all states</div><a>Edit &amp; resend</a></div>
+  </div>
+  <div class="pf"><button class="tbtn" onclick="S.pop=null;render()">Close</button><span class="grow"></span>
+    <button class="sbtn" title="Send the stock to X133-64GB-GRAY-WFS, which is already on WFS" onclick="S.pick='X133-64GB-GRAY-WFS';S.pop='ship';render()">Use the WFS listing</button>
+    <button class="pbtn" onclick="S.checked=true;render()">Check now</button>
+  </div>`;
+}
 function convert() {
   S.converting = true; render();
   setTimeout(() => { S.converting = false; S.converted = true; render(); }, 1500);
@@ -545,6 +593,15 @@ function menuHtml() {
     <div class="menu-h"><div><b>WFS shipments</b><small>Status from Walmart · updated 4 min ago</small></div>
       <button class="btn btn-primary btn-sm">＋ New shipment</button></div>
     <div class="menu-b">
+      ${S.pend ? `<div class="sec">Conversions</div>
+      <div class="sh" onclick="openPending()">
+        <div class="sh-r"><span class="mono" style="color:var(--blue);font-weight:600">x110gray</span><span class="car">for X133-64GB-GRAY</span><span class="chip chip-warn" style="margin-left:auto">Reviewing · 2 days</span></div>
+        <div class="sh-to">Sent Nov 5 · taking longer than usual · checked 3 min ago</div>
+      </div>
+      <div class="sh">
+        <div class="sh-r"><span class="mono" style="color:var(--blue);font-weight:600">X230-128GB-SLV-WFS</span><span class="car">for X230-128GB-SILVER</span><span class="chip chip-red" style="margin-left:auto">Rejected</span></div>
+        <div class="sh-to">Walmart: “The shipping weight doesn't match the item.” <a class="lnk" style="margin-left:auto">Fix &amp; resend</a></div>
+      </div>` : ''}
       <div class="sec">Draft · not sent</div>
       <div class="draft">
         <div class="draft-h"><b>${S.draftAdded ? '2 SKUs · 80 units' : '1 SKU · 20 units'}</b><span style="color:var(--faint);font-size:11px">added from Stock rows</span>
@@ -562,7 +619,7 @@ function menuHtml() {
           <div class="sh-acts"><button class="btn btn-ghost btn-sm">Open shipment</button><button class="btn btn-ghost btn-sm">Box labels</button></div>` : ''}
       </div>`).join('')}
     </div>
-    <div class="menu-f"><a>All shipments →</a><span>3 open · 1 draft</span></div>
+    <div class="menu-f"><a>All shipments →</a><span>3 open · 1 draft${S.pend ? ' · 2 conversions' : ''}</span></div>
   </div>`;
 }
 
@@ -571,7 +628,7 @@ function render() {
   const cs = curStep();
   $('steps').innerHTML = STEPS.map(s => s.g ? `<span class="grp">${s.g}</span>`
     : `<button class="step${cs === s.k ? ' on' : ''}" onclick="set('${s.k}')"><i>${s.n}</i>${s.t}</button>`).join('');
-  const pop = S.pop ? `<div class="pop fade" id="pop">${({ pick: popPick, convert: popConvert, ship: popShip })[S.pop]()}</div>` : '';
+  const pop = S.pop ? `<div class="pop fade" id="pop">${({ pick: popPick, convert: popConvert, ship: popShip, pending: popPending })[S.pop]()}</div>` : '';
   $('stage').innerHTML = bandHtml() + tableHtml() + pop + (S.menu ? menuHtml() : '');
   $('why').innerHTML = WHY[cs] || WHY.pick;
   $('stage').style.marginBottom = '0px';
