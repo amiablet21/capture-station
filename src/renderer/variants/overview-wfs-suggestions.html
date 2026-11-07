@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overview WFS Suggestions</title>
+<!--
+  Owner 2026-11-07: "is there a thing where it can give us suggestion on what
+  to send next? Like forecasting and such, based on our current stock and
+  stock we have never sent to WFS? ... This would be more for the overview
+  page". The old Send to WFS column was the app's own guess and was removed
+  ("it is not accurate anyway"); this one shows WALMART's suggestions:
+    Restock     GET /v3/wfs/recommendation/restock  (items on WFS: stock status,
+                days of supply, suggested units, forecasted sales lift)
+    Try on WFS  GET /v3/wfs/recommendation/fulfill-with-wfs  (seller-fulfilled
+                items Walmart suggests converting: suggested units, estimated
+                sales lift; refreshed the 1st and 15th)
+  Walmart's SKU / GTIN map to the Linnworks item through the existing channel
+  links, so each row also shows what's on the warehouse shelf. Send / Convert
+  & send open the SKU's full-window WFS screen (variants/wfs-sku-fullscreen.html)
+  with Walmart's number filled in. The rest of the page is design 1a as
+  shipped (navy accent), trimmed to a few rows. Sample data only.
+-->
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --row:#FBFBFA; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06);
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#1E3A66; --accent-hover:#152B4E; --accent-soft:#E4EAF4;
+    --pos-bg:#EDF3EC; --pos-text:#346538; --neg-bg:#FDEBEC; --neg-text:#9F2F2D;
+    --blue-bg:#E1F3FE; --blue:#1F6C9F; --yellow-bg:#FBF3DB; --yellow:#956400;
+    --hot-bg:#FCEADF; --hot:#B4501B; --wm:#2E86D9; --wm-brand:#0071DC; --spark:#FFC220;
+    --font:'Geist','Segoe UI Variable','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:12.5px; line-height:1.5; background:var(--canvas); color:var(--text); }
+  button { font-family:inherit; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .chrome { padding:20px 28px 0; }
+  .pg-h { font-size:16px; font-weight:600; letter-spacing:-0.02em; }
+  .pg-sub { font-size:12px; color:var(--muted); margin:2px 0 12px; max-width:1160px; }
+  .steps { display:flex; gap:6px; flex-wrap:wrap; }
+  .step { display:flex; align-items:center; gap:7px; border:1px solid var(--border); background:var(--surface); color:var(--muted); border-radius:999px; padding:4px 12px 4px 5px; font-size:12px; font-weight:500; cursor:pointer; }
+  .step i { font-style:normal; width:19px; height:19px; border-radius:50%; display:grid; place-items:center; background:var(--surface-2); border:1px solid var(--border); font-size:10.5px; font-weight:600; font-family:var(--mono); }
+  .step.on { color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .step.on i { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .sheet { max-width:1160px; padding:22px 28px 30px; }
+  .hd { display:flex; align-items:baseline; gap:12px; margin-bottom:22px; }
+  .hd h1 { font-size:20px; font-weight:600; letter-spacing:-0.01em; }
+  .hd .date { color:var(--muted); }
+  .hd .upd { margin-left:auto; color:var(--faint); font-size:12px; }
+  .counts { display:flex; align-items:baseline; gap:44px; margin-bottom:20px; }
+  .count { display:flex; align-items:baseline; gap:10px; }
+  .count b { font-family:var(--mono); font-size:38px; font-weight:500; line-height:1; }
+  .count span { font-size:14px; }
+  .c-out b { color:var(--neg-text); } .c-low b { color:var(--yellow); } .c-fast b { color:var(--blue); }
+  .c-wfs { cursor:pointer; } .c-wfs b { color:var(--wm-brand); }
+  .c-wfs span { display:inline-flex; align-items:center; gap:6px; }
+  .c-wfs svg { width:15px; height:15px; color:var(--spark); }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) 316px; gap:16px; align-items:start; }
+  .col { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .card-h { display:flex; align-items:center; gap:10px; padding:13px 18px; }
+  .lbl { font-size:10.5px; font-weight:500; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+  .card-h .note { margin-left:auto; font-size:11px; color:var(--faint); }
+
+  /* Needs attention (design 1a, trimmed) */
+  .na { display:grid; grid-template-columns:52px minmax(0,1fr) minmax(0,1fr) 12px; gap:16px; padding:13px 18px; align-items:center; border-top:1px solid var(--border-soft); }
+  .badge { font-size:10.5px; font-weight:500; padding:2px 7px; border-radius:4px; justify-self:start; }
+  .b-out { background:var(--neg-bg); color:var(--neg-text); } .b-low { background:var(--yellow-bg); color:var(--yellow); } .b-fast { background:var(--blue-bg); color:var(--blue); }
+  .sku { font-family:var(--mono); font-size:12px; font-weight:500; }
+  .ttl { font-size:11.5px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .phrase { font-size:13px; }
+  .chev { color:var(--faint); font-size:11px; }
+  .hot { display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:500; background:var(--hot-bg); color:var(--hot); border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:1px; font-family:var(--font); }
+  .na-f { padding:10px 18px; border-top:1px solid var(--border-soft); font-size:12px; color:var(--accent); font-weight:500; }
+
+  /* NEW: Send to WFS, Walmart's suggestions */
+  .wfs-h .lbl { display:inline-flex; align-items:center; gap:6px; }
+  .wfs-h .lbl svg { width:13px; height:13px; color:var(--spark); }
+  .seg { display:inline-flex; background:#F1F0EC; border-radius:8px; padding:2px; gap:2px; margin-left:10px; }
+  .seg span { font-size:11.5px; padding:3px 10px; border-radius:6px; color:var(--muted); cursor:pointer; white-space:nowrap; }
+  .seg span b { font-family:var(--mono); font-weight:600; margin-left:4px; }
+  .seg span.on { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+  .wh { display:grid; grid-template-columns:62px minmax(0,1fr) 90px 84px 92px 156px; gap:14px; align-items:center; padding:7px 18px; background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:10px; font-weight:500; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
+  .wr { display:grid; grid-template-columns:62px minmax(0,1fr) 90px 84px 92px 156px; gap:14px; align-items:center; padding:11px 18px; border-top:1px solid var(--border-soft); }
+  .wr:first-of-type { border-top:none; }
+  .wr:hover { background:var(--row); }
+  .r { text-align:right; }
+  .ch { font-family:var(--mono); font-size:11px; color:var(--blue); margin-top:1px; }
+  .fav { color:#E0A526; margin-left:6px; font-size:12px; cursor:help; }
+  .sku { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .num { font-family:var(--mono); font-size:13px; font-weight:500; text-align:right; }
+  .num small { display:block; font-family:var(--font); font-size:10.5px; font-weight:400; color:var(--faint); }
+  .num.big { font-size:15px; font-weight:600; color:var(--wm-brand); }
+  .num.short { color:var(--yellow); }
+  .lift { font-family:var(--mono); font-size:13px; font-weight:500; color:var(--pos-text); text-align:right; }
+  .act { justify-self:end; display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; font-weight:500; padding:5px 11px; border-radius:7px; cursor:pointer; white-space:nowrap; }
+  .act:hover { border-color:var(--accent); color:var(--accent); background:#F7F9FD; }
+  .act svg { width:12px; height:12px; }
+  .b-wout { background:var(--neg-bg); color:var(--neg-text); } .b-risk { background:var(--yellow-bg); color:var(--yellow); } .b-new { background:#E8F1FC; color:var(--wm-brand); }
+  .wfs-f { display:flex; align-items:center; gap:8px; padding:10px 18px; border-top:1px solid var(--border-soft); font-size:11.5px; color:var(--faint); }
+  .wfs-f a { margin-left:auto; color:var(--accent); font-weight:500; cursor:pointer; }
+
+  /* Sold today (design 1a) */
+  .st-top { padding:14px 18px; }
+  .st-n { display:flex; align-items:baseline; gap:8px; margin-top:6px; }
+  .st-n b { font-family:var(--mono); font-size:34px; font-weight:500; line-height:1; }
+  .st-n span { color:var(--muted); }
+  .st-sub { display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:var(--muted); }
+  .delta { background:var(--pos-bg); color:var(--pos-text); font-size:11px; font-weight:500; border-radius:999px; padding:1px 8px; }
+  .share { display:flex; gap:2px; height:6px; margin-top:12px; }
+  .share i { border-radius:3px; }
+  .legend { display:flex; gap:12px; margin-top:8px; font-size:11.5px; color:var(--muted); }
+  .legend span::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; background:var(--c); }
+  .st-t { display:grid; grid-template-columns:22px minmax(0,1fr) 44px; padding:5px 18px; font-family:var(--mono); font-size:11.5px; }
+  .st-th { background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-family:var(--font); font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <div class="pg-h">Overview: Walmart's WFS suggestions</div>
+  <p class="pg-sub">Mockup. A fourth count, <b>to send to WFS</b>, and a card under Needs attention with Walmart's own suggestions: <b>Restock</b> for listings already on WFS, <b>Try on WFS</b> for items you've never sent. Sample data only.</p>
+  <div class="steps" id="steps"></div>
+</div>
+<div class="sheet" id="sheet"></div>
+
+<script>
+const SPARK = '<svg viewBox="0 0 24 24" fill="currentColor"><defs><path id="pt" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/></defs><use href="#pt"/><use href="#pt" transform="rotate(60 12 12)"/><use href="#pt" transform="rotate(120 12 12)"/><use href="#pt" transform="rotate(180 12 12)"/><use href="#pt" transform="rotate(240 12 12)"/><use href="#pt" transform="rotate(300 12 12)"/></svg>';
+const ARROW = '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z"/></svg>';
+// Walmart's restock suggestions (listings already on WFS), joined to the warehouse count
+const RESTOCK = [
+  { b: 'b-wout', bt: 'Out', sku: 'X133-64GB-SILVER', ch: 'X133-64GB-SLV-WFS', title: 'Galaxy Tab A9 64GB Silver', dos: 'Out at WFS', dosSub: 'since Nov 2', sug: 60, wh: 427, fav: true },
+  { b: 'b-risk', bt: 'At risk', sku: 'X610-128GB-BLACK', ch: 'X610-128GB-BLACK-WFS', title: 'Galaxy Tab S10 FE 128GB Black', dos: '6 days', dosSub: 'of supply', sug: 40, wh: 30 },
+  { b: 'b-risk', bt: 'At risk', sku: 'X110-64GB-GRAY', ch: 'X110GRAY-WFS', title: 'Galaxy Tab A9 64GB Gray', dos: '11 days', dosSub: 'of supply', sug: 30, wh: 88 },
+  { b: 'b-risk', bt: 'At risk', sku: 'X230-128GB-GRAY', ch: 'X230-128GB-GRAY-WFS', title: 'Galaxy Tab A11+ 128GB Gray', dos: '19 days', dosSub: 'of supply', sug: 40, wh: 240 },
+];
+// Walmart's "fulfill with WFS" suggestions: seller-fulfilled listings it suggests converting
+const TRY = [
+  { sku: 'S26-PLUS-256GB-WHITE', ch: 'S26-PLUS-256GB-WHITE-US', title: 'Galaxy S26+ 256GB White', lift: '$2,140', sug: 20, wh: 64, fav: true },
+  { sku: 'X133-64GB-GRAY', ch: 'x110gray', title: 'Galaxy Tab A9 64GB Gray', lift: '$860', sug: 40, wh: 1090 },
+  { sku: 'X230-128GB-SILVER', ch: 'X230-128GB-SILVER', title: 'Galaxy Tab A11+ 128GB Silver', lift: '$410', sug: 25, wh: 12 },
+];
+const S = { tab: 'restock' };
+const $ = (id) => document.getElementById(id);
+
+function wfsCard() {
+  const restock = S.tab === 'restock';
+  const head = `<div class="card-h wfs-h"><span class="lbl">${SPARK}Send to WFS</span>
+      <span class="seg"><span class="${restock ? 'on' : ''}" onclick="S.tab='restock';render()">Restock<b>${RESTOCK.length}</b></span><span class="${restock ? '' : 'on'}" onclick="S.tab='try';render()">Try on WFS<b>${TRY.length}</b></span></span>
+      <span class="note">Walmart's suggestions · ${restock ? 'updated 6:00 AM' : 'updated Nov 1'}</span></div>`;
+  const whCell = (r, n) => `<div class="num${r.wh < n ? ' short' : ''}">${r.wh.toLocaleString()}${r.wh < n ? '<small>only this many</small>' : '<small>in warehouse</small>'}</div>`;
+  const send = (r, label) => { const n = Math.min(r.sug, r.wh); return `<button class="act" title="Opens ${r.sku}'s WFS screen with ${n} units filled in">${label} ${n}${ARROW}</button>`; };
+  const skuCell = (r) => `<div style="min-width:0"><div class="sku">${r.sku}${r.fav ? '<span class="fav" title="Walmart flags it as a customer favorite">★</span>' : ''}</div><div class="ch">${r.ch}</div></div>`;
+  if (restock) return `<div class="card" id="wfsCard">${head}
+    <div class="wh"><span></span><span>SKU · listing</span><span class="r">At WFS</span><span class="r">Walmart says</span><span class="r">Warehouse</span><span></span></div>
+    ${RESTOCK.map(r => `<div class="wr"><span class="badge ${r.b}">${r.bt}</span>${skuCell(r)}
+      <div class="num">${r.dos}<small>${r.dosSub}</small></div>
+      <div class="num big">${r.sug}<small>units</small></div>
+      ${whCell(r, r.sug)}${send(r, 'Send')}</div>`).join('')}
+    <div class="wfs-f">On-WFS listings Walmart thinks will run out first.<a>See all 9</a></div></div>`;
+  return `<div class="card" id="wfsCard">${head}
+    <div class="wh"><span></span><span>SKU · listing</span><span class="r">Extra sales</span><span class="r">Walmart says</span><span class="r">Warehouse</span><span></span></div>
+    ${TRY.map(r => `<div class="wr"><span class="badge b-new">New</span>${skuCell(r)}
+      <div class="lift">+${r.lift}<small style="display:block;font-family:var(--font);font-size:10.5px;font-weight:400;color:var(--faint)">next 4 weeks</small></div>
+      <div class="num big">${r.sug}<small>units</small></div>
+      ${whCell(r, r.sug)}${send(r, 'Convert & send')}</div>`).join('')}
+    <div class="wfs-f">Listings you ship yourself that Walmart expects to sell more from WFS.<a>See all 7</a></div></div>`;
+}
+
+function render() {
+  $('steps').innerHTML = [['restock', 'Restock (already on WFS)'], ['try', 'Try on WFS (never sent)']]
+    .map(([k, t], i) => `<button class="step${S.tab === k ? ' on' : ''}" onclick="S.tab='${k}';render()"><i>${i + 1}</i>${t}</button>`).join('');
+  $('sheet').innerHTML = `
+    <div class="hd"><h1>Overview</h1><span class="date">Saturday, November 7</span><span class="upd">Updated 9:14 AM</span></div>
+    <div class="counts">
+      <div class="count c-out"><b>1</b><span>out of stock</span></div>
+      <div class="count c-low"><b>2</b><span>running low</span></div>
+      <div class="count c-fast"><b>1</b><span>selling fast</span></div>
+      <div class="count c-wfs" title="Walmart's restock suggestions: listings out or at risk at WFS" onclick="document.getElementById('wfsCard').scrollIntoView({behavior:'smooth'})"><b>${RESTOCK.length}</b><span>to send to WFS${SPARK}</span></div>
+    </div>
+    <div class="grid">
+      <div class="col">
+        <div class="card"><div class="card-h"><span class="lbl">Needs attention</span><span class="note">Lead time 7 days · target 28 days on hand</span></div>
+          <div class="na"><span class="badge b-out">Out</span><div><div class="sku">S25-FE-128GB-JETBLACK</div><div class="ttl">Galaxy S25 FE 128GB Jet Black</div></div><span class="phrase">Out since Nov 5</span><span class="chev">▾</span></div>
+          <div class="na"><span class="badge b-low">Low</span><div><div class="sku">X230-128GB-SILVER<span class="hot">Hot</span></div><div class="ttl">Galaxy Tab A11+ 128GB Silver</div></div><span class="phrase">3 days left</span><span class="chev">▾</span></div>
+          <div class="na"><span class="badge b-low">Low</span><div><div class="sku">X135-64GB-GRAY</div><div class="ttl">Galaxy Tab A9 64GB Gray (LTE)</div></div><span class="phrase">5 days left</span><span class="chev">▾</span></div>
+          <div class="na"><span class="badge b-fast">Fast</span><div><div class="sku">S26-PLUS-256GB-WHITE</div><div class="ttl">Galaxy S26+ 256GB White</div></div><span class="phrase">Up 42%</span><span class="chev">▾</span></div>
+          <div class="na-f">12 more under 28 days of cover →</div></div>
+        ${wfsCard()}
+      </div>
+      <div class="card">
+        <div class="st-top"><span class="lbl">Sold today</span>
+          <div class="st-n"><b>41</b><span>units</span></div>
+          <div class="st-sub">27 orders · 9 SKUs <span class="delta">+6 vs yesterday</span></div>
+          <div class="share"><i style="flex:26;background:var(--wm)"></i><i style="flex:11;background:#047857"></i><i style="flex:4;background:#C97B12"></i></div>
+          <div class="legend"><span style="--c:var(--wm)">Walmart 26</span><span style="--c:#047857">eBay 11</span><span style="--c:#C97B12">Temu 4</span></div></div>
+        <div class="st-t st-th"><span>#</span><span>SKU</span><span class="r">Units</span></div>
+        <div class="st-t"><span>1</span><span>X133-64GB-GRAY</span><span class="r">9</span></div>
+        <div class="st-t"><span>2</span><span>X610-128GB-BLACK</span><span class="r">7</span></div>
+        <div class="st-t"><span>3</span><span>S26-PLUS-256GB-WHITE</span><span class="r">6</span></div>
+        <div class="st-t"><span>4</span><span>X230-128GB-GRAY</span><span class="r">5</span></div>
+        <div class="st-t"><span>5</span><span>X110-64GB-GRAY</span><span class="r">4</span></div>
+        <div class="st-t" style="font-weight:600;border-top:1px solid var(--border-soft)"><span></span><span>Total</span><span class="r">41</span></div>
+      </div>
+    </div>`;
+}
+S.tab = new URLSearchParams(location.search).get('tab') === 'try' ? 'try' : 'restock';
+render();
+</script>
+</body>
+</html>
