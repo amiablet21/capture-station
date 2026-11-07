@@ -267,6 +267,12 @@
   .sent a, .lnk { color:var(--accent); font-weight:600; cursor:pointer; white-space:nowrap; font-size:11.5px; }
   .sent a:hover, .lnk:hover { text-decoration:underline; }
   .lnk svg { width:11px; height:11px; vertical-align:-1px; margin-left:2px; }
+  .pb.pend { border-top:1px solid var(--border-soft); padding-top:14px; }
+  .pend-h { display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; }
+  .pend-h .mono { color:var(--blue); }
+  .pend-h .chip { font-size:11px; padding:2px 9px; cursor:help; }
+  .track2 { display:flex; align-items:center; margin:14px 0 12px; }
+  .pend-m { font-size:11.5px; color:var(--faint); }
   .pbtn, .sbtn, .tbtn { white-space:nowrap; }
 
   /* shared with the shipments dropdown */
@@ -380,7 +386,7 @@ const WHY = {
   convert: `<b>Convert without leaving the page.</b> The size, weight and battery fields fill in from the item's other WFS listing (same tablet), so it's usually just a check and <b>Send to Walmart</b>. Walmart reviews it. Once approved, the app reminds you to tick <b>Ignore</b> on that listing's Linnworks link, as you do today for WFS listings.`,
   ship: `<b>Then the shipment.</b> Units with a − / + stepper (one box at a time), units per box and an arrive-by date; the boxes work themselves out, and the two tiles show the counts before and after. <b>Create shipment</b> opens the WFS shipment with this line already in it, where you can add other SKUs and send it to Walmart (the flow from the first mockup). <b>Add to draft</b> collects lines from several rows into one shipment you send later from the WFS shipments button.`,
   one: `<b>Even with one Walmart listing, the popup still asks you to pick it.</b> It's pre-selected, so it's one click to confirm, but you always see which listing the units go to.`,
-  pending: `<b>A conversion stuck for 2 days.</b> The app keeps checking Walmart in the background, so nothing depends on keeping the popup open. You can tell from three places: an amber <b>Converting · 2d</b> tag beside the SKU on the Stock page, an amber dot on the <b>WFS shipments</b> button, and a <b>Conversions</b> list in its dropdown. Clicking the tag (or the row's spark) opens this view: when it was sent, how long it's been, when it was last checked, and what was sent. Past 24 hours it turns amber with <b>Taking longer than usual</b>. From here you can check now, open it in Seller Center, or send the stock to the item's WFS listing instead. If Walmart rejects it, the tag turns red with Walmart's reason and a <b>Fix &amp; resend</b> button.`,
+  pending: `<b>A conversion stuck for 2 days.</b> The app keeps checking Walmart in the background. You can tell from the amber <b>Converting · 2d</b> tag beside the SKU, the amber dot on <b>WFS shipments</b>, and its <b>Conversions</b> list. The popup is just the status and two actions: <b>Check now</b>, or <b>Use WFS listing</b> to send the stock to the listing that's already on WFS. Hover the <b>2 days</b> pill for when it was sent and why it can take long. A rejection turns the tag red with Walmart's reason and <b>Fix &amp; resend</b>.`,
   menu: `<b>A WFS shipments button in the toolbar</b>, next to Actions. The number is how many shipments are still open; the amber dot means a conversion needs a look. It drops down any <b>conversions</b> still waiting on Walmart (or rejected), the <b>draft</b> (lines added from rows, not sent yet) and the <b>recent shipments</b> with Walmart's live status. Click one to see sent vs received per SKU. <b>All shipments</b> opens the full dialog. In the WFS view, the blue <b>+N inbound</b> tag beside a count means units are on their way; click it to jump to that shipment.`,
 };
 
@@ -466,8 +472,11 @@ function openPop(sku) {
 function selListing() { return (LISTINGS[S.row] || []).find(l => l.ch === S.pick); }
 // Listing · (Convert) · Shipment — Convert shows only when the picked listing started off WFS
 function flowSteps() { const l = selListing(); return l && !l.wfs ? ['Listing', 'Convert', 'Shipment'] : ['Listing', 'Shipment']; }
-function popHead(i) {
+function popHead(i, compact) {
   const r = ROWS.find(x => x.sku === S.row);
+  if (compact) return `<div class="ph"><div class="ph-img"><div class="thumb ${r.th}"></div></div>
+      <div><div class="pk">${IC.spark}Send to WFS</div><div class="ph-sku">${r.sku}</div><div class="ph-t">${r.title}</div></div>
+      <button class="px" onclick="S.pop=null;render()" title="Close">✕</button></div>`;
   const steps = flowSteps();
   const cols = `grid-template-columns:repeat(${steps.length},1fr)`;
   return `<div class="ph"><div class="ph-img"><div class="thumb ${r.th}"></div></div>
@@ -532,26 +541,27 @@ function popConvert() {
 }
 // the same popup, reopened two days later while Walmart still hasn't answered
 function popPending() {
+  // owner 2026-11-07 "this is so wordy": status line + buttons only; the
+  // "taking longer than usual" explanation lives in the 2-days pill's tooltip
   const tk = (cls, t) => `<span class="tk ${cls}"><i>${cls === 'd' ? CHECK : ''}</i>${t}</span>`;
-  return `${popHead(1)}<div class="pb">
-    <div class="cv-h">Converting <span class="mono">x110gray</span> to WFS</div>
-    <div class="cv-s">Sent Nov 5 at 2:10 PM · 2 days ago</div>
-    <div class="track" style="margin-top:0">
-      ${tk('d', 'Sent')}<span class="tk-line d"></span>
-      ${tk('slow', 'Walmart reviewing · 2 days')}<span class="tk-line"></span>
-      ${tk('', 'Approved')}</div>
-    <div class="slowbox"><b>Taking longer than usual.</b> Walmart hasn't approved or rejected it yet. Items with batteries can be held for an extra review, which can take a few days. You don't need to resend it.
-      <div class="chk">${S.checked ? 'Checked just now · still reviewing' : 'Last checked 3 min ago'} · checks every 15 min · <a class="lnk">Seller Center<svg viewBox="0 0 256 256" fill="currentColor"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.51a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg></a></div></div>
-    <div class="sent"><div><b>What you sent</b>10.6 × 7.0 × 1.9 in · 1.3 lb · lithium-ion in device, 19 Wh · all states</div><a>Edit &amp; resend</a></div>
+  return `${popHead(1, true)}<div class="pb pend">
+    <div class="pend-h"><span>Converting <span class="mono">x110gray</span></span>
+      <span class="chip chip-warn" title="Sent Nov 5, 2:10 PM. Taking longer than usual; Walmart can hold battery items for an extra review. No need to resend.">2 days</span></div>
+    <div class="track2">${tk('d', 'Sent')}<span class="tk-line d"></span>${tk('slow', 'Reviewing')}<span class="tk-line"></span>${tk('', 'Approved')}</div>
+    <div class="pend-m">${S.checked ? 'Checked just now' : 'Checked 3 min ago'} · <a class="lnk">Seller Center</a> · <a class="lnk">Edit</a></div>
   </div>
   <div class="pf"><button class="tbtn" onclick="S.pop=null;render()">Close</button><span class="grow"></span>
-    <button class="sbtn" title="Send the stock to X133-64GB-GRAY-WFS, which is already on WFS" onclick="S.pick='X133-64GB-GRAY-WFS';S.pop='ship';render()">Use the WFS listing</button>
+    <button class="sbtn" title="Send the stock to X133-64GB-GRAY-WFS instead, it's already on WFS" onclick="S.pick='X133-64GB-GRAY-WFS';S.pop='ship';render()">Use WFS listing</button>
     <button class="pbtn" onclick="S.checked=true;render()">Check now</button>
   </div>`;
 }
+// Walmart often approves at once (owner 2026-11-07): while the popup is open
+// the app asks every few seconds, so an instant approval lands here and you
+// carry straight on. Only a conversion still waiting after you close the
+// popup becomes a tag on the row, a dot on WFS shipments and a Conversions row
 function convert() {
   S.converting = true; render();
-  setTimeout(() => { S.converting = false; S.converted = true; render(); }, 1500);
+  setTimeout(() => { S.converting = false; S.converted = true; render(); }, 900);
 }
 function popShip() {
   const r = ROWS.find(x => x.sku === S.row);
