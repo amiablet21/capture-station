@@ -289,7 +289,7 @@ function screenHtml() {
 
   const l = it.listings.find(x => x.ch === S.pick);
   const opts = it.listings.map(o => `<div class="opt${S.pick === o.ch ? ' on' : ''}" onclick="S.pick='${o.ch}';render()"><span class="ck">${IC.check}</span>
-      <div><div class="o-sku">${o.ch}</div><div class="o-meta">${o.wfs ? `<b>${o.at}</b> at WFS${o.way ? ` · <span class="way">+${o.way} on the way</span>` : ''} · <b>${o.sold}</b> sold 30d` : `Shipped by you · <b>${o.sold}</b> sold 30d`}</div></div>
+      <div><div class="o-sku">${o.ch}</div><div class="o-meta">${o.wfs ? `<b>${o.at}</b> at WFS${o.way ? ` · <span class="way">+${o.way} on the way</span>` : ''} · <b>${o.sold}</b> sold` : `Shipped by you · <b>${o.sold}</b> sold`}</div></div>
       ${o.wfs ? (o.runs === 'Out now' ? '<span class="stt out">Out at WFS</span>' : `<span class="stt out">Runs out ${o.runs}</span>`) : '<span class="stt no">Not on WFS</span>'}</div>`).join('');
   let sec2, foot;
   if (l.wfs) {
@@ -300,7 +300,7 @@ function screenHtml() {
       <div class="hint">4 weeks at your pace · Walmart says <b>${fmt(it.walmart)}</b></div>
       <div class="line"><span>Arrive at Walmart by</span><span class="ig"><input value="Nov 18, 2026" /></span></div>
       <div class="flows"><div class="flow"><span>Warehouse</span><b>${fmt(it.home)}<em>→</em><strong>${fmt(it.home - n)}</strong></b></div>
-        <div class="flow"><span>${l.ch.length > 18 ? 'This listing' : l.ch} at WFS, once received</span><b>${l.at + l.way}<em>→</em><strong>${l.at + l.way + n}</strong></b></div></div></div>`;
+        <div class="flow"><span>At WFS, once received</span><b>${l.at + l.way}<em>→</em><strong>${l.at + l.way + n}</strong></b></div></div></div>`;
     foot = `<span class="sum"><b>${n}</b> units · <b>${Math.ceil(n / 10)}</b> boxes</span><button class="pbtn">Create shipment ${IC.arrow}</button>`;
   } else {
     sec2 = `<div class="sec"><div class="sec-t"><i>2</i>Convert to WFS<span class="tag">Pre-filled</span></div>
