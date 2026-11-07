@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview What to Send</title>
+<style>
+  /* Mock-up only (2026-11-07). Owner: "is there a thing where it can give us
+     suggestion on what to send next? ... based on our current stock and stock
+     we have never sent to WFS? ... more for the overview page".
+     A third Overview tab, What to send, drawn exactly like What to buy
+     (variants/ov-buylist.html, v1.32.126/127): ranked tables, # SKU numbers
+     and a shaded Send column, a SKU drops off once it's covered.
+       Send now     on-WFS listings, from Walmart's WFS inventory health report
+                    (the real Nov 5 read in variants/wfs-restock.html): Walmart's
+                    runs-out date, Send = 4 weeks at your real WFS pace less what's
+                    there and on the way, capped at the warehouse
+       Never sent   Walmart's "fulfill with WFS" suggestions
+                    (GET /v3/wfs/recommendation/fulfill-with-wfs) for listings you
+                    ship yourself; Send = 4 weeks at your Walmart pace. SAMPLE rows:
+                    that API isn't read yet
+     Walmart's own suggested units ride along faint for reference: on Nov 5 they
+     ran far above the real pace (2,515 vs 325 for X230-128GB-GRAY). */
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #1E3A66; --accent-soft: #E4EAF4;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --sec-now: #B00020; --sec-next: #333333; --sec-then: #5A6B7D; --sec-new: #1D5FA8; --spark: #FFC220;
+    --r-card: 8px; --r-ctl: 6px;
+    --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.5; background: var(--canvas); color: var(--text); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .rc-head { display: flex; align-items: flex-end; gap: 22px; border-bottom: 1px solid #EAEAEA; padding-bottom: 10px; margin-bottom: 4px; }
+  .rc-h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; }
+  .rc-subtabs { display: flex; gap: 22px; margin-left: 18px; align-items: flex-end; }
+  .rc-subtab { font-size: 12.5px; font-weight: 500; color: #787774; display: flex; align-items: center; gap: 8px; line-height: 1.55; }
+  .rc-subtab.is-active { font-weight: 600; color: #2F3437; padding-bottom: 10px; margin-bottom: -11px; border-bottom: 2px solid #1E3A66; }
+  .rc-subtab-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: #9F2F2D; }
+  .rc-subtab .new { font-size: 9.5px; font-weight: 700; color: var(--badge-blue-text); background: var(--badge-blue-bg); border-radius: 4px; padding: 0 5px; letter-spacing: .03em; }
+  .ov-headright { margin-left: auto; align-self: center; display: flex; align-items: center; gap: 10px; }
+  .ov-updated { font-size: 12px; color: var(--faint); }
+  .ov-refresh { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 16px 22px 30px; display: flex; flex-direction: column; gap: 14px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
+  .sec { padding: 4px 18px 16px; }
+  .sec h2 { font-size: 15px; font-weight: 600; margin-top: 8px; display: flex; align-items: center; gap: 7px; }
+  .sec h2 svg { width: 14px; height: 14px; color: var(--spark); }
+  .sec .why { font-size: 12px; color: var(--muted); margin: 1px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  col.c-rank { width: 48px; } col.c-num { width: 104px; } col.c-wide { width: 124px; } col.c-buy { width: 100px; }
+  td.sku { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  thead th { background: var(--sec-now); color: #fff; font-weight: 600; font-size: 12px; text-align: right; padding: 7px 10px; white-space: nowrap; }
+  thead th:first-child { border-radius: 6px 0 0 0; } thead th:last-child { border-radius: 0 6px 0 0; }
+  .s-new thead th { background: var(--sec-new); }
+  th.l, td.l { text-align: left; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: #FAFAF8; } tbody tr:hover td.buy { background: #E9EDF3; }
+  td.rank { color: var(--muted); }
+  td.sku { font-family: var(--mono); font-size: 12.5px; }
+  td.sku .tag { font-family: var(--font); font-size: 10.5px; border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  .t-list { color: var(--badge-blue-text); background: var(--badge-blue-bg); }
+  .t-conv { color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
+  td.out { color: var(--neg-text); font-weight: 700; }
+  td.soon { color: var(--neg-text); }
+  td .way { display: block; font-size: 11px; color: var(--badge-blue-text); }
+  td.wm { color: var(--faint); }
+  td.lift { color: #346538; }
+  td.buy { font-weight: 700; background: #F2F4F7; }
+  td.buy .cap { display: block; font-size: 10.5px; font-weight: 500; color: var(--badge-yellow-text); }
+  tfoot td { padding: 7px 10px; text-align: right; font-weight: 700; border-top: 1.5px solid var(--text); font-variant-numeric: tabular-nums; }
+  tfoot td.buy { background: #F2F4F7; }
+
+  .foot { display: flex; align-items: center; gap: 14px; padding: 12px 18px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .foot .link { color: var(--accent); cursor: pointer; }
+  .foot .go { color: #fff; background: var(--accent); border-radius: 7px; padding: 6px 12px; font-weight: 600; cursor: pointer; }
+  .foot .tot { margin-left: auto; color: var(--text); }
+  .foot .tot b { font-family: var(--mono); }
+  .how { padding: 0 18px 16px; font-size: 11.5px; color: var(--faint); max-width: 110ch; }
+  .note { font-size: 12px; color: var(--muted); background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 14px; }
+  .note b { color: var(--text); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="note"><b>Mock-up, on the current build (v1.32.131).</b> A third Overview tab, <b>What to send</b>, laid out like What to buy. <b>Send now</b> uses the real WFS read from Nov 5 (Walmart's inventory health report). <b>Never sent to WFS</b> is sample data: it needs Walmart's "fulfill with WFS" suggestions, which the app doesn't read yet. Click a row to open that SKU's WFS screen.</div>
+
+    <div class="rc-head">
+      <h1 class="rc-h1">Overview</h1>
+      <nav class="rc-subtabs"><span class="rc-subtab">What to buy <span class="rc-subtab-count">33</span></span><span class="rc-subtab is-active">What to send <span class="rc-subtab-count" id="nsend"></span></span><span class="rc-subtab">Sent to WFS</span></nav>
+      <span class="ov-headright"><span class="ov-updated">Walmart read 2:14 PM</span><span class="ov-refresh"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></span></span>
+    </div>
+
+    <div class="card">
+      <div id="sections"></div>
+      <div class="foot">
+        <span class="go">Create one WFS shipment with Send now →</span>
+        <span class="link">Download this list as Excel</span>
+        <span class="tot" id="grand"></span>
+      </div>
+      <p class="how">Sold 30d: units sold from WFS in the last 30 days (Never sent: sold on Walmart, shipped by you). At WFS: Walmart's own count, with what's on the way under it. Runs out: Walmart's forecast. Send: four weeks at your real pace, less what's at WFS and on the way, rounded up to 5, never more than the warehouse holds. Walmart says: Walmart's own suggested units, for reference only. A SKU leaves the list once what's there and on the way covers four weeks. Never sent: listings Walmart suggests moving to WFS, with its estimate of extra sales over 4 weeks; they need converting first.</p>
+    </div>
+  </div>
+
+<script>
+  const SPARK = '<svg viewBox="0 0 24 24" fill="currentColor"><defs><path id="pt" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/></defs><use href="#pt"/><use href="#pt" transform="rotate(60 12 12)"/><use href="#pt" transform="rotate(120 12 12)"/><use href="#pt" transform="rotate(180 12 12)"/><use href="#pt" transform="rotate(240 12 12)"/><use href="#pt" transform="rotate(300 12 12)"/></svg>';
+  // Send now: the Nov 5 read (variants/wfs-restock.html), only the rows whose
+  // Send is above 0. [sku, listings, sold30, atWfs, onWay, runsOut, warehouse, walmartSays, send, capped]
+  const NOW = [
+    ['X230-128GB-GRAY', 2, 195, 0, 0, 'Out now', 795, 2515, 325, 0],
+    ['X620-128GB-GRAY', 1, 20, 0, 0, 'Out now', 150, 139, 60, 0],
+    ['X133-128GB-GRAY', 1, 40, 0, 40, 'Out now', 34, 820, 34, 75],
+    ['X520-128GB-SILVER', 1, 34, 0, 20, 'Out now', 52, 179, 52, 55],
+    ['X400-128GB-GRAY', 1, 159, 82, 45, 'Nov 7', 314, 2300, 110, 0],
+    ['X210-64GB-GRAY', 2, 209, 3, 210, 'Nov 14', 353, 1053, 95, 0],
+  ];
+  // Never sent: SAMPLE. [sku, listing, sold30 on Walmart, extra sales est, warehouse, walmartSays, send]
+  const NEW = [
+    ['X133-128GB-SILVER', 'X133-128GB-SLV', 23, '$1,320', 67, 120, 25],
+    ['X135-128GB-SILVER', 'X135-128GB-SILVER', 15, '$540', 71, 60, 15],
+    ['X356-128GB-GREEN', 'X356-128GB-GRN', 13, '$410', 90, 45, 15],
+  ];
+  const fmt = (n) => Number(n).toLocaleString('en-US');
+  function draw() {
+    let rank = 0;
+    const nowTot = NOW.reduce((t, r) => t + r[8], 0), newTot = NEW.reduce((t, r) => t + r[6], 0);
+    const cols = '<colgroup><col class="c-rank"><col><col class="c-num"><col class="c-num"><col class="c-wide"><col class="c-num"><col class="c-wide"><col class="c-buy"></colgroup>';
+    const now = `<div class="sec"><h2>Send now</h2><p class="why">Walmart says these run out within 2 weeks, counting what's already on the way</p>
+      <table>${cols}<thead><tr><th>#</th><th class="l">SKU</th><th>Sold 30d</th><th>At WFS</th><th>Runs out</th><th>Warehouse</th><th>Walmart says</th><th>Send</th></tr></thead>
+      <tbody>${NOW.map((r) => { rank++; return `<tr title="Open ${r[0]}'s WFS screen">
+        <td class="rank">${rank}</td><td class="l sku">${r[0]}${r[1] > 1 ? `<span class="tag t-list">${r[1]} listings</span>` : ''}</td>
+        <td>${fmt(r[2])}</td><td>${fmt(r[3])}${r[4] ? `<span class="way">+${fmt(r[4])} on the way</span>` : ''}</td>
+        <td class="${r[5] === 'Out now' ? 'out' : 'soon'}">${r[5]}</td><td>${fmt(r[6])}</td><td class="wm">${fmt(r[7])}</td>
+        <td class="buy">${fmt(r[8])}${r[9] ? `<span class="cap" title="4 weeks at your pace is ${r[9]}; the warehouse only has ${r[8]}">all you have</span>` : ''}</td></tr>`; }).join('')}</tbody>
+      <tfoot><tr><td></td><td class="l">Total</td><td></td><td></td><td></td><td></td><td></td><td class="buy">${fmt(nowTot)}</td></tr></tfoot></table></div>`;
+    const nev = `<div class="sec s-new"><h2>${SPARK}Never sent to WFS</h2><p class="why">Listings you ship yourself that Walmart suggests moving to WFS</p>
+      <table>${cols}<thead><tr><th>#</th><th class="l">SKU</th><th>Sold 30d</th><th>At WFS</th><th>Extra sales</th><th>Warehouse</th><th>Walmart says</th><th>Send</th></tr></thead>
+      <tbody>${NEW.map((r) => { rank++; return `<tr title="Open ${r[0]}'s WFS screen (convert, then send)">
+        <td class="rank">${rank}</td><td class="l sku">${r[0]}<span class="tag t-conv">Convert first</span></td>
+        <td>${fmt(r[2])}</td><td class="wm">—</td><td class="lift">+${r[3]}</td><td>${fmt(r[4])}</td><td class="wm">${fmt(r[5])}</td>
+        <td class="buy">${fmt(r[6])}</td></tr>`; }).join('')}</tbody>
+      <tfoot><tr><td></td><td class="l">Total</td><td></td><td></td><td></td><td></td><td></td><td class="buy">${fmt(newTot)}</td></tr></tfoot></table></div>`;
+    document.getElementById('sections').innerHTML = now + nev;
+    document.getElementById('nsend').textContent = NOW.length + NEW.length;
+    document.getElementById('grand').innerHTML = `All ${NOW.length + NEW.length} SKUs: <b>${fmt(nowTot + newTot)}</b> units`;
+  }
+  draw();
+</script>
+</body>
+</html>
