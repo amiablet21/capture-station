@@ -457,4 +457,4 @@ function readAux(prefix) {
   return out;
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux, readAuxNew };
+module.exports = { configure, enabled, stationName, saneStation, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux, readAuxNew };

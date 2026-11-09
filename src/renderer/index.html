@@ -851,7 +851,29 @@
         <input id="setLowWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
       </label>
 
-      <h3 class="dlg-section">Shared folder</h3>
+      <h3 class="dlg-section">Shared sync</h3>
+      <div class="settings-row">
+        <span class="field-label">Desktops share their logs through</span>
+        <label class="check"><input type="radio" name="setSyncMode" id="setSyncModeHub" value="hub" /> DWS server</label>
+        <label class="check"><input type="radio" name="setSyncMode" id="setSyncModeFolder" value="folder" /> A shared folder</label>
+      </div>
+      <div id="setSyncHubBox">
+        <div class="grid2">
+          <label class="field">
+            <span class="field-label">Server address</span>
+            <input id="setHubUrl" type="text" class="input mono" placeholder="https://hub.example.com" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span class="field-label">Access key</span>
+            <input id="setHubKey" type="password" class="input mono" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+        <div class="settings-row">
+          <button id="testHubBtn" class="btn btn-ghost">Test server</button>
+          <span id="testHubResult" class="test-result"></span>
+        </div>
+        <p class="dlg-note">Every desktop uses the same server address and access key (Save turns it on). Changes reach the other desktops in about a second. Anything logged while the internet is down is kept on this computer and sent when the server is back. On the first switch, the shared folder below is sent up to the server once, so the history comes with it.</p>
+      </div>
       <div class="settings-row">
         <span class="field-label">Shared DWS Stock folder</span>
         <span id="setRetSyncFolder" class="test-result mono"></span>
@@ -862,7 +884,7 @@
         <span class="field-label">This station's name (stamped on everything it logs)</span>
         <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
       </label>
-      <p class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share (set it to mirror / be available offline) and they all share one log of returns and WFS shipments — more record types join the same folder over time. Each station writes only its own files, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds. Renaming the folder later? Re-pick it here on every desktop afterward.</p>
+      <p id="setSyncFolderNote" class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share (set it to mirror / be available offline) and they all share one log of returns and WFS shipments — more record types join the same folder over time. Each station writes only its own files, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds. Renaming the folder later? Re-pick it here on every desktop afterward.</p>
 
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">

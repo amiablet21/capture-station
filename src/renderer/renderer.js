@@ -117,6 +117,8 @@ if (!window.api) {
     receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
     chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
     returnsSyncChooseFolder: async () => ({ ok: false, folder: '' }),
+    hubTest: async () => ({ ok: false, error: 'Preview mode' }),
+    hubStatus: async () => ({ configured: false }),
     copyText: async () => ({ ok: true }),
     on: (ch, fn) => { const h = (window.__apiHandlers = window.__apiHandlers || {}); (h[ch] = h[ch] || []).push(fn); }, // preview: handlers kept so a test can fire events
   };
@@ -1238,8 +1240,16 @@ async function openSettings() {
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   const rsy = cfg.returnsSync || {};
-  $('setRetSyncFolder').textContent = rsy.folder || 'off — returns stay on this desktop';
+  $('setRetSyncFolder').dataset.folder = rsy.folder || '';
   $('setRetSyncStation').value = rsy.station || '';
+  $('setSyncModeHub').checked = rsy.mode === 'hub';
+  $('setSyncModeFolder').checked = rsy.mode !== 'hub';
+  $('setHubUrl').value = rsy.hubUrl || '';
+  $('setHubKey').value = rsy.hubKey || '';
+  $('testHubResult').textContent = '';
+  $('testHubResult').className = 'test-result';
+  syncModeShow();
+  if (rsy.mode === 'hub') api.hubStatus().then(hubStatusShow).catch(() => {});
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
@@ -1315,13 +1325,59 @@ $('chooseRetSyncBtn').addEventListener('click', async () => {
   if (!st) { toast('Give this station a name first — it labels every return it logs.'); $('setRetSyncStation').focus(); return; }
   await api.setConfig({ returnsSync: { station: st } });
   const res = await api.returnsSyncChooseFolder();
-  if (res.folder) $('setRetSyncFolder').textContent = res.folder;
+  if (res.folder) { $('setRetSyncFolder').dataset.folder = res.folder; syncModeShow(); }
   if (res.ok) { retSyncToasted = false; loadRetPast(); }
+});
+
+// Shared sync: a DWS server (owner 2026-11-09, off Google Drive) or the
+// old shared folder. In server mode the folder row stays as the place the
+// history is sent up from, once.
+function syncModeShow() {
+  const hub = $('setSyncModeHub').checked;
+  $('setSyncHubBox').hidden = !hub;
+  $('setSyncFolderNote').hidden = hub;
+  const lbl = $('chooseRetSyncBtn').parentElement.querySelector('.field-label');
+  if (lbl) lbl.textContent = hub ? 'Old shared folder (its history goes up to the server once)' : 'Shared DWS Stock folder';
+  $('clearRetSyncBtn').textContent = hub ? 'Clear' : 'Turn off';
+  const f = $('setRetSyncFolder').dataset.folder || '';
+  $('setRetSyncFolder').textContent = f || (hub ? 'none' : 'off — returns stay on this desktop');
+}
+for (const id of ['setSyncModeHub', 'setSyncModeFolder']) $(id).addEventListener('change', syncModeShow);
+
+function hubStatusShow(st) {
+  const out = $('testHubResult');
+  if (!out || !st || !st.configured || !$('setSyncModeHub').checked) return;
+  if (out.dataset.testing === '1') return; // a Test answer is on screen
+  out.className = 'test-result ' + (st.online ? 'is-ok' : 'is-fail');
+  out.textContent = st.online ? 'Connected — syncing' : `Not connected${st.lastError ? `: ${st.lastError}` : ''} — changes wait on this computer`;
+}
+api.on('hub:status', (st) => {
+  hubStatusShow(st);
+  // the Returns page's Users pill follows the server's reachability
+  if (retSyncInfo && retSyncInfo.hub && !!st.online !== !!retSyncInfo.folderOk) {
+    retSyncInfo.folderOk = !!st.online;
+    renderRetSyncLine();
+  }
+});
+
+$('testHubBtn').addEventListener('click', async () => {
+  const out = $('testHubResult');
+  out.dataset.testing = '1';
+  out.className = 'test-result';
+  out.textContent = 'Connecting…';
+  const res = await api.hubTest($('setHubUrl').value.trim(), $('setHubKey').value.trim()).catch(err => ({ ok: false, error: err.message }));
+  if (!res.ok) { out.textContent = res.error; out.classList.add('is-fail'); return; }
+  out.textContent = res.stations.length
+    ? `Connected — ${res.stations.length} station${res.stations.length === 1 ? '' : 's'} on the server: ${res.stations.join(', ')}`
+    : 'Connected — the server is empty, this desktop will be the first';
+  out.classList.add('is-ok');
+  setTimeout(() => { out.dataset.testing = ''; }, 8000);
 });
 
 $('clearRetSyncBtn').addEventListener('click', async () => {
   await api.setConfig({ returnsSync: { folder: '' } });
-  $('setRetSyncFolder').textContent = 'off — returns stay on this desktop';
+  $('setRetSyncFolder').dataset.folder = '';
+  syncModeShow();
   retSyncInfo = null;
   renderRetSyncLine();
   loadRetPast();
@@ -1347,7 +1403,12 @@ $('settingsSave').addEventListener('click', async () => {
       cost: $('setPageCost').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
-    returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
+    returnsSync: {
+      station: $('setRetSyncStation').value.trim().toUpperCase(),
+      mode: $('setSyncModeHub').checked ? 'hub' : 'folder',
+      hubUrl: $('setHubUrl').value.trim(),
+      hubKey: $('setHubKey').value.trim(),
+    },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
@@ -1374,7 +1435,9 @@ $('settingsSave').addEventListener('click', async () => {
   });
   $('settingsDialog').close();
   await refresh();
-  toast('Settings saved');
+  const hubHalf = $('setSyncModeHub').checked
+    && !($('setHubUrl').value.trim() && $('setHubKey').value.trim() && $('setRetSyncStation').value.trim());
+  toast(hubHalf ? 'Settings saved — sharing stays off until the server address, access key and station name are all filled in' : 'Settings saved', hubHalf ? 6000 : undefined);
 });
 
 $('settingsCancel').addEventListener('click', () => $('settingsDialog').close());
@@ -5835,6 +5898,8 @@ document.addEventListener('keydown', (e) => {
 // a peer's file synced in: refresh, wash the moved rows, say who did what
 api.on('returns:syncChanged', (d) => {
   const changes = (d && d.changes) || [];
+  // sync re-pointed (settings saved, or the server's first pass finished)
+  if (d && d.reconfigured) { if (activePage === 'returns') loadRetPast(); return; }
   if (!changes.length) return;
   for (const c of changes) retFreshGids.add(String(c.gid));
   if (activePage !== 'returns') return; // the next page open reloads anyway

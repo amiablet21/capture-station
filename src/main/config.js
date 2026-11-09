@@ -90,7 +90,11 @@ const DEFAULTS = {
   orderImport: { enabled: true, excludeLocationNames: ['WFS FULFILLED'] },
   // shared returns across desktops: a file-synced folder (Google Drive /
   // OneDrive / network share) + this station's name. Both empty = sync off.
-  returnsSync: { folder: '', station: '' },
+  // mode 'hub' (owner 2026-11-09) syncs through a DWS Hub server instead
+  // (server/dws-hub.js): hubUrl + hubKey; the folder is then a local one in
+  // userData that the app syncs itself. importedFrom = the old folder whose
+  // files were already sent to the hub, so the move only happens once.
+  returnsSync: { folder: '', station: '', mode: 'folder', hubUrl: '', hubKey: '', importedFrom: '' },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {
@@ -213,6 +217,11 @@ function load() {
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
   }
+  if (stored.hubKeyEnc) {
+    const secrets = decryptCreds(stored.hubKeyEnc);
+    if (secrets && secrets.hubKey) stored.returnsSync = { ...(stored.returnsSync || {}), hubKey: secrets.hubKey };
+    delete stored.hubKeyEnc;
+  }
   // migration: Temu shipped with no order URL; fill in the real one for
   // configs saved before it was known (a blank means "never set", not
   // "deliberately cleared" — clearing it just makes the PO# copy instead)
@@ -275,6 +284,16 @@ function save(patch) {
   if (enc) {
     persisted.linnworksEnc = enc;
     for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
+  }
+  // the hub access key gets the same at-rest protection as Linnworks'
+  const hubKey = (cfg.returnsSync && cfg.returnsSync.hubKey) || '';
+  if (hubKey) {
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        persisted.hubKeyEnc = safeStorage.encryptString(JSON.stringify({ hubKey })).toString('base64');
+        persisted.returnsSync.hubKey = '';
+      }
+    } catch { /* stays as typed, like the Linnworks fallback */ }
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');
