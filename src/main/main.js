@@ -4734,6 +4734,10 @@ exit 1
      pallets, the seller accepts it (Walmart bills the seller), and the
      carrier's labels come back as a PDF; or the seller's own carrier's
      tracking goes to Walmart. */
+  // open a label PDF in the PC's viewer without waiting on the viewer: the
+  // popup goes on once the file is handed over (test runs only write it)
+  const wfsxOpenPdf = (file) => (IS_TEST_RUN ? Promise.resolve('')
+    : Promise.race([shell.openPath(file), new Promise(res => setTimeout(() => res(''), 4000))]));
   const wfsxFrom = (cfg) => (cfg.ups && cfg.ups.shipFrom) || {};
   const wfsxQuoted = new Map(); // shipmentId -> { p, quote }: what Accept books
   ipcMain.handle('wfsx:quote', async (_e, p = {}) => {
@@ -4784,8 +4788,8 @@ exit 1
       const pdf = await wmClient().carrierLabels(String(shipmentId || ''), String(mode || 'PARCEL'));
       const file = path.join(os.tmpdir(), `WFS-${mode === 'LTL' || mode === 'FTL' ? 'BOL' : 'carrier'}-${String(shipmentId).replace(/[^\w-]/g, '')}.pdf`);
       fs.writeFileSync(file, pdf);
-      const err = await shell.openPath(file);
-      return err ? { ok: false, error: err } : { ok: true };
+      const err = await wfsxOpenPdf(file);
+      return err ? { ok: false, error: err } : { ok: true, file };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -4829,8 +4833,8 @@ exit 1
       const pdf = await wmClient().shipmentLabels(String(shipmentId || ''), boxes);
       const file = path.join(os.tmpdir(), `WFS-labels-${String(shipmentId).replace(/[^\w-]/g, '')}.pdf`);
       fs.writeFileSync(file, pdf);
-      const err = await shell.openPath(file);
-      return err ? { ok: false, error: err } : { ok: true };
+      const err = await wfsxOpenPdf(file);
+      return err ? { ok: false, error: err } : { ok: true, file };
     } catch (e) {
       return { ok: false, error: e.message };
     }

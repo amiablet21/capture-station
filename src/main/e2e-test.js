@@ -1932,6 +1932,16 @@ module.exports = async function run({ app, win, db, clipboard }) {
             rateQuotes: [{ quoteId: 'Q-777', carrier: { carrierId: 'FEDEX', carrierName: 'FedEx' }, currency: 'USD', netCharge: 31.84, totalCharge: 44.1, estimatedDeliveryDateTime: '2026-11-13T00:00:00Z' }], netCharge: 31.84, eligibleForITS: true } }));
           if (req.url === '/v3/fulfillment/inbound-shipments-booking' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK' }));
           if (req.url === '/v3/fulfillment/shipment-tracking' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK' }));
+          if (req.url.startsWith('/v3/fulfillment/inbound-shipments-booking?') && req.method === 'DELETE') return res.end(JSON.stringify({ status: 'OK' }));
+          if (req.url === '/v3/fulfillment/generate-label' && req.method === 'POST') return res.end(JSON.stringify({ status: 'OK' }));
+          if (req.url.startsWith('/v3/fulfillment/download-label?')) {
+            // still drawing the first time, the PDF the next
+            fake.labelAsks = (fake.labelAsks || 0) + 1;
+            if (fake.labelAsks === 1) { res.statusCode = 202; return res.end(''); }
+            res.setHeader('content-type', 'application/pdf');
+            return res.end(Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(200, 32)]));
+          }
+          if (req.url.startsWith('/v3/fulfillment/inbound-shipments-bol?')) { res.setHeader('content-type', 'application/pdf'); return res.end(Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(200, 32)])); }
           if (req.url.startsWith('/v3/items/WX-') || req.url.startsWith('/v3/items/wx')) return res.end(JSON.stringify({ ItemResponse: [{ sku: decodeURIComponent(req.url.split('/')[3]), productName: 'Galaxy Tab Test 64GB', brand: 'SAMSUNG', gtin: '00195949183522', price: { amount: 129 }, productType: 'Tablet Computers', condition: 'New' }] }));
           if (req.url === '/v3/feeds?feedType=OMNI_WFS' && req.method === 'POST') return res.end(JSON.stringify({ feedId: 'FEEDWFS1' }));
           if (req.url.startsWith('/v3/feeds/FEEDWFS1')) return res.end(JSON.stringify({ feedStatus: 'PROCESSED', itemsReceived: 1, itemsSucceeded: 1, itemDetails: { itemIngestionStatus: [{ sku: 'wxconv', ingestionStatus: 'SUCCESS' }] } }));
@@ -2330,6 +2340,69 @@ module.exports = async function run({ app, win, db, clipboard }) {
                 !early && /\$31\.84/.test(bookAsk.confirm) && !!bBody && bBody.payload.bookingDetails.quoteId === 'Q-777' && bBody.payload.bookingDetails.quoteType === 'Parcel'
                 && bBody.payload.bookingDetails.unitDetails[0].noOfSingleSkuBoxes === 3 && /Booked with FedEx/.test(booked.ok) && booked.labels, { bookAsk, bBody, booked });
               if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-booked.png'), (await win.webContents.capturePage()).toPNG());
+              // the carrier labels: asked for, then fetched once Walmart has drawn them
+              const l0 = upsSeen.length;
+              await exec(`document.querySelector('#wfsxRight [data-wx="carrierLabels"]').click()`);
+              for (let i = 0; i < 40 && await exec(`WX.busy`); i++) await sleep(250);
+              const lab = upsSeen.slice(l0);
+              const labDone = await exec(`({ busy: WX.busy, msg: WX.msg })`);
+              check('wfs labels: Carrier labels asks Walmart to draw them, then waits through "still drawing" for the PDF',
+                !labDone.busy && !labDone.msg && lab.some(x => x.url === '/v3/fulfillment/generate-label' && JSON.parse(x.body).payload.labelType === 'Carrier')
+                && lab.filter(x => x.url.startsWith('/v3/fulfillment/download-label?shipmentId=4400777WFB&labelType=Carrier&labelSize=X4_6')).length === 2, lab.map(x => x.url));
+              // Walmart split it in two: Next shipment moves on to the one not booked
+              await exec(`(() => { WX.result.shipments.push({ id: '4400778WFB', shipTo: 'PHL5s · Greencastle, PA', address: '', to: { name: 'PHL5s', line1: '1 Antrim Way', city: 'Greencastle', state: 'PA', zip: '17225' }, eta: '2026-11-20', items: [{ sku: 'wxconv', qty: 10 }] }); wxRender(); })()`);
+              const nextBtn = await exec(`!!document.querySelector('#wfsxRight [data-wx="nextShipment"]')`);
+              await exec(`document.querySelector('#wfsxRight [data-wx="nextShipment"]').click()`);
+              await sleep(100);
+              const tab2 = await exec(`({ tab: WX.tab, step: WX.step, tabs: [...document.querySelectorAll('#wfsxRight .wfsx-tabs button')].map(b => b.textContent.trim()), id: (document.querySelector('#wfsxRight .wfsx-sch b') || {}).textContent })`);
+              check('wfs shipments: with two shipments, Next shipment opens the one still to book, tabs mark the booked one',
+                nextBtn && tab2.tab === 1 && tab2.step === 'carrier' && tab2.id === '4400778WFB' && tab2.tabs.join('|') === 'Shipment 1 ✓|Shipment 2', tab2);
+              // your own carrier: the tracking numbers go to Walmart
+              await exec(`document.querySelector('#wfsxRight [data-wxmode="OWN"]').click()`);
+              await sleep(100);
+              await exec(`(() => { const t = document.querySelector('#wfsxRight [data-wxsf="tracking"]'); t.value = '1Z999AA10123456784\\n1Z999AA10123456785'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+              const t0 = upsSeen.length;
+              await exec(`document.querySelector('#wfsxRight [data-wx="saveTracking"]').click()`);
+              for (let i = 0; i < 20 && await exec(`!(WX.ship['4400778WFB'] && WX.ship['4400778WFB'].booked)`); i++) await sleep(150);
+              const tPost = upsSeen.slice(t0).find(x => x.url === '/v3/fulfillment/shipment-tracking');
+              let tBody = null; try { tBody = JSON.parse(tPost.body); } catch { /* checked below */ }
+              const allDone = await exec(`!!document.querySelector('#wfsxRight [data-wx="close"].btn-primary')`);
+              check('wfs own carrier: the tracking numbers go on the shipment at Walmart, and with both shipments done the popup offers Done',
+                !!tBody && tBody.shipmentId === '4400778WFB' && tBody.carrierName === 'UPS' && tBody.trackingInfo.join(',') === '1Z999AA10123456784,1Z999AA10123456785' && allDone, { tBody, allDone });
+              // back on the booked one: Cancel booking asks once, then undoes it at Walmart
+              await exec(`document.querySelector('#wfsxRight [data-wxtab="0"]').click()`);
+              await sleep(100);
+              await exec(`(() => { WX.step = 'review'; wxRender(); })()`);
+              const c0 = upsSeen.length;
+              await exec(`document.querySelector('#wfsxRight [data-wx="cancelBooking"]').click()`);
+              await sleep(100);
+              const cEarly = upsSeen.slice(c0).some(x => x.method === 'DELETE');
+              await exec(`document.querySelector('#wfsxRight [data-wx="cancelBooking"]').click()`);
+              for (let i = 0; i < 20 && await exec(`!!(WX.ship['4400777WFB'] && WX.ship['4400777WFB'].booked)`); i++) await sleep(150);
+              const del = upsSeen.slice(c0).find(x => x.method === 'DELETE');
+              const afterCancel = await exec(`({ step: WX.step, quote: !!document.querySelector('#wfsxRight [data-wx="getQuote"]') })`);
+              check('wfs cancel booking: asks once, then cancels the booking at Walmart and goes back to Shipping',
+                !cEarly && !!del && del.url === '/v3/fulfillment/inbound-shipments-booking?shipmentId=4400777WFB&mode=Parcel' && del.version === '3.1'
+                && afterCancel.step === 'carrier' && afterCancel.quote, { del, afterCancel });
+              // LTL: pallets, pickup day and contact in the quote; the booking carries them back
+              const lq0 = upsSeen.length;
+              const ltl = await exec(`api.wfsxQuote({ shipmentId: '4400778WFB', mode: 'LTL', to: { name: 'PHL5s', line1: '1 Antrim Way', city: 'Greencastle', state: 'PA', zip: '17225' },
+                boxes: [{ n: 12, l: 22, w: 17, h: 13, lb: 44 }], pallets: 1, stackable: false, pl: 48, pw: 40, ph: 50, plb: 570, value: 4200, ready: '2026-11-12',
+                contact: { name: 'Imran Test', phone: '(973) 555-0100', email: 'ops@example.com' } })`);
+              const ltlBook = await exec(`api.wfsxBook({ shipmentId: '4400778WFB' })`);
+              const lqBody = JSON.parse((upsSeen.slice(lq0).find(x => x.url === '/v3/fulfillment/inbound-shipments-quote') || { body: 'null' }).body);
+              const lbBody = JSON.parse((upsSeen.slice(lq0).find(x => x.url === '/v3/fulfillment/inbound-shipments-booking' && x.method === 'POST') || { body: 'null' }).body);
+              const lu = lqBody && lqBody.payload.units[0];
+              const bd = lbBody && lbBody.payload.bookingDetails;
+              check('wfs LTL: the quote carries the pallet, the warehouse and the pickup window; the booking carries the contact and the pickup day',
+                ltl.ok && ltlBook.ok && lqBody.payload.quoteType === 'LTL' && lu.unitDetails.totalPalletCount === 1 && lu.unitDetails.noOfSingleSkuBoxes === 12
+                && lu.unitDetails.shipmentPackages[0].isStackable === false && lu.unitDetails.shipmentPackages[0].weight === 570 && lu.unitDetails.declaredValue === 4200
+                && lu.destination.postalCode === '17225' && /^2026-11-1[12]T/.test(lqBody.payload.pickUpFromDate)
+                && bd.quoteType === 'LTL' && bd.quoteId === 'Q-777' && bd.pickupDetails.pickupDateInfo[0].pickupDate === '2026-11-12'
+                && bd.shipperInfo.contactInfo.primaryContactPhoneNumber === '9735550100' && bd.shipperInfo.firstName === 'Imran' && bd.locations.destination.postalCode === '17225',
+                { lqBody, lbBody, ltl, ltlBook });
+              const bad = await exec(`api.wfsxQuote({ shipmentId: '4400778WFB', mode: 'LTL', to: { line1: '1 Antrim Way', zip: '17225' }, boxes: [{ n: 12, l: 22, w: 17, h: 13, lb: 44 }], pallets: 1, ph: 50, plb: 570, ready: '2026-11-12', contact: { name: 'X' } })`);
+              check('wfs LTL: a quote without the pickup contact\'s phone and email is stopped before Walmart sees it', !bad.ok && /contact/i.test(bad.error), bad);
               await exec(`document.getElementById('wfsxDialog').close()`);
             } finally {
               Object.assign(lwMod.LinnworksClient.prototype, { getChannelSkus: keep.gcs, getMappingChannels: keep.gmc, getChannelItems: keep.gci, changeStockLevels: keep.csl });
