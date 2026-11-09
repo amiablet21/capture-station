@@ -2,6 +2,14 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.134 highlights
+
+- **Send to WFS goes through Walmart's whole shipping plan** (owner: "I want the same exact thing from Walmart on here"): Listing, Packing, Distribution, Shipping and Review, as in Seller Center.
+- **Packing:** units, item prep (Label, Bag, Tape, Wrap), units per box, box size and weight per box. The boxes are remembered for each model and go to Walmart with the order.
+- **Distribution:** "Distribute it yourself" or "Inventory Transfer Service", with Walmart's own estimate before anything is made: where self-distribution would send the units, and the ITS price per unit. The last choice is remembered.
+- **Shipping:** the shipment Walmart made (ship from, ship to, units, case receiving labels), then Walmart's preferred carrier for a small parcel (one line per box), LTL or FTL (pallets, size, weight, stackable, value, pickup day and contact), or your own carrier's tracking numbers. Two or more shipments get a tab each and a Next shipment button.
+- **Review:** Walmart's quote with the carrier and price. Accept and book asks once more with the price (Walmart bills the seller account), then prints the carrier labels or the bill of lading. Cancel booking works inside Walmart's window (24 hours for a parcel, 1 hour for pallets).
+
 ## v1.32.133 highlights
 
 - **Send to WFS: listings already on WFS read On WFS** (owner: SM-X133-64GB-GREY, 429 sold at WFS, showed "Not on WFS" and offered Convert). A listing now counts as on WFS when it is in Walmart's WFS stock, has sold from WFS in the last 30 days, or was in any WFS shipment; failing all three, the app asks Walmart about that one SKU before offering to convert it.
