@@ -1254,6 +1254,9 @@
         <label class="field"><span class="field-label">Client secret</span><input id="setWmSecret" type="password" class="input mono" autocomplete="off" /></label>
       </div>
       <div class="settings-row"><button id="setWmTest" class="btn btn-secondary" type="button">Test</button><span id="setWmRes" class="test-result"></span></div>
+      <label class="check"><input id="setWmPull" type="checkbox" /> Import Walmart payment periods into Recovery automatically</label>
+      <div class="settings-row"><button id="setWmPullNow" class="btn btn-secondary" type="button">Check now</button><span id="setWmPullRes" class="test-result"></span></div>
+      <p class="dlg-note">Tick this on one computer only. It checks Walmart every 6 hours for new payment periods (the last 120 days) and imports them the same way a downloaded report is imported; every other computer gets them through sync. Periods already in Recovery are left alone.</p>
 
       <h3 class="dlg-section">Addresses</h3>
       <div class="ups-addrs">
@@ -1342,9 +1345,31 @@
       </section>
       <section class="set-sec" data-p="returns" hidden>
         <div class="set-h">Returns</div>
-      <h3 class="dlg-section">Shared folder</h3>
+      <h3 class="dlg-section">Shared sync</h3>
       <div class="settings-row">
-        <span class="field-label">Shared DWS Stock folder</span>
+        <span class="field-label">Desktops share through</span>
+        <label class="check"><input type="radio" name="setSyncMode" id="setSyncModeHub" value="hub" /> DWS server</label>
+        <label class="check"><input type="radio" name="setSyncMode" id="setSyncModeFolder" value="folder" /> A shared folder</label>
+      </div>
+      <div id="setSyncHubBox">
+        <div class="grid2">
+          <label class="field">
+            <span class="field-label">Server address</span>
+            <input id="setHubUrl" type="text" class="input mono" placeholder="https://hub.example.com" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span class="field-label">Access key</span>
+            <input id="setHubKey" type="password" class="input mono" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+        <div class="settings-row">
+          <button id="testHubBtn" class="btn btn-secondary" type="button">Test server</button>
+          <span id="testHubResult" class="test-result"></span>
+        </div>
+        <p class="dlg-note">The same address and key on every desktop; Save turns it on. Changes reach the other desktops in about a second, and anything logged while the internet is down is sent when it is back. The first time, the shared folder below is sent up once, so the history comes along.</p>
+      </div>
+      <div class="settings-row">
+        <span class="field-label" id="setRetSyncFolderLbl">Shared DWS Stock folder</span>
         <span id="setRetSyncFolder" class="test-result mono"></span>
         <button id="chooseRetSyncBtn" class="btn btn-ghost">Change</button>
         <button id="clearRetSyncBtn" class="btn btn-ghost">Turn off</button>
@@ -1353,7 +1378,7 @@
         <span class="field-label">This station</span>
         <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
       </label>
-      <p class="dlg-note">The same folder on every desktop (Google Drive, OneDrive or a network share).</p>
+      <p class="dlg-note" id="setSyncFolderNote">The same folder on every desktop (Google Drive, OneDrive or a network share).</p>
       <!-- what the shared folder holds for Recovery (owner 2026-10-14: off the Import screen, into Settings) -->
       <div class="rc-sync" id="rcSyncPanel" hidden></div>
 

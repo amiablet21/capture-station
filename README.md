@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.138 highlights
+
+- **Payment periods arrive in Recovery on their own** (owner: "have the Walmart API automatically include the payment periods", on the IMRAN-WORK-PC). Settings › Shipping › Walmart › **Import Walmart payment periods into Recovery automatically**: the computer it is ticked on asks Walmart's Payment Reports API every 6 hours (and on **Check now**) for new reconciliation reports from the last 120 days and imports each one exactly as a downloaded report: same period name, same archived CSV, same checks against the Returns log. Every other computer gets it through sync. A period already in Recovery is never replaced; only a report this feature imported itself in the last 4 days is re-read in case Walmart regenerates it. The line under the box says when Walmart was last asked and what came in, or why not. Tick it on one computer only.
+- **Sync through your own server instead of Google Drive.** Settings › Returns › Shared sync now offers **DWS server**: a small server rented on AWS (about $5 a month) that every desktop syncs with directly. Changes reach the other desktops in about a second, and anything logged while the internet is down waits on that computer and uploads once it is back. Everything that rode the Drive folder rides the server: returns, captured orders, stock history, costs, WFS shipments, price changes, wholesale, Recovery periods, marks and expenses, who's online. The first time a desktop switches, its old Drive folder is sent up once, so the history comes along. Each desktop keeps working on Drive until it is switched. Server setup is one pasted line: see `server/README.md`.
+
 ## v1.32.137 highlights
 
 - **Stock opens organized every time** (owner: "still not organized"): entering the Stock tab always starts in natural SKU order. Clicking In stock still ranks by count for a look, but the order no longer sticks to the next visit.

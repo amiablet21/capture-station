@@ -146,12 +146,18 @@ const DEFAULTS = {
   orderImport: { enabled: true, excludeLocationNames: ['WFS FULFILLED'] },
   // shared returns across desktops: a file-synced folder (Google Drive /
   // OneDrive / network share) + this station's name. Both empty = sync off.
-  returnsSync: { folder: '', station: '' },
+  // mode 'hub' (owner 2026-11-10) syncs through a DWS Hub server instead
+  // (server/dws-hub.js): hubUrl + hubKey; the folder is then a local one in
+  // userData that the app keeps in step itself. importedFrom = the old
+  // folder whose files were already sent up, so the move happens once.
+  returnsSync: { folder: '', station: '', mode: 'folder', hubUrl: '', hubKey: '', importedFrom: '' },
   // Recovery page: the alert email for "Email me this list", the make.com
   // webhook the dispute digest POSTs to, and the digest's last-sent memory
   // (so the same set of cases is not re-sent within 20 hours)
   // (the tab itself is unlocked with the Settings PIN — no code of its own)
-  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0 },
+  // autoPull (owner 2026-11-10): this desktop fetches Walmart's payment
+  // periods from the API on its own — tick it on ONE computer only
+  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0, autoPull: false },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {
@@ -256,6 +262,11 @@ function load() {
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
   }
+  if (stored.hubKeyEnc) {
+    const secrets = decryptCreds(stored.hubKeyEnc);
+    if (secrets && secrets.hubKey) stored.returnsSync = { ...(stored.returnsSync || {}), hubKey: secrets.hubKey };
+    delete stored.hubKeyEnc;
+  }
   // the Recovery tab's own access code retired (owner 2026-10-20): the
   // Settings PIN unlocks it, so an old saved code is dropped
   if (stored.recovery) delete stored.recovery.codeHash;
@@ -345,6 +356,16 @@ function save(patch) {
   if (wEnc) {
     persisted.walmartEnc = wEnc;
     persisted.walmart = { ...(persisted.walmart || {}), clientId: '', clientSecret: '' };
+  }
+  // the hub access key gets the same at-rest protection as the others
+  const hubKey = (cfg.returnsSync && cfg.returnsSync.hubKey) || '';
+  if (hubKey) {
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        persisted.hubKeyEnc = safeStorage.encryptString(JSON.stringify({ hubKey })).toString('base64');
+        persisted.returnsSync.hubKey = '';
+      }
+    } catch { /* stays as typed, like the Linnworks fallback */ }
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');

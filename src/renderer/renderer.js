@@ -142,6 +142,8 @@ if (!window.api) {
     receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
     chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
     returnsSyncChooseFolder: async () => ({ ok: false, folder: '' }),
+    hubTest: async () => ({ ok: false, error: 'Preview mode' }),
+    hubStatus: async () => ({ configured: false }),
     copyText: async () => ({ ok: true }),
     on: (ch, fn) => { const h = (window.__apiHandlers = window.__apiHandlers || {}); (h[ch] = h[ch] || []).push(fn); }, // preview: handlers kept so a test can fire events
   };
@@ -1323,8 +1325,17 @@ async function openSettings(group) {
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   const rsy = cfg.returnsSync || {};
-  $('setRetSyncFolder').textContent = rsy.folder || 'off — returns stay on this desktop';
+  $('setRetSyncFolder').dataset.folder = rsy.folder || '';
   $('setRetSyncStation').value = rsy.station || '';
+  $('setSyncModeHub').checked = rsy.mode === 'hub';
+  $('setSyncModeFolder').checked = rsy.mode !== 'hub';
+  $('setHubUrl').value = rsy.hubUrl || '';
+  setSecretField('setHubKey', rsy.hasHubKey);
+  $('testHubResult').textContent = '';
+  $('testHubResult').className = 'test-result';
+  $('testHubResult').dataset.testing = '';
+  syncModeShow();
+  if (rsy.mode === 'hub') api.hubStatus().then(hubStatusShow).catch(() => {});
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
   const rcv2 = cfg.recovery || {};
@@ -1335,6 +1346,8 @@ async function openSettings(group) {
   $('setAppId').value = cfg.linnworks.applicationId;
   fillWebSettings();
   setSecretField('setWmId', (cfg.walmart || {}).hasClientId);
+  $('setWmPull').checked = !!(cfg.recovery && cfg.recovery.autoPull);
+  wmPullShow();
   setSecretField('setWmSecret', (cfg.walmart || {}).hasClientSecret);
   $('setWmRes').textContent = ''; $('setWmRes').className = 'test-result';
   setSecretField('setAppSecret', cfg.linnworks.hasApplicationSecret);
@@ -1461,13 +1474,58 @@ $('chooseRetSyncBtn').addEventListener('click', async () => {
   if (!st) { toast('Give this station a name first — it labels every return it logs.'); $('setRetSyncStation').focus(); return; }
   await api.setConfig({ returnsSync: { station: st } });
   const res = await api.returnsSyncChooseFolder();
-  if (res.folder) $('setRetSyncFolder').textContent = res.folder;
+  if (res.folder) { $('setRetSyncFolder').dataset.folder = res.folder; syncModeShow(); }
   if (res.ok) { retSyncToasted = false; loadRetPast(); }
+});
+
+// Shared sync: a DWS server (owner 2026-11-10, off Google Drive) or the
+// shared folder. In server mode the folder row stays as the place the
+// history is sent up from, once.
+function syncModeShow() {
+  const hub = $('setSyncModeHub').checked;
+  $('setSyncHubBox').hidden = !hub;
+  $('setSyncFolderNote').hidden = hub;
+  $('setRetSyncFolderLbl').textContent = hub ? 'Old shared folder (sent to the server once)' : 'Shared DWS Stock folder';
+  $('clearRetSyncBtn').textContent = hub ? 'Clear' : 'Turn off';
+  const f = $('setRetSyncFolder').dataset.folder || '';
+  $('setRetSyncFolder').textContent = f || (hub ? 'none' : 'off — returns stay on this desktop');
+}
+for (const id of ['setSyncModeHub', 'setSyncModeFolder']) $(id).addEventListener('change', syncModeShow);
+
+function hubStatusShow(st) {
+  const out = $('testHubResult');
+  if (!out || !st || !st.configured || !$('setSyncModeHub').checked) return;
+  if (out.dataset.testing === '1') return; // a Test answer is on screen
+  out.className = 'test-result ' + (st.online ? 'is-ok' : 'is-fail');
+  out.textContent = st.online ? 'Connected — syncing' : `Not connected${st.lastError ? `: ${st.lastError}` : ''} — changes wait on this computer`;
+}
+api.on('hub:status', (st) => {
+  hubStatusShow(st);
+  // the Returns page's Users pill follows the server's reachability
+  if (retSyncInfo && retSyncInfo.hub && !!st.online !== !!retSyncInfo.folderOk) {
+    retSyncInfo.folderOk = !!st.online;
+    renderRetSyncLine();
+  }
+});
+
+$('testHubBtn').addEventListener('click', async () => {
+  const out = $('testHubResult');
+  out.dataset.testing = '1';
+  out.className = 'test-result';
+  out.textContent = 'Connecting…';
+  const res = await api.hubTest($('setHubUrl').value.trim(), $('setHubKey').value.trim()).catch(err => ({ ok: false, error: err.message }));
+  setTimeout(() => { out.dataset.testing = ''; }, 8000);
+  if (!res.ok) { out.textContent = res.error; out.classList.add('is-fail'); return; }
+  out.textContent = res.stations.length
+    ? `Connected — ${res.stations.length} station${res.stations.length === 1 ? '' : 's'} on the server: ${res.stations.join(', ')}`
+    : 'Connected — the server is empty, this desktop will be the first';
+  out.classList.add('is-ok');
 });
 
 $('clearRetSyncBtn').addEventListener('click', async () => {
   await api.setConfig({ returnsSync: { folder: '' } });
-  $('setRetSyncFolder').textContent = 'off — returns stay on this desktop';
+  $('setRetSyncFolder').dataset.folder = '';
+  syncModeShow();
   retSyncInfo = null;
   renderRetSyncLine();
   loadRetPast();
@@ -1496,9 +1554,15 @@ $('settingsSave').addEventListener('click', async () => {
     },
     ups: readUpsSettings(),
     walmart: { clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() },
+    recovery: { autoPull: $('setWmPull').checked },
     web: { enabled: $('setWebOn').checked },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
-    returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
+    returnsSync: {
+      station: $('setRetSyncStation').value.trim().toUpperCase(),
+      mode: $('setSyncModeHub').checked ? 'hub' : 'folder',
+      hubUrl: $('setHubUrl').value.trim(),
+      hubKey: $('setHubKey').value.trim(),
+    },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
     txnUrlTemplates: { walmart: $('setRcTxnUrl').value.trim() },
     recovery: {
@@ -1537,7 +1601,9 @@ $('settingsSave').addEventListener('click', async () => {
   $('settingsDialog').close();
   await refresh();
   if (activePage === 'ship') enterShip();
-  toast('Settings saved');
+  const hubHalf = $('setSyncModeHub').checked
+    && !($('setHubUrl').value.trim() && ($('setHubKey').value.trim() || $('setHubKey').hidden /* saved key */) && $('setRetSyncStation').value.trim());
+  toast(hubHalf ? 'Settings saved — sharing stays off until the server address, access key and station name are all filled in' : 'Settings saved', hubHalf ? 6000 : undefined);
 });
 
 $('settingsCancel').addEventListener('click', () => $('settingsDialog').close());
@@ -2202,11 +2268,11 @@ async function rcRenderSyncPanel() {
   if (!st.enabled) { box.innerHTML = '<div class="rc-sync-h">Shared folder</div><div class="rc-sync-line rc-muted">Sync is off on this computer, so marks and periods made elsewhere do not reach it. Turn it on in Settings → Sync with the same folder as the other desktops.</div>'; return; }
   const when = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${rcMonDay(d.toISOString())} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`; };
   const row = (label, list, unit) => `<div class="rc-sync-grp"><span class="rc-sync-k">${label}</span>${list.length ? list.map(f => `<span class="rc-sync-f ${f.own ? 'is-own' : ''} ${f.readable ? '' : 'is-bad'}" title="${esc(f.file)}">${esc(f.station)}${f.own ? ' (this computer)' : ''} · <b>${f.lines}</b> ${unit}${f.readable ? '' : ' · could not be read'}${f.mtime ? ` · ${esc(when(f.mtime))}` : ''}</span>`).join('') : '<span class="rc-muted">no files yet</span>'}</div>`;
-  box.innerHTML = `<div class="rc-sync-h">Shared folder <span class="rc-muted rc-small">${esc(st.folder || '')}${st.folderOk ? '' : ' · not reachable right now'}</span><button type="button" class="rc-link" id="rcResyncBtn">Re-read every file</button></div>
+  box.innerHTML = `<div class="rc-sync-h">${st.hub ? 'DWS server' : 'Shared folder'} <span class="rc-muted rc-small">${esc(st.folder || '')}${st.folderOk ? '' : ' · not reachable right now'}</span><button type="button" class="rc-link" id="rcResyncBtn">Re-read every file</button></div>
     ${row('Periods', st.files.wmruns, 'events')}${row('Marks', st.files.wmmarks, 'lines')}${row('Expenses', st.files.wmexpenses, 'lines')}
     <div class="rc-sync-line rc-muted">This computer holds ${rcPlural(st.local.runs, 'period')}, ${rcPlural(st.local.marks, 'mark')} (${st.local.ownMarks} made here) and ${rcPlural(st.local.expenses, 'expense')}. A station's marks file should hold at least as many lines as the marks it made; if another desktop's file is missing or short, open Recovery on that desktop once so it rebuilds its file.</div>`;
   const btn = $('rcResyncBtn');
-  if (btn) btn.onclick = async () => { btn.disabled = true; btn.textContent = 'Reading…'; await api.recoveryResync().catch(() => null); if (rc.data) await rcLoad(); await rcRenderSyncPanel(); toast('Shared folder read again'); };
+  if (btn) btn.onclick = async () => { btn.disabled = true; btn.textContent = 'Reading…'; await api.recoveryResync().catch(() => null); if (rc.data) await rcLoad(); await rcRenderSyncPanel(); toast(st.hub ? 'Shared files read again' : 'Shared folder read again'); };
 }
 function rcRenderImport() {
   const runs = rc.data.runs || [];
@@ -3356,7 +3422,11 @@ $('rcMarkBrowseBtn').addEventListener('click', async () => {
   if (!pick.ok) { rcMarkProgress(pick.error || 'Could not open that file.', 'fail'); return; }
   await rcMarkFile(pick.name, pick.text, null);
 });
-api.on('recovery:progress', ({ text }) => { if (rc.busy) rcProgress(text); });
+api.on('recovery:progress', ({ text, refreshed }) => {
+  // a payment period the Walmart API brought in on its own: the page follows
+  if (refreshed) { if (activePage === 'recovery' && !rc.busy) rcLoad(); return; }
+  if (rc.busy) rcProgress(text);
+});
 $('rcDupSkip').addEventListener('click', () => { $('rcDupDlg').close(); rc.pendingImport = null; rcProgress('Skipped — the imported period stands.', ''); });
 $('rcDupReimport').addEventListener('click', async () => {
   $('rcDupDlg').close();
@@ -8046,6 +8116,8 @@ document.addEventListener('keydown', (e) => {
 // a peer's file synced in: refresh, wash the moved rows, say who did what
 api.on('returns:syncChanged', (d) => {
   const changes = (d && d.changes) || [];
+  // sync re-pointed (settings saved, or the server's first pass finished)
+  if (d && d.reconfigured) { if (activePage === 'returns') loadRetPast(); return; }
   if (!changes.length) return;
   for (const c of changes) retFreshGids.add(String(c.gid));
   if (activePage === 'recovery') { rcLoad(); return; } // a return logged elsewhere may clear a PO
@@ -16540,6 +16612,33 @@ $('setWebNew').addEventListener('click', async () => {
   if (!r.ok) { toast(r.error, 4000); return; }
   fillWebSettings();
   toast('New link made');
+});
+
+// Walmart payment periods pulled from the API (owner 2026-11-10): the line
+// under the box says when Walmart was last asked and what came of it
+function wmPullLine(st) {
+  if (!st || !st.lastCheck) return { text: 'Not checked yet', cls: '' };
+  const when = new Date(st.lastCheck).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  if (st.lastError) return { text: `Checked ${when} · ${st.lastError}`, cls: 'is-fail' };
+  const got = st.lastImported && st.lastImported.length && st.lastImportedAt === st.lastCheck
+    ? ` · imported ${st.lastImported.join(', ')}` : ' · up to date';
+  return { text: `Checked ${when}${got}`, cls: 'is-ok' };
+}
+async function wmPullShow() {
+  const out = $('setWmPullRes');
+  const st = await api.recoveryPullStatus().catch(() => null);
+  const l = wmPullLine(st);
+  out.className = 'test-result' + (l.cls ? ` ${l.cls}` : '');
+  out.textContent = l.text;
+}
+$('setWmPullNow').addEventListener('click', async () => {
+  const out = $('setWmPullRes');
+  out.className = 'test-result';
+  out.textContent = 'Asking Walmart for payment periods…';
+  const res = await api.recoveryPullNow().catch(err => ({ ok: false, error: err.message }));
+  if (res.status) { const l = wmPullLine(res.status); out.className = 'test-result' + (l.cls ? ` ${l.cls}` : ''); out.textContent = l.text; return; }
+  out.className = 'test-result is-fail';
+  out.textContent = res.error || 'Could not reach Walmart.';
 });
 
 $('setWmTest').addEventListener('click', async () => {

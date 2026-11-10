@@ -257,6 +257,31 @@ class WalmartClient {
     return [...new Set(list.map(c => clip(c && (c.shortName || c.carrierName || c.name), 40)).filter(Boolean))];
   }
 
+  // Payment Reports API (owner 2026-11-10: the payment periods arrive in
+  // Recovery without a manual import): the settlement dates Walmart has a
+  // reconciliation report for, as MMDDYYYY strings (the payment date, the
+  // same date Seller Center's download puts after "MP_" in its file name)
+  async reconReportDates() {
+    const body = await this.call('GET', '/v3/report/reconreport/availableReconFiles?reportVersion=v1');
+    return arr(body && body.availableApReportDates).map(String).filter(d => /^\d{8}$/.test(d));
+  }
+
+  // one settlement's reconciliation report as CSV text. Walmart streams a
+  // zip holding the CSV (a plain CSV body is taken as is)
+  async reconReport(date) {
+    const q = `reportVersion=v1&reportDate=${encodeURIComponent(date)}`;
+    const res = await this.call('GET', `/v3/report/reconreport/reconFile?${q}`, null, { accept: 'application/octet-stream' });
+    const buf = res && res.buffer;
+    if (!buf || !buf.length) throw new WalmartError(`Walmart sent an empty report for ${date}.`);
+    if (buf.readUInt32LE(0) === 0x04034b50) {
+      const zip = require('./shipfile.js').readZip(buf);
+      const name = [...zip.entries.keys()].find(n => /\.csv$/i.test(n)) || [...zip.entries.keys()][0];
+      if (!name) throw new WalmartError(`Walmart's report for ${date} was an empty zip.`);
+      return { name, text: zip.read(name).toString('utf8').replace(/^﻿/, '') };
+    }
+    return { name: '', text: buf.toString('utf8').replace(/^﻿/, '') };
+  }
+
   async order(po) {
     const body = await this.call('GET', `/v3/orders/${encodeURIComponent(String(po).trim())}`);
     const o = parseOrder(body);

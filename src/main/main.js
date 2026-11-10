@@ -24,8 +24,10 @@ const webserve = require('./webserve');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const recovery = require('./recovery');
+const walmartPull = require('./recovery/walmartPull');
 const wfsrecv = require('./wfsrecv');
 const presence = require('./presence');
+const hubsync = require('./hubsync');
 // in-place updates (owner 2026-10-08: "why can't it update within itself?")
 // — electron-updater downloads the new NSIS build in the background and
 // installs it on restart. Windows only: the Mac build is unsigned, so the
@@ -873,34 +875,79 @@ function listReceivingSessions(limit = 200) {
 }
 
 // Mirror the returns ledger to a CSV beside the other exports.
-// shared returns folder (Google Drive / OneDrive / a network share):
-// boot + every settings change re-point the sync engine; folder events
-// wake the renderer with exactly which returns moved
+// shared returns folder (Google Drive / OneDrive / a network share), or a
+// DWS Hub server (owner 2026-11-10): boot + every settings change re-point
+// the sync engine; folder events wake the renderer with exactly which
+// returns moved. In hub mode retsync and presence work on a LOCAL folder
+// in userData exactly as they did on the Drive folder, and hubsync keeps
+// that folder in step with the server.
+let retsyncGen = 0;
+function hubDir() { return path.join(app.getPath('userData'), 'hub-shared'); }
+function hubOn(cfg) {
+  const rs = (cfg && cfg.returnsSync) || {};
+  return !cfg.captureOnly && rs.mode === 'hub' && !!(rs.hubUrl && rs.hubKey && retsync.saneStation(rs.station));
+}
+// the sync settings as retsync / presence see them
+function effectiveSync(cfg) {
+  if (cfg.captureOnly) return null;
+  const rs = cfg.returnsSync || {};
+  if (rs.mode === 'hub') return hubOn(cfg) ? { folder: hubDir(), station: rs.station } : null;
+  return rs;
+}
+
 function startRetSync() {
   const cfg = config.load();
-  const res = retsync.configure({
-    sync: cfg.captureOnly ? null : cfg.returnsSync,
-    database: db,
-    userData: app.getPath('userData'),
-    writeCsv: writeReturnsCsv,
-    changed: (summary) => { if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', summary); },
-  });
-  retsyncMissed = (res && res.missed) || 0;
-  // LAN presence rides the same folder: online avatars, who-is-in-which-row,
-  // and edit pings that poke the rescan ahead of the cloud drive. An edit
-  // ping carries no data — the peer's file may not have SYNCED yet, so the
-  // rescan retries a few times; the folder watcher covers the stragglers.
-  const sync = cfg.captureOnly ? null : cfg.returnsSync;
-  presence.configure({
-    folder: sync && sync.folder,
-    station: retsync.stationName(),
-    onUpdate: (snap) => { if (win && !win.isDestroyed()) win.webContents.send('presence:update', snap); },
-    onRemoteEdit: () => {
-      for (const delay of [400, 2500, 7000]) {
-        setTimeout(() => { try { retsync.rescan(writeReturnsCsv); } catch { /* watcher covers it */ } }, delay);
-      }
-    },
-  });
+  const gen = ++retsyncGen;
+  const go = () => {
+    if (gen !== retsyncGen) return; // settings changed again meanwhile
+    const sync = effectiveSync(config.load());
+    const res = retsync.configure({
+      sync,
+      database: db,
+      userData: app.getPath('userData'),
+      writeCsv: writeReturnsCsv,
+      changed: (summary) => { if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', summary); },
+    });
+    retsyncMissed = (res && res.missed) || 0;
+    // LAN presence rides the same folder: online avatars, who-is-in-which-row,
+    // and edit pings that poke the rescan ahead of the cloud drive. An edit
+    // ping carries no data — the peer's file may not have SYNCED yet, so the
+    // rescan retries a few times; the folder watcher covers the stragglers.
+    presence.configure({
+      folder: sync && sync.folder,
+      station: retsync.stationName(),
+      onUpdate: (snap) => { if (win && !win.isDestroyed()) win.webContents.send('presence:update', snap); },
+      onRemoteEdit: () => {
+        for (const delay of [400, 2500, 7000]) {
+          setTimeout(() => { try { retsync.rescan(writeReturnsCsv); } catch { /* watcher covers it */ } }, delay);
+        }
+      },
+    });
+    if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', { changes: [], reconfigured: true });
+  };
+  if (!hubOn(cfg)) { hubsync.stop(); go(); return; }
+  const rs = cfg.returnsSync;
+  const hub = { url: rs.hubUrl, key: rs.hubKey };
+  // moving off the Drive folder: its files go up to the hub once, so every
+  // desktop's history comes along (the first desktop to switch sends them,
+  // the rest find them there)
+  const oldFolder = String(rs.folder || '').trim();
+  const imported = (oldFolder && rs.importedFrom !== oldFolder && fs.existsSync(oldFolder))
+    ? hubsync.importFolder(oldFolder, hub).then((r) => {
+      if (r && r.ok) config.save({ returnsSync: { importedFrom: oldFolder } });
+      else console.error('[hub] import from the old folder failed:', r && r.error);
+    }).catch((e) => console.error('[hub] import from the old folder failed:', e.message))
+    : Promise.resolve();
+  imported
+    .then(() => (gen === retsyncGen ? hubsync.configure({
+      ...hub,
+      station: retsync.saneStation(rs.station),
+      dir: hubDir(),
+      statePath: path.join(app.getPath('userData'), 'hub-state.json'),
+      onStatus: (st) => { if (win && !win.isDestroyed()) win.webContents.send('hub:status', st); },
+    }) : null))
+    .then(go, go)
+    .then(() => { if (gen === retsyncGen) { try { syncStockLog(); } catch { /* the next history open folds it */ } } });
 }
 
 function writeReturnsCsv() {
@@ -3688,6 +3735,8 @@ exit 1
     const w = out.walmart || (out.walmart = {});
     w.hasClientId = !!w.clientId; w.hasClientSecret = !!w.clientSecret;
     w.clientId = ''; w.clientSecret = '';
+    const rs = out.returnsSync || (out.returnsSync = {});
+    rs.hasHubKey = !!rs.hubKey; rs.hubKey = '';
     return out;
   }
   ipcMain.handle('config:get', () => publicConfig(config.load()));
@@ -3708,6 +3757,10 @@ exit 1
     if (patch.walmart) {
       for (const f of ['clientId', 'clientSecret']) if (!patch.walmart[f]) delete patch.walmart[f];
       delete patch.walmart.hasClientId; delete patch.walmart.hasClientSecret;
+    }
+    if (patch.returnsSync) {
+      if (!patch.returnsSync.hubKey) delete patch.returnsSync.hubKey;
+      delete patch.returnsSync.hasHubKey;
     }
     if (patch.linnworks) {
       for (const f of ['applicationSecret', 'token']) if (!patch.linnworks[f]) delete patch.linnworks[f];
@@ -4304,7 +4357,11 @@ exit 1
     if (!retsync.enabled()) return db.listReturns();
     const missed = retsyncMissed;
     retsyncMissed = 0; // the catch-up toast shows once
-    return { rows: retsync.list(), sync: { ...retsync.status(), missed } };
+    // on the hub, "folder reachable" means the server answers
+    const st = retsync.status();
+    const hs = hubsync.getStatus();
+    if (st.enabled && hs.configured) { st.hub = true; st.folderOk = !!hs.online; st.hubError = hs.lastError || ''; }
+    return { rows: retsync.list(), sync: { ...st, missed } };
   });
 
   // Claim photos: QR + status for the Upload Photos corner button. The QR is
@@ -8794,7 +8851,22 @@ exit 1
   // config re-points the engine via the config:set hook above.
   // popover ✕: forget a stale/renamed desktop — deletes its file from the
   // shared folder; its returns leave every desktop until it syncs again
-  ipcMain.handle('retsync:removeStation', (_e, { name }) => retsync.removeStation(name));
+  ipcMain.handle('retsync:removeStation', async (_e, { name }) => {
+    const res = retsync.removeStation(name);
+    // on the hub the file goes from the server too, or it would sync back
+    if (res.ok && hubsync.getStatus().configured) {
+      const r = await hubsync.deleteRemote(`returns-${retsync.saneStation(name)}.jsonl`).catch(e => ({ ok: false, error: e.message }));
+      if (!r.ok) return { ok: false, error: `Removed here, but the server said: ${r.error || 'no'}` };
+    }
+    return res;
+  });
+  // Settings › Shared sync › Test: does this address + key reach a hub?
+  // A key left blank means the saved one
+  ipcMain.handle('hub:test', (_e, { url, key } = {}) => {
+    const cur = config.load().returnsSync || {};
+    return hubsync.test(url, key || cur.hubKey);
+  });
+  ipcMain.handle('hub:status', () => hubsync.getStatus());
 
   ipcMain.handle('retsync:chooseFolder', async () => {
     const cur = (config.load().returnsSync || {}).folder || '';
@@ -9260,6 +9332,7 @@ app.whenReady().then(() => {
   startOrderImporter();
   startLowStockWatcher();
   startClaims();
+  startWalmartPull();
 
   if (process.env.CAPTURE_SMOKE === '1') {
     setTimeout(() => {
@@ -9332,7 +9405,8 @@ function startRecovery() {
     // goods price although its file was uploaded)
     archiveDirs: () => {
       const st = retsync.status();
-      return [path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports'), st.folder ? path.join(st.folder, 'Walmart Reports') : ''];
+      const old = String((config.load().returnsSync || {}).folder || '');
+      return [path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports'), st.folder ? path.join(st.folder, 'Walmart Reports') : '', old ? path.join(old, 'Walmart Reports') : ''];
     },
     station: () => stockLogComputer(),
     stationAliases: () => [os.hostname()],
@@ -9374,7 +9448,47 @@ async function recoverySaveBuffer(title, defaultName, filters, buffer) {
   try { fs.writeFileSync(filePath, buffer); return { ok: true, path: filePath }; } catch (e) { return { ok: false, error: e.message }; }
 }
 const XLSX_FILTER = [{ name: 'Excel workbook', extensions: ['xlsx'] }];
+// Walmart payment periods straight from the Payment Reports API (owner
+// 2026-11-10), on the one desktop where Settings › Walmart › "Import
+// payment periods automatically" is ticked (the IMRAN-WORK-PC): every 6
+// hours, plus Check now. Imports ride the shared folder to every desktop.
+const WM_PULL_EVERY_MS = 6 * 60 * 60 * 1000;
+let wmPullTimer = null;
+let wmPullBusy = false;
+const wmPullStatePath = () => path.join(app.getPath('userData'), 'walmart-payment-pull.json');
+async function walmartPullRun(manual) {
+  const cfg = config.load();
+  if (!manual && !(cfg.recovery && cfg.recovery.autoPull)) return { ok: false, off: true };
+  if (wmPullBusy) return { ok: false, error: 'Already checking Walmart.' };
+  wmPullBusy = true;
+  try {
+    const res = await walmartPull.pullOnce({
+      client: new walmart.WalmartClient(cfg.walmart || {}),
+      importReport: (args) => recovery.importReport(args),
+      statePath: wmPullStatePath(),
+    });
+    if (res.imported.length && win && !win.isDestroyed()) {
+      win.webContents.send('app:notice', { message: `Walmart payment period${res.imported.length === 1 ? '' : 's'} imported: ${res.imported.join(', ')}` });
+      win.webContents.send('recovery:progress', { text: '', refreshed: true });
+    }
+    return { ...res, status: walmartPull.status(wmPullStatePath()) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    wmPullBusy = false;
+  }
+}
+function startWalmartPull() {
+  clearTimeout(wmPullTimer);
+  // first look two minutes after start (the shared folder has synced in by
+  // then, so a period another desktop imported is seen as already there)
+  const tick = (delay) => { wmPullTimer = setTimeout(async () => { await walmartPullRun(false).catch(() => {}); tick(WM_PULL_EVERY_MS); }, delay); };
+  if (!IS_TEST_RUN) tick(2 * 60 * 1000);
+}
+
 function registerRecoveryIpc() {
+  ipcMain.handle('recovery:pullNow', () => walmartPullRun(true));
+  ipcMain.handle('recovery:pullStatus', () => walmartPull.status(wmPullStatePath()));
   ipcMain.handle('recovery:state', () => recoveryGate() || recoveryTry(() => recovery.state()));
   ipcMain.handle('recovery:run', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.runDetail(id)));
   ipcMain.handle('recovery:summary', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.summary(scope, key)));
@@ -9543,7 +9657,17 @@ function registerRecoveryIpc() {
     try { costPut(k, n); return { ok: true, cost: n }; } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('recovery:markFile', (_e, { text } = {}) => recoveryGate() || recoveryTry(() => recovery.markFile(text)));
-  ipcMain.handle('recovery:syncStatus', () => recoveryGate() || recoveryTry(() => recovery.syncStatus()));
+  ipcMain.handle('recovery:syncStatus', () => recoveryGate() || recoveryTry(() => {
+    const st = recovery.syncStatus();
+    // on the hub the "folder" is the server: name it, and its reachability
+    const hs = hubsync.getStatus();
+    if (st && st.enabled && hs.configured) {
+      st.hub = true;
+      st.folder = String((config.load().returnsSync || {}).hubUrl || '');
+      st.folderOk = !!hs.online;
+    }
+    return st;
+  }));
   ipcMain.handle('recovery:resync', () => recoveryGate() || recoveryTry(() => recovery.resync()));
   ipcMain.handle('recovery:markPick', async () => {
     if (recoveryGate()) return recoveryGate();
