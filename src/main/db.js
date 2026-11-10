@@ -602,6 +602,17 @@ function setWfsReceivedAt(id, iso) {
   open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?').run(String(iso || ''), Number(id));
 }
 
+// a correction rewrites the note and items in place; the Linnworks stock
+// difference is the caller's job. created_at and received_at stay.
+function updateWfsShipment(id, { note, items }) {
+  open().prepare('UPDATE wfs_shipments SET note = ?, items = ? WHERE id = ?')
+    .run(String(note || ''), JSON.stringify(items || []), Number(id));
+}
+
+function deleteWfsShipment(id) {
+  open().prepare('DELETE FROM wfs_shipments WHERE id = ?').run(Number(id));
+}
+
 function setWfsIgnore(sku, days, pace) {
   const until = new Date(Date.now() + days * 86400000).toISOString();
   open().prepare('INSERT INTO wfs_ignores (sku, until, pace) VALUES (?, ?, ?) ON CONFLICT(sku) DO UPDATE SET until = excluded.until, pace = excluded.pace')
@@ -1315,7 +1326,7 @@ module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
-  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsReceivedAt, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
+  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsReceivedAt, updateWfsShipment, deleteWfsShipment, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
   lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, rowsInDays, stockRowsFromBulkEntry, stockLogOwnRows,

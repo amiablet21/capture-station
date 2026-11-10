@@ -3485,6 +3485,25 @@ button.item-info { background: transparent; padding: 0; cursor: pointer; font-fa
 .wfs-card-skus { display: flex; flex-direction: column; min-width: 0; }
 .wfs-card-ch { font-size: 10.5px !important; color: var(--badge-blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* fixing a past shipment in place (owner 2026-11-10): the card flips into
+   a small correction form — SKU + qty per line, note, Save/Cancel/Delete */
+.wfs-card-edit { margin-left: 2px; opacity: 0; }
+.wfs-card:hover .wfs-card-edit, .wfs-card-edit:focus-visible { opacity: 1; }
+.wfs-card.is-editing { border-color: var(--accent); }
+.wfs-ecard-line { display: flex; gap: 6px; margin-top: 6px; }
+.wfs-ecard-line input { font-size: 11.5px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); min-width: 0; }
+.wfs-ecard-sku { flex: 1; text-transform: uppercase; }
+.wfs-ecard-qty { width: 58px; text-align: right; }
+.wfs-ecard-x { border: none; background: none; color: var(--faint); cursor: pointer; font-size: 12px; padding: 0 2px; }
+.wfs-ecard-x:hover { color: var(--neg-text); }
+.wfs-ecard-add { border: none; background: none; color: var(--accent); cursor: pointer; font-size: 11px; font-weight: 600; padding: 4px 0 0; }
+.wfs-ecard-note { width: 100%; margin-top: 8px; font-size: 11px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.wfs-ecard-btns { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.wfs-ecard-btns .wfs-ecard-save { font-size: 11.5px; padding: 4px 12px; }
+.wfs-ecard-cancel { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 11.5px; }
+.wfs-ecard-del { border: none; background: none; color: var(--neg-text); cursor: pointer; font-size: 11.5px; margin-left: auto; }
+.wfs-ecard-err { color: var(--neg-text); margin-top: 6px; }
+
 .stock-loading {
   display: flex;
   align-items: center;

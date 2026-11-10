@@ -7164,6 +7164,86 @@ exit 1
       return { ok: false, error: e.message };
     }
   });
+  // correct a logged shipment: wrong quantity, wrong SKU, wrong note
+  // (owner 2026-11-10). The warehouse moves by the DIFFERENCE per SKU —
+  // the wholesale-invoice edit rule — so a correction never double-counts:
+  // lowering a qty puts units back, a swapped SKU returns the old item's
+  // units and takes the new item's. Works on API-logged (Send to WFS)
+  // shipments too; it fixes the log and Linnworks only — nothing changes
+  // on Walmart's side.
+  ipcMain.handle('wfs:update', async (_e, payload) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const k = wfsrecv.parseKey(payload && payload.id, retsync.stationName() || '');
+    if (!Number.isFinite(k.id)) return { ok: false, error: 'Unknown shipment.' };
+    if (!k.own && !retsync.enabled()) return { ok: false, error: 'Turn on Sync to edit another desktop\'s shipment.' };
+    const prev = wfsShipmentsAll().find(s => s.key === k.key);
+    if (!prev) return { ok: false, error: 'That shipment is gone already.' };
+    const note = String((payload && payload.note) || '').slice(0, 500);
+    const items = ((payload && payload.items) || [])
+      .map(i => ({ sku: String(i.sku || '').trim(), channelSku: String(i.channelSku || '').trim().slice(0, 80), gtin: String(i.gtin || '').trim(), qty: Number(i.qty) }))
+      .filter(i => i.sku && Number.isInteger(i.qty) && i.qty > 0);
+    if (!items.length) return { ok: false, error: 'Keep at least one line — or delete the shipment instead.' };
+    // aggregate per SKU ignoring case, but send Linnworks the spelled form
+    const spelled = new Map();
+    const sum = (list) => {
+      const m = new Map();
+      for (const i of list || []) {
+        const up = String(i.sku).toUpperCase();
+        if (!spelled.has(up)) spelled.set(up, String(i.sku));
+        m.set(up, (m.get(up) || 0) + (Number(i.qty) || 0));
+      }
+      return m;
+    };
+    const before = sum(prev.items);
+    const after = sum(items);
+    const deltas = [];
+    for (const up of new Set([...before.keys(), ...after.keys()])) {
+      const d = (after.get(up) || 0) - (before.get(up) || 0);
+      if (d) deltas.push({ sku: spelled.get(up), delta: -d });
+    }
+    try {
+      if (deltas.length) {
+        const client = new LinnworksClient(cfg.linnworks);
+        await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station WFS shipment edit',
+          { note: String(note || prev.note || '').slice(0, 120) });
+      }
+      if (k.own) db.updateWfsShipment(k.id, { note, items });
+      retsync.appendAux('wfsedit', { key: k.key, ts: Date.now(), note, items });
+      writeWfsCsv();
+      return { ok: true, adjusted: deltas.length };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // delete a logged shipment outright: every unit goes back on the
+  // warehouse count. For an API shipment this only clears the log entry —
+  // cancelling the inbound order itself happens in Send to WFS / Walmart.
+  ipcMain.handle('wfs:delete', async (_e, payload) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const k = wfsrecv.parseKey(payload && payload.id, retsync.stationName() || '');
+    if (!Number.isFinite(k.id)) return { ok: false, error: 'Unknown shipment.' };
+    if (!k.own && !retsync.enabled()) return { ok: false, error: 'Turn on Sync to delete another desktop\'s shipment.' };
+    const prev = wfsShipmentsAll().find(s => s.key === k.key);
+    if (!prev) return { ok: false, error: 'That shipment is gone already.' };
+    try {
+      const back = (prev.items || [])
+        .filter(i => Number(i.qty) > 0)
+        .map(i => ({ sku: i.sku, delta: Number(i.qty) }));
+      if (back.length) {
+        const client = new LinnworksClient(cfg.linnworks);
+        await client.changeStockLevels(back, cfg.linnworks.locationId, 'Capture Station WFS shipment deleted',
+          { note: String(prev.note || '').slice(0, 120) });
+      }
+      if (k.own) db.deleteWfsShipment(k.id);
+      retsync.appendAux('wfsedit', { key: k.key, ts: Date.now(), deleted: true });
+      writeWfsCsv();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   // units leaving for WFS: off the warehouse in Linnworks, into the local
   // shipment log and the shared folder (WFS Shipments and the Stock row's
   // Send to WFS both come through here)
@@ -9231,7 +9311,10 @@ function wfsShipmentsAll(ownLimit = 100000, limit = Infinity) {
   // shipment wins on every desktop, and one on this station's own shipment
   // is written back to SQLite so the local record agrees
   wfsrecv.applyMarks(mine.concat(foreign), wfsrecv.latestMarks(retsync.readAux('wfsrecv')), (id, at) => db.setWfsReceivedAt(id, at));
-  return mine.concat(foreign)
+  // corrections (wfsedit aux): the newest rewrite/delete on a key wins on
+  // every desktop, and one on this station's own shipment lands in SQLite
+  return wfsrecv.applyEdits(mine.concat(foreign), wfsrecv.latestMarks(retsync.readAux('wfsedit')),
+    (id, edit) => edit ? db.updateWfsShipment(id, edit) : db.deleteWfsShipment(id))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .slice(0, limit);
 }

@@ -147,6 +147,8 @@ contextBridge.exposeInMainWorld('api', {
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),
   wfsReceived: (id, received) => ipcRenderer.invoke('wfs:received', { id, received }),
+  wfsUpdate: (id, note, items) => ipcRenderer.invoke('wfs:update', { id, note, items }),
+  wfsDelete: (id) => ipcRenderer.invoke('wfs:delete', { id }),
   wfsIgnore: (sku, pace) => ipcRenderer.invoke('overview:wfsIgnore', { sku, pace }),
   wfsUnignore: (sku) => ipcRenderer.invoke('overview:wfsUnignore', { sku }),
   // wholesale invoices (owner 2026-09-30): customers, invoices, serials

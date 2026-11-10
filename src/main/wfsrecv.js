@@ -29,6 +29,32 @@ function applyMarks(shipments, marks, writeBack) {
   return shipments;
 }
 
+// Corrections to logged shipments (owner 2026-11-10) ride the shared
+// folder as the `wfsedit` aux log: { key, ts, note, items } rewrites a
+// shipment's lines, { key, ts, deleted: true } removes it; the newest line
+// on a key wins (same latestMarks). writeBack(id, edit) mirrors a mark
+// onto this station's own SQLite row (edit = { note, items }, or null for
+// a delete), so the local record agrees like the received marks do.
+function applyEdits(shipments, marks, writeBack) {
+  const out = [];
+  for (const s of shipments || []) {
+    const m = marks.get(s.key);
+    if (!m) { out.push(s); continue; }
+    if (m.deleted) {
+      if (s.mine && writeBack) writeBack(s.id, null);
+      continue;
+    }
+    const items = Array.isArray(m.items) ? m.items : s.items;
+    const note = m.note === undefined ? s.note : String(m.note || '');
+    if (s.mine && writeBack
+      && (note !== String(s.note || '') || JSON.stringify(items) !== JSON.stringify(s.items))) {
+      writeBack(s.id, { note, items });
+    }
+    out.push({ ...s, note, items, edited: true });
+  }
+  return out;
+}
+
 // "STATION:12" or a bare local id -> { owner, id, key, own }
 function parseKey(raw, station) {
   const s = String(raw ?? '');
@@ -38,4 +64,4 @@ function parseKey(raw, station) {
   return { owner, id, key: `${owner}:${id}`, own: owner === String(station || '') && Number.isFinite(id) };
 }
 
-module.exports = { latestMarks, applyMarks, parseKey };
+module.exports = { latestMarks, applyMarks, applyEdits, parseKey };

@@ -95,6 +95,8 @@ if (!window.api) {
     wfsList: async () => [],
     wfsCreate: async () => ({ ok: false, error: 'Preview mode' }),
     wfsReceived: async () => ({ ok: false, error: 'Preview mode' }),
+    wfsUpdate: async () => ({ ok: false, error: 'Preview mode' }),
+    wfsDelete: async () => ({ ok: false, error: 'Preview mode' }),
     wfsIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     wfsUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     setStockCost: async () => ({ ok: false, error: 'Preview mode' }),
@@ -10846,19 +10848,56 @@ function wfsStatusBadge(s) {
     : '<span class="badge wfs-badge status-pending">Pending</span>';
 }
 
+// a past shipment opens into an inline correction form (owner 2026-11-10:
+// "we accidently put the wrong SKU") — qty, SKU and note are editable, and
+// saving moves the warehouse by the per-SKU difference. The main-process
+// side works for any station's shipment (sync carries the fix); API-logged
+// Send to WFS shipments edit the log and Linnworks only, never Walmart.
+let wfsEditKey = null; // the shipment key open for editing | null
+let wfsPastByKey = new Map();
+
+function wfsEditCard(s) {
+  const lines = (s.items.length ? s.items : [{ sku: '', channelSku: '', gtin: '', qty: '' }]).map(i => `
+    <div class="wfs-ecard-line" data-ch="${esc(i.channelSku || '')}" data-gtin="${esc(i.gtin || '')}" data-sku0="${esc(i.sku || '')}">
+      <input class="wfs-ecard-sku mono" value="${esc(i.sku)}" placeholder="SKU" spellcheck="false" />
+      <input class="wfs-ecard-qty mono" type="number" min="1" step="1" value="${esc(i.qty)}" />
+      <button type="button" class="wfs-ecard-x" title="Remove this line — its units go back on the warehouse when you save">✕</button>
+    </div>`).join('');
+  return `
+      <div class="wfs-card is-editing" data-wfskey="${esc(s.key || s.id)}">
+        <div class="wfs-card-h">
+          <b>${retDateUS(s.created_at.slice(0, 10))}</b>
+          <span class="wfs-card-u">editing</span>
+        </div>
+        ${lines}
+        <button type="button" class="wfs-ecard-add">+ Add line</button>
+        <input class="wfs-ecard-note" value="${esc(s.note || '')}" placeholder="Note" />
+        <div class="wfs-ecard-btns">
+          <button type="button" class="btn btn-primary wfs-ecard-save">Save fix</button>
+          <button type="button" class="wfs-ecard-cancel">Cancel</button>
+          <button type="button" class="wfs-ecard-del" title="Delete the shipment — every unit goes back on the warehouse count">Delete</button>
+        </div>
+        <div class="dlg-note wfs-ecard-err" hidden></div>
+      </div>`;
+}
+
 async function renderWfsPast() {
   const shipments = await api.wfsList();
+  wfsPastByKey = new Map(shipments.map(s => [String(s.key || s.id), s]));
+  const canFix = state && !state.captureOnly;
   $('wfsPast').innerHTML = shipments.length === 0
     ? '<p class="dlg-note">No shipments logged yet.</p>'
-    : shipments.map(s => `
-      <div class="wfs-card" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
+    : shipments.map(s => String(s.key || s.id) === wfsEditKey ? wfsEditCard(s) : `
+      <div class="wfs-card" data-wfskey="${esc(s.key || s.id)}" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
         <div class="wfs-card-h">
           <b>${retDateUS(s.created_at.slice(0, 10))}</b>
           <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
+          ${canFix ? `<button type="button" class="btn-icon wfs-card-edit" title="Fix this shipment — change a SKU, a quantity or the note; the warehouse count moves by the difference">${ICONS.pencil}</button>` : ''}
         </div>
         <div class="wfs-card-tags">
           ${s.station ? `<span class="wfs-card-st${s.mine ? ' is-me' : ''}" title="${s.mine ? 'Logged on this desktop' : `Logged on ${esc(s.station)}`}">${esc(s.station)}</span>` : ''}
           ${s.mine === false ? '' : wfsStatusBadge(s)}
+          ${s.edited ? '<span class="wfs-card-st" title="This shipment was corrected after it was logged">corrected</span>' : ''}
         </div>
         ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}
         ${s.items.map(i => `
@@ -10868,6 +10907,93 @@ async function renderWfsPast() {
           </div>`).join('')}
       </div>`).join('');
 }
+
+// one delegated handler drives the correction forms inside the panel
+$('wfsPast').addEventListener('click', async (e) => {
+  const card = e.target.closest('.wfs-card');
+  if (!card) return;
+  const key = card.dataset.wfskey;
+  if (e.target.closest('.wfs-card-edit')) {
+    wfsEditKey = key;
+    renderWfsPast();
+    return;
+  }
+  if (e.target.closest('.wfs-ecard-cancel')) {
+    wfsEditKey = null;
+    renderWfsPast();
+    return;
+  }
+  if (e.target.closest('.wfs-ecard-add')) {
+    const add = card.querySelector('.wfs-ecard-add');
+    add.insertAdjacentHTML('beforebegin', `
+    <div class="wfs-ecard-line" data-ch="" data-gtin="" data-sku0="">
+      <input class="wfs-ecard-sku mono" value="" placeholder="SKU" spellcheck="false" />
+      <input class="wfs-ecard-qty mono" type="number" min="1" step="1" value="" />
+      <button type="button" class="wfs-ecard-x" title="Remove this line — its units go back on the warehouse when you save">✕</button>
+    </div>`);
+    card.querySelector('.wfs-ecard-line:last-of-type input').focus();
+    return;
+  }
+  if (e.target.closest('.wfs-ecard-x')) {
+    const row = e.target.closest('.wfs-ecard-line');
+    if (card.querySelectorAll('.wfs-ecard-line').length > 1) row.remove();
+    else { row.querySelector('.wfs-ecard-sku').value = ''; row.querySelector('.wfs-ecard-qty').value = ''; }
+    return;
+  }
+  const err = card.querySelector('.wfs-ecard-err');
+  const fail = (msg) => { if (err) { err.textContent = msg; err.hidden = false; } };
+  if (e.target.closest('.wfs-ecard-del')) {
+    const prev = wfsPastByKey.get(key);
+    const units = prev ? prev.items.reduce((a, i) => a + (Number(i.qty) || 0), 0) : 0;
+    if (!confirm(`Delete this shipment?\n${units} unit${units === 1 ? '' : 's'} go back on the warehouse count in Linnworks.${prev && /^Walmart /.test(prev.note || '') ? '\n\nThis only clears the log — the Walmart inbound order itself is cancelled from Send to WFS.' : ''}`)) return;
+    const btn = card.querySelector('.wfs-ecard-del');
+    btn.disabled = true;
+    const res = await api.wfsDelete(key);
+    btn.disabled = false;
+    if (!res.ok) { fail(res.error || 'Could not delete.'); return; }
+    wfsEditKey = null;
+    toast(`Shipment deleted — ${units} unit${units === 1 ? '' : 's'} back on the warehouse`);
+    await renderWfsPast();
+    loadStock();
+    return;
+  }
+  if (e.target.closest('.wfs-ecard-save')) {
+    const items = [...card.querySelectorAll('.wfs-ecard-line')].map(l => {
+      const sku = l.querySelector('.wfs-ecard-sku').value.trim();
+      const same = sku.toUpperCase() === String(l.dataset.sku0 || '').toUpperCase();
+      return {
+        sku,
+        qty: Number(l.querySelector('.wfs-ecard-qty').value),
+        // the channel SKU and GTIN belong to the ORIGINAL item: a corrected
+        // SKU drops them rather than carry the wrong listing's identifiers
+        channelSku: same ? (l.dataset.ch || '') : '',
+        gtin: same ? (l.dataset.gtin || '') : '',
+      };
+    }).filter(i => i.sku || i.qty);
+    if (!items.length) { fail('Keep at least one line — or use Delete.'); return; }
+    if (items.some(i => !i.sku || !Number.isInteger(i.qty) || i.qty <= 0)) { fail('Every line needs a SKU and a whole-number quantity.'); return; }
+    // canonicalize casing so a hand-typed fix hits the real item (same
+    // guard as the send form: only when an inventory cache has loaded)
+    if (stockCache || recvBySku) {
+      for (const i of items) {
+        const known = wfsFindSku(i.sku);
+        if (known) i.sku = known.sku;
+        else { fail(`Unknown SKU: ${i.sku}`); return; }
+      }
+    }
+    const btn = card.querySelector('.wfs-ecard-save');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    const res = await api.wfsUpdate(key, card.querySelector('.wfs-ecard-note').value.trim(), items);
+    btn.disabled = false;
+    btn.textContent = 'Save fix';
+    if (!res.ok) { fail(res.error || 'Could not save.'); return; }
+    wfsEditKey = null;
+    toast(res.adjusted ? 'Fixed — the warehouse moved by the difference' : 'Fixed — no stock change needed');
+    await renderWfsPast();
+    loadStock();
+  }
+});
 
 // (WFS Shipments opens from the Stock page's Actions menu — see stockActionsDlg)
 $('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
