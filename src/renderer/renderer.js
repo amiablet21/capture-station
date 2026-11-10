@@ -4488,7 +4488,7 @@ $('stockChips').addEventListener('click', (e) => {
     stockLowActive = true;
     stockWfsActive = false;
     stockActiveView = null;
-    if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
+    if (stockSort.key === 'home') stockSort = { key: 'sku', dir: 1 };
   } else if (chip.dataset.view === 'ds') {
     stockDsActive = true;
     stockWfsActive = false;
@@ -4504,7 +4504,7 @@ $('stockChips').addEventListener('click', (e) => {
     stockUnlistedActive = wasUnlisted;
     stockActiveView = chip.dataset.view === 'new' ? STOCK_VIEW_NEW
       : chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
-    if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
+    if (stockSort.key === 'home') stockSort = { key: 'sku', dir: 1 };
   }
   renderStockChips();
   renderStock();
@@ -4558,6 +4558,40 @@ function stockSeed(data) {
   renderStock();
 }
 
+/* natural SKU order (owner pick 2026-11-10, Option B of the stock-grouped
+   sketches): model → storage as a NUMBER → color, so 512GB follows 256GB
+   (alphabetical put 1TB first) and each family reads as one block. SKUs
+   without a storage token (accessories…) sort by plain name within their
+   model. In the All view a condition rank stacks the blocks New → Open
+   Box → Used → Scrap, never mixed, whatever column is sorted. */
+function skuCondRank(sku) {
+  const s = String(sku || '').toUpperCase();
+  return s.startsWith('OPEN-BOX-') ? 1 : s.startsWith('USED-') ? 2 : s.startsWith('SCRAP-') ? 3 : 0;
+}
+const skuNaturalCache = new Map(); // parsed keys, keyed by upper-cased SKU
+function skuNaturalKey(sku) {
+  const s = String(sku || '').toUpperCase();
+  let k = skuNaturalCache.get(s);
+  if (k) return k;
+  const toks = s.replace(/^(OPEN-BOX|USED|SCRAP)-/, '').split('-');
+  const si = toks.findIndex(t => /^\d+(?:GB|TB)$/.test(t));
+  k = {
+    model: si < 0 ? toks.join('-') : toks.slice(0, si).join('-'),
+    storage: si < 0 ? 0 : parseInt(toks[si], 10) * (toks[si].endsWith('TB') ? 1024 : 1),
+    rest: si < 0 ? '' : toks.slice(si + 1).join('-'),
+  };
+  skuNaturalCache.set(s, k);
+  return k;
+}
+function skuNaturalCmp(a, b) {
+  const ka = skuNaturalKey(a);
+  const kb = skuNaturalKey(b);
+  return ka.model.localeCompare(kb.model, undefined, { numeric: true })
+    || (ka.storage - kb.storage)
+    || ka.rest.localeCompare(kb.rest, undefined, { numeric: true })
+    || String(a).localeCompare(String(b));
+}
+
 // column sort: key + direction, toggled by clicking headers
 const STOCK_COLS = {
   sku: { label: 'SKU', get: r => r.sku, text: true },
@@ -4571,7 +4605,7 @@ const STOCK_COLS = {
   // WFS view only: your own warehouse count beside Walmart's
   home: { label: 'At warehouse', get: r => (r.home ? r.home.stockLevel : 0) },
 };
-let stockSort = { key: 'stockLevel', dir: -1 }; // default: highest stock first
+let stockSort = { key: 'sku', dir: 1 }; // default: natural SKU order (owner 2026-11-10; was highest stock first)
 
 // user-adjusted column widths, persisted across sessions
 let stockColWidths = {};
@@ -4772,11 +4806,19 @@ function renderStock() {
       || skuMatch(it.category, q)
       || !!chSkuHit(it))
     .sort((a, b) => {
+      // the All view never mixes conditions (owner 2026-11-10): New stacks
+      // above Open Box, then Used, then Scrap, whatever column is sorted —
+      // a condition chip or the WFS view shows one slice, so no rank there
+      if (!stockActiveView && !wfsLoc) {
+        const cr = skuCondRank(a.sku) - skuCondRank(b.sku);
+        if (cr) return cr;
+      }
       const col = STOCK_COLS[stockSort.key] || STOCK_COLS.stockLevel;
       const av = col.get(a);
       const bv = col.get(b);
-      const cmp = col.text ? String(av).localeCompare(String(bv)) : (av - bv);
-      return (cmp * stockSort.dir) || a.sku.localeCompare(b.sku);
+      const cmp = stockSort.key === 'sku' ? skuNaturalCmp(av, bv)
+        : col.text ? String(av).localeCompare(String(bv)) : (av - bv);
+      return (cmp * stockSort.dir) || skuNaturalCmp(a.sku, b.sku);
     });
   const tip = document.querySelector('#stockHint .stock-tip');
   if (tip) tip.hidden = !!wfsLoc; // the WFS column is Walmart's, not correctable
