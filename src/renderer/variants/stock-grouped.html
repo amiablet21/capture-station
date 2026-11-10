@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@300..700&display=swap">
+
+<title>Stock sheet organization — sketches</title>
+<style>
+  /* layout: the app's own light sheet look — one column of option cards, Geist type, navy accent */
+  :root {
+    --canvas:#F7F6F3; --surface:#FFFFFF; --surface-2:#F9F9F8;
+    --border:#EAEAEA; --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#1E3A66; --accent-soft:#E4EAF4;
+    --pos:#346538; --low:#9F2F2D; --low-bg:#FDEBEC;
+    --font:'Geist','Inter','Segoe UI',sans-serif;
+    --mono:'Geist Mono','Cascadia Mono',ui-monospace,monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:var(--font); font-size:13px; line-height:1.55;
+    background:var(--canvas); color:var(--text);
+    padding-block:28px 70px;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width:960px; margin:0 auto; }
+  h1 { font-size:17px; font-weight:650; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12.5px; color:var(--muted); margin-bottom:30px; max-width:780px; }
+  .sub .mono { font-size:11.5px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  .opt { margin-bottom:46px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .opt-label b { font-size:13.5px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .pick { font-size:10px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+          background:var(--accent-soft); color:var(--accent); border-radius:99px; padding:2px 9px; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .card-x { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; min-width:520px; }
+  th { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint);
+       text-align:right; padding:7px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; }
+  th.l { text-align:left; }
+  td { padding:7px 14px; border-bottom:1px solid var(--grid); text-align:right;
+       font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:12.5px; }
+  td.l { text-align:left; }
+  tr:last-child td { border-bottom:none; }
+  .gut { color:var(--faint); font-size:11px; width:34px; }
+  .ph { display:inline-block; width:22px; height:28px; border-radius:4px; background:var(--grid);
+        border:1px solid var(--border); vertical-align:middle; }
+  td.img { width:40px; padding-right:4px; }
+  .sku { font-weight:600; white-space:nowrap; }
+  .sku .dim { color:var(--faint); font-weight:450; }
+  .lowcell { color:var(--low); background:var(--low-bg); font-weight:650; }
+
+  /* group header rows */
+  tr.grp td { background:var(--surface-2); border-bottom:1px solid var(--border); border-top:1px solid var(--border);
+              padding:6px 14px; font-family:var(--font); }
+  tr.grp:first-child td, thead + tbody tr.grp:first-child td { border-top:none; }
+  .grp-line { display:flex; align-items:baseline; gap:10px; }
+  .grp-name { font-size:12px; font-weight:700; letter-spacing:0.01em; }
+  .grp-meta { font-size:11px; color:var(--muted); margin-left:auto; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .chev { display:inline-block; width:14px; color:var(--faint); font-size:10px; transition:transform 0.12s; }
+  tr.grp.closed .chev { transform:rotate(-90deg); }
+  tr.grp { cursor:pointer; user-select:none; }
+  tr.grp:hover td { background:var(--accent-soft); }
+
+  /* option B: family break lines in a flat sheet */
+  tr.brk td { border-top:2px solid var(--border); }
+
+  .note { margin-top:8px; font-size:11.5px; color:var(--muted); max-width:780px; }
+  .note b { color:var(--text); }
+
+  .how { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+         padding:18px 20px; max-width:860px; }
+  .how h2 { font-size:13.5px; font-weight:650; margin-bottom:10px; }
+  .how ul { margin:0 0 0 18px; display:grid; gap:7px; font-size:12.5px; }
+  .how li { color:var(--text); }
+  .how .mono { font-size:11.5px; background:var(--surface-2); border:1px solid var(--border);
+               border-radius:4px; padding:1px 5px; }
+  @media (max-width:560px) { .grp-meta { font-size:10px; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Stock sheet — organizing the SKUs</h1>
+  <p class="sub">Three ways to organize the sheet, drawn with the real <span class="mono">s26</span> search from today
+    (18&nbsp;SKUs · 512&nbsp;units). Every SKU already follows one scheme —
+    <span class="mono">MODEL&#8209;STORAGE&#8209;COLOR</span> with an optional variant
+    (<span class="mono">FE / PLUS / ULTRA</span>) and condition prefix (<span class="mono">OPEN&#8209;BOX&#8209; / USED&#8209; / SCRAP&#8209;</span>) —
+    so the app can group and order them by itself; nothing needs renaming in Linnworks.</p>
+
+  <!-- ============ OPTION A ============ -->
+  <div class="opt">
+    <div class="opt-label"><b>Option A — Family bands</b><span class="pick">Recommended</span>
+      <span>one band per model; inside each, storage low→high, then color A→Z</span></div>
+    <div class="card card-x"><table>
+      <thead><tr><th class="l gut">#</th><th class="l"></th><th class="l">SKU</th><th>In stock</th><th>Available</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="5"><span class="grp-line"><span class="grp-name">S26</span><span class="grp-meta">5 SKUs · 203 units</span></span></td></tr>
+        <tr><td class="gut l">1</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-<span class="dim">256GB-</span>BLACK</td><td>22</td><td>20</td></tr>
+        <tr><td class="gut l">2</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-<span class="dim">256GB-</span>VIOLET</td><td>93</td><td>91</td></tr>
+        <tr><td class="gut l">3</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-<span class="dim">256GB-</span>WHITE</td><td>33</td><td>31</td></tr>
+        <tr><td class="gut l">4</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-<span class="dim">512GB-</span>BLUE</td><td>14</td><td class="lowcell">3</td></tr>
+        <tr><td class="gut l">5</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-<span class="dim">512GB-</span>WHITE</td><td>41</td><td>39</td></tr>
+        <tr class="grp"><td colspan="5"><span class="grp-line"><span class="grp-name">S26 PLUS</span><span class="grp-meta">2 SKUs · 18 units</span></span></td></tr>
+        <tr><td class="gut l">6</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-PLUS-<span class="dim">256GB-</span>BLUE</td><td>6</td><td>6</td></tr>
+        <tr><td class="gut l">7</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-PLUS-<span class="dim">512GB-</span>WHITE</td><td>12</td><td>11</td></tr>
+        <tr class="grp"><td colspan="5"><span class="grp-line"><span class="grp-name">S26 ULTRA</span><span class="grp-meta">8 SKUs · 160 units</span></span></td></tr>
+        <tr><td class="gut l">8</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">256GB-</span>BLACK</td><td>37</td><td>36</td></tr>
+        <tr><td class="gut l">9</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">256GB-</span>BLUE</td><td>8</td><td>8</td></tr>
+        <tr><td class="gut l">10</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">256GB-</span>VIOLET</td><td>21</td><td>19</td></tr>
+        <tr><td class="gut l">11</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">256GB-</span>WHITE</td><td>27</td><td>27</td></tr>
+        <tr><td class="gut l">12</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">512GB-</span>BLACK</td><td>21</td><td>21</td></tr>
+        <tr><td class="gut l">13</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">512GB-</span>BLUE</td><td>14</td><td>13</td></tr>
+        <tr><td class="gut l">14</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">512GB-</span>VIOLET</td><td>11</td><td>10</td></tr>
+        <tr><td class="gut l">15</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-<span class="dim">512GB-</span>WHITE</td><td>21</td><td>20</td></tr>
+        <tr class="grp"><td colspan="5"><span class="grp-line"><span class="grp-name">S26 FE</span><span class="grp-meta">3 SKUs · 131 units</span></span></td></tr>
+        <tr><td class="gut l">16</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-FE-<span class="dim">256GB-</span>GRAPHITE</td><td>52</td><td>50</td></tr>
+        <tr><td class="gut l">17</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-FE-<span class="dim">256GB-</span>PISTACHIO</td><td>29</td><td>29</td></tr>
+        <tr><td class="gut l">18</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-FE-<span class="dim">256GB-</span>PURPLE</td><td>52</td><td>50</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note"><b>What changes:</b> a "Group" toggle joins the sort headers. On, the sheet orders itself
+      model → storage → color with a subtotal band per model; clicking a number column (In stock, Available…)
+      still sorts, but <i>within</i> each band. Off, the sheet is exactly today's flat table. The toggle is remembered.</p>
+  </div>
+
+  <!-- ============ OPTION B ============ -->
+  <div class="opt">
+    <div class="opt-label"><b>Option B — Natural order, no bands</b>
+      <span>the flat sheet keeps its columns; SKU sort becomes model-aware, with a heavier line between models</span></div>
+    <div class="card card-x"><table>
+      <thead><tr><th class="l gut">#</th><th class="l"></th><th class="l">SKU ▴</th><th>In stock</th><th>Available</th></tr></thead>
+      <tbody>
+        <tr><td class="gut l">1</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-256GB-BLACK</td><td>22</td><td>20</td></tr>
+        <tr><td class="gut l">2</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-256GB-VIOLET</td><td>93</td><td>91</td></tr>
+        <tr><td class="gut l">3</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-256GB-WHITE</td><td>33</td><td>31</td></tr>
+        <tr><td class="gut l">4</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-512GB-BLUE</td><td>14</td><td class="lowcell">3</td></tr>
+        <tr><td class="gut l">5</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-512GB-WHITE</td><td>41</td><td>39</td></tr>
+        <tr class="brk"><td class="gut l">6</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-PLUS-256GB-BLUE</td><td>6</td><td>6</td></tr>
+        <tr><td class="gut l">7</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-PLUS-512GB-WHITE</td><td>12</td><td>11</td></tr>
+        <tr class="brk"><td class="gut l">8</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-256GB-BLACK</td><td>37</td><td>36</td></tr>
+        <tr><td class="gut l">9</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-256GB-BLUE</td><td>8</td><td>8</td></tr>
+        <tr><td class="gut l">10</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-256GB-VIOLET <span class="dim">… and so on</span></td><td>21</td><td>19</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note"><b>What changes:</b> only the SKU sort. Today it is alphabetical, which puts 1TB before 256GB and
+      leaves the default view sorted by stock count (the jumble in the screenshot). Here SKU-sort means
+      model → storage as a number → color, and it becomes the sheet's default. Lightest touch, no new UI.</p>
+  </div>
+
+  <!-- ============ OPTION C ============ -->
+  <div class="opt">
+    <div class="opt-label"><b>Option C — Collapsible families</b>
+      <span>bands fold; the whole sheet becomes a model list you open as needed (tap a band to try it)</span></div>
+    <div class="card card-x"><table id="optc">
+      <thead><tr><th class="l gut">#</th><th class="l"></th><th class="l">SKU</th><th>In stock</th><th>Available</th></tr></thead>
+      <tbody>
+        <tr class="grp closed" data-fam="a"><td colspan="5"><span class="grp-line"><span class="chev">▾</span><span class="grp-name">S26</span><span class="grp-meta">5 SKUs · 203 units · 1 low</span></span></td></tr>
+        <tr data-row="a" hidden><td class="gut l">1</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-256GB-BLACK</td><td>22</td><td>20</td></tr>
+        <tr data-row="a" hidden><td class="gut l">2</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-256GB-VIOLET</td><td>93</td><td>91</td></tr>
+        <tr data-row="a" hidden><td class="gut l">3</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-256GB-WHITE</td><td>33</td><td>31</td></tr>
+        <tr data-row="a" hidden><td class="gut l">4</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-512GB-BLUE</td><td>14</td><td class="lowcell">3</td></tr>
+        <tr data-row="a" hidden><td class="gut l">5</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-512GB-WHITE</td><td>41</td><td>39</td></tr>
+        <tr class="grp closed" data-fam="b"><td colspan="5"><span class="grp-line"><span class="chev">▾</span><span class="grp-name">S26 PLUS</span><span class="grp-meta">2 SKUs · 18 units</span></span></td></tr>
+        <tr data-row="b" hidden><td class="gut l">6</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-PLUS-256GB-BLUE</td><td>6</td><td>6</td></tr>
+        <tr data-row="b" hidden><td class="gut l">7</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-PLUS-512GB-WHITE</td><td>12</td><td>11</td></tr>
+        <tr class="grp" data-fam="c"><td colspan="5"><span class="grp-line"><span class="chev">▾</span><span class="grp-name">S26 ULTRA</span><span class="grp-meta">8 SKUs · 160 units</span></span></td></tr>
+        <tr data-row="c"><td class="gut l">8</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-256GB-BLACK</td><td>37</td><td>36</td></tr>
+        <tr data-row="c"><td class="gut l">9</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-256GB-BLUE</td><td>8</td><td>8</td></tr>
+        <tr data-row="c"><td class="gut l">10</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-256GB-VIOLET</td><td>21</td><td>19</td></tr>
+        <tr data-row="c"><td class="gut l">11</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-256GB-WHITE</td><td>27</td><td>27</td></tr>
+        <tr data-row="c"><td class="gut l">12</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-512GB-BLACK</td><td>21</td><td>21</td></tr>
+        <tr data-row="c"><td class="gut l">13</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-512GB-BLUE</td><td>14</td><td>13</td></tr>
+        <tr data-row="c"><td class="gut l">14</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-512GB-VIOLET</td><td>11</td><td>10</td></tr>
+        <tr data-row="c"><td class="gut l">15</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-ULTRA-512GB-WHITE</td><td>21</td><td>20</td></tr>
+        <tr class="grp closed" data-fam="d"><td colspan="5"><span class="grp-line"><span class="chev">▾</span><span class="grp-name">S26 FE</span><span class="grp-meta">3 SKUs · 131 units</span></span></td></tr>
+        <tr data-row="d" hidden><td class="gut l">16</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-FE-256GB-GRAPHITE</td><td>52</td><td>50</td></tr>
+        <tr data-row="d" hidden><td class="gut l">17</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-FE-256GB-PISTACHIO</td><td>29</td><td>29</td></tr>
+        <tr data-row="d" hidden><td class="gut l">18</td><td class="img l"><span class="ph"></span></td><td class="l sku">S26-FE-256GB-PURPLE</td><td>52</td><td>50</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note"><b>What changes:</b> same bands as Option A, but they fold. The full sheet (hundreds of SKUs)
+      collapses to a short model list with units and a low-stock count per model; searching auto-expands whatever
+      matches. Strongest for browsing everything, one extra click when correcting a single count.</p>
+  </div>
+
+  <!-- ============ HOW ============ -->
+  <div class="how">
+    <h2>How it gets built (any of the three)</h2>
+    <ul>
+      <li>A small parser reads each SKU once: strip a condition prefix (<span class="mono">OPEN-BOX- / USED- / SCRAP-</span>),
+        take everything before the first storage token (<span class="mono">256GB / 512GB / 1TB</span>) as the model,
+        the storage as a number, the rest as the color. Anything that doesn't fit the scheme lands in an
+        <b>Other</b> band at the bottom instead of being hidden.</li>
+      <li>Grouping is render-only in the Stock tab — nothing changes in Linnworks, and the condition chips
+        (New / Open Box / Used / Scrap), WFS view, search, and the hover tray all keep working inside bands.</li>
+      <li>Inline edits (stock corrections, Min, Cost), the clock history, and Export keep working row by row exactly as now;
+        Export gains the same ordering so the purchasing sheet reads in model blocks too.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // Option C demo: a band toggles its rows
+  document.getElementById('optc').addEventListener('click', (e) => {
+    const g = e.target.closest('tr.grp');
+    if (!g) return;
+    const open = g.classList.toggle('closed');
+    document.querySelectorAll(`#optc tr[data-row="${g.dataset.fam}"]`).forEach(r => { r.hidden = open; });
+  });
+</script>
+
+</body>
+</html>
