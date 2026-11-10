@@ -2,6 +2,19 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.137 highlights
+
+- **Stock opens organized every time** (owner: "still not organized"): entering the Stock tab always starts in natural SKU order. Clicking In stock still ranks by count for a look, but the order no longer sticks to the next visit.
+
+## v1.32.136 highlights
+
+- **Past WFS shipments can be fixed in place** (owner: "we accidently put the wrong SKU"): a pencil on each card opens its SKU, quantity and note for editing — or deletes the shipment. The warehouse moves by the per-SKU difference, so a correction never double-counts; fixes sync to both desktops and corrected cards say so. Works on API-logged Send to WFS shipments too (the log and Linnworks only, never Walmart's side).
+- **The Past Shipments panel is organized** (owner pick: both sketches): By date folds the log into month bands with totals, newest open; By SKU rolls it up to one row per SKU with units, shipment count, last date and its history. A filter above both searches SKU, channel SKU, note and station.
+
+## v1.32.135 highlights
+
+- **The stock sheet reads in natural order** (owner pick: Option B of the stock-grouped sketches): model, then storage as a number, then color — families read as blocks and 512GB follows 256GB, not after 1TB. In the All view conditions never mix: New stacks above Open Box, then Used, then Scrap, whatever column is sorted.
+
 ## v1.32.134 highlights
 
 - **Send to WFS goes through Walmart's whole shipping plan** (owner: "I want the same exact thing from Walmart on here"): Listing, Packing, Distribution, Shipping and Review, as in Seller Center.
