@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Past Shipments Organization</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@300..700&display=swap">
+<style>
+  /* layout: two live panel sketches side by side, drawn in the app's own WFS-card style */
+  :root {
+    --canvas:#F7F6F3; --surface:#FFFFFF; --surface-2:#F9F9F8;
+    --border:#EAEAEA; --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#1E3A66; --accent-soft:#E4EAF4;
+    --me-bg:#E7F3EC; --me-text:#17854C; --ch:#1B6AC9;
+    --font:'Geist','Inter','Segoe UI',sans-serif;
+    --mono:'Geist Mono','Cascadia Mono',ui-monospace,monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:var(--font); font-size:13px; line-height:1.5;
+    background:var(--canvas); color:var(--text);
+    padding-block:28px 70px;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width:860px; margin:0 auto; }
+  h1 { font-size:17px; font-weight:650; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12.5px; color:var(--muted); margin-bottom:26px; max-width:760px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .cols { display:flex; gap:26px; flex-wrap:wrap; align-items:flex-start; }
+  .opt { flex:1 1 330px; min-width:0; max-width:400px; }
+  .opt-label { margin-bottom:8px; }
+  .opt-label b { font-size:13.5px; display:inline-block; margin-right:8px; }
+  .opt-label .pick { font-size:10px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+          background:var(--accent-soft); color:var(--accent); border-radius:99px; padding:2px 9px; vertical-align:1px; }
+  .opt-label p { font-size:11.5px; color:var(--muted); margin-top:3px; }
+
+  /* the panel frame, like the dialog's right column */
+  .panel { background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
+           padding:12px; height:560px; overflow-y:auto; }
+  .panel-h { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em;
+             color:var(--faint); margin-bottom:8px; }
+  .filter { width:100%; font:12px var(--font); padding:6px 9px; border:1px solid var(--border);
+            border-radius:7px; background:var(--surface); color:var(--text); margin-bottom:10px; }
+  .filter::placeholder { color:var(--faint); }
+
+  /* month band */
+  .mo { display:flex; align-items:baseline; gap:8px; cursor:pointer; user-select:none;
+        padding:7px 9px; margin:2px 0 8px; border-radius:7px; background:var(--surface);
+        border:1px solid var(--border); position:sticky; top:-12px; z-index:2; }
+  .mo:hover { background:var(--accent-soft); }
+  .mo b { font-size:11px; letter-spacing:0.05em; text-transform:uppercase; }
+  .mo .chev { font-size:9px; color:var(--faint); width:12px; transition:transform .12s; }
+  .mo.closed .chev { transform:rotate(-90deg); }
+  .mo .tot { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--muted); }
+
+  /* shipment card, verbatim from the app */
+  .wfs-card { background:var(--surface); border:1px solid var(--border); border-radius:8px;
+              padding:10px 12px; margin-bottom:8px; }
+  .wfs-card-h { display:flex; align-items:baseline; gap:8px; font-size:12px; }
+  .wfs-card-h b { font-weight:600; }
+  .wfs-card-u { margin-left:auto; font-family:var(--mono); font-weight:600; color:var(--accent); white-space:nowrap; }
+  .st { font-family:var(--mono); font-size:10px; background:var(--grid); color:var(--muted);
+        border-radius:5px; padding:1px 6px; }
+  .st.is-me { background:var(--me-bg); color:var(--me-text); }
+  .tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+  .note { font-size:11px; color:var(--muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item { display:flex; gap:10px; font-size:11.5px; margin-top:6px; }
+  .item .n { margin-left:auto; font-family:var(--mono); font-weight:600; }
+  .skus { display:flex; flex-direction:column; min-width:0; }
+  .ch { font-size:10.5px; color:var(--ch); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* by-SKU rollup rows */
+  .seg { display:flex; gap:0; border:1px solid var(--border); border-radius:7px; overflow:hidden;
+         margin-bottom:10px; background:var(--surface); }
+  .seg button { flex:1; font:600 11px var(--font); padding:6px 0; border:none; background:none;
+                color:var(--muted); cursor:pointer; }
+  .seg button.on { background:var(--accent); color:#fff; }
+  .skurow { background:var(--surface); border:1px solid var(--border); border-radius:8px;
+            padding:9px 12px; margin-bottom:8px; cursor:pointer; user-select:none; }
+  .skurow:hover { border-color:var(--accent); }
+  .skurow-h { display:flex; align-items:baseline; gap:8px; }
+  .skurow-h .mono { font-size:12px; font-weight:600; }
+  .skurow-h .tot { margin-left:auto; font-family:var(--mono); font-size:12px; font-weight:600; color:var(--accent); white-space:nowrap; }
+  .skurow-s { font-size:10.5px; color:var(--muted); margin-top:2px; }
+  .skurow .hist { margin-top:8px; border-top:1px solid var(--grid); padding-top:6px; }
+  .hist-line { display:flex; gap:8px; font-size:11px; padding:2px 0; }
+  .hist-line .n { margin-left:auto; font-family:var(--mono); font-weight:600; }
+  .hist-line .d { font-family:var(--mono); color:var(--muted); }
+  @media (max-width:760px) { .panel { height:auto; max-height:480px; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Past shipments — two ways to stop the scroll</h1>
+  <p class="sub">The panel today is one endless card list, newest first. Both sketches below are live —
+    click a month band or a SKU row. Same real shipments from today's screenshot.</p>
+
+  <div class="cols">
+    <!-- ============ A: months that fold ============ -->
+    <div class="opt">
+      <div class="opt-label"><b>A — Months that fold</b><span class="pick">Recommended</span>
+        <p>A filter box on top, and one band per month with its total. The current month starts open,
+        every older month starts folded — the whole history is a few bands, not a mile of cards.</p></div>
+      <div class="panel" id="pa">
+        <div class="panel-h">Past shipments</div>
+        <input class="filter" placeholder="Filter — SKU, note, station…" />
+        <div class="mo" data-mo="nov"><span class="chev">▾</span><b>November 2026</b><span class="tot">7 shipments · 410 units</span></div>
+        <div data-in="nov">
+          <div class="wfs-card"><div class="wfs-card-h"><b>11/07/2026</b><span class="wfs-card-u">10 units</span></div>
+            <div class="tags"><span class="st is-me">IMRAN-MACBOOK-PRO</span></div>
+            <div class="note">Walmart DWS-1794091756279 · 4439713WFB</div>
+            <div class="item"><span class="skus"><span class="mono">X133-64GB-GRAY</span><span class="ch mono">SM-X133-64GB-GREY</span></span><span class="n">×10</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>11/06/2026</b><span class="wfs-card-u">100 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X620-128GB-BLUE</span><span class="ch mono">X620-128GB-BLUE-INT</span></span><span class="n">×100</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>11/06/2026</b><span class="wfs-card-u">60 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X620-128GB-GRAY</span><span class="ch mono">X620-128GB-GRAY-INT</span></span><span class="n">×60</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>11/05/2026</b><span class="wfs-card-u">60 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X620-128GB-GRAY</span><span class="ch mono">X620-128GB-GRAY-INT</span></span><span class="n">×60</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>11/03/2026</b><span class="wfs-card-u">45 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X400-128GB-GRAY</span><span class="ch mono">X400-128GB-BLACK-INTL-VER</span></span><span class="n">×45</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>11/02/2026</b><span class="wfs-card-u">90 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X236-128GB-GRAY</span></span><span class="n">×90</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>11/02/2026</b><span class="wfs-card-u">45 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X400-128GB-GRAY</span><span class="ch mono">X400-128GB-BLACK-INTL-VER</span></span><span class="n">×45</span></div></div>
+        </div>
+        <div class="mo closed" data-mo="oct"><span class="chev">▾</span><b>October 2026</b><span class="tot">3 shipments · 230 units</span></div>
+        <div data-in="oct" hidden>
+          <div class="wfs-card"><div class="wfs-card-h"><b>10/30/2026</b><span class="wfs-card-u">120 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X133-64GB-GRAY</span><span class="ch mono">SM-X133-64GB-GREY</span></span><span class="n">×120</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>10/30/2026</b><span class="wfs-card-u">80 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X236-128GB-GRAY</span></span><span class="n">×80</span></div></div>
+          <div class="wfs-card"><div class="wfs-card-h"><b>10/28/2026</b><span class="wfs-card-u">30 units</span></div>
+            <div class="tags"><span class="st">STOCK-ROOM</span></div>
+            <div class="item"><span class="skus"><span class="mono">X400-128GB-GRAY</span><span class="ch mono">X400-128GB-BLACK-INTL-VER</span></span><span class="n">×30</span></div></div>
+        </div>
+        <div class="mo closed"><span class="chev">▾</span><b>September 2026</b><span class="tot">9 shipments · 760 units</span></div>
+      </div>
+    </div>
+
+    <!-- ============ B: by-SKU rollup ============ -->
+    <div class="opt">
+      <div class="opt-label"><b>B — A "By SKU" view</b>
+        <p>A small toggle on the panel. "By date" is today's list (with A's months if you want both);
+        "By SKU" answers "how much X620 have we sent?" in one row — click a SKU for its shipments.</p></div>
+      <div class="panel" id="pb">
+        <div class="panel-h">Past shipments</div>
+        <div class="seg"><button type="button">By date</button><button type="button" class="on">By SKU</button></div>
+        <input class="filter" placeholder="Filter — SKU, note, station…" />
+        <div class="skurow" data-sku>
+          <div class="skurow-h"><span class="mono">X133-64GB-GRAY</span><span class="tot">130 units</span></div>
+          <div class="skurow-s">2 shipments · last 11/07/2026</div>
+          <div class="hist" hidden>
+            <div class="hist-line"><span class="d">11/07/2026</span><span>IMRAN-MACBOOK-PRO</span><span class="n">×10</span></div>
+            <div class="hist-line"><span class="d">10/30/2026</span><span>STOCK-ROOM</span><span class="n">×120</span></div>
+          </div>
+        </div>
+        <div class="skurow" data-sku>
+          <div class="skurow-h"><span class="mono">X620-128GB-GRAY</span><span class="tot">120 units</span></div>
+          <div class="skurow-s">2 shipments · last 11/06/2026</div>
+          <div class="hist">
+            <div class="hist-line"><span class="d">11/06/2026</span><span>STOCK-ROOM</span><span class="n">×60</span></div>
+            <div class="hist-line"><span class="d">11/05/2026</span><span>STOCK-ROOM</span><span class="n">×60</span></div>
+          </div>
+        </div>
+        <div class="skurow" data-sku>
+          <div class="skurow-h"><span class="mono">X620-128GB-BLUE</span><span class="tot">100 units</span></div>
+          <div class="skurow-s">1 shipment · 11/06/2026</div>
+          <div class="hist" hidden>
+            <div class="hist-line"><span class="d">11/06/2026</span><span>STOCK-ROOM</span><span class="n">×100</span></div>
+          </div>
+        </div>
+        <div class="skurow" data-sku>
+          <div class="skurow-h"><span class="mono">X400-128GB-GRAY</span><span class="tot">120 units</span></div>
+          <div class="skurow-s">3 shipments · last 11/03/2026</div>
+          <div class="hist" hidden>
+            <div class="hist-line"><span class="d">11/03/2026</span><span>STOCK-ROOM</span><span class="n">×45</span></div>
+            <div class="hist-line"><span class="d">11/02/2026</span><span>STOCK-ROOM</span><span class="n">×45</span></div>
+            <div class="hist-line"><span class="d">10/28/2026</span><span>STOCK-ROOM</span><span class="n">×30</span></div>
+          </div>
+        </div>
+        <div class="skurow" data-sku>
+          <div class="skurow-h"><span class="mono">X236-128GB-GRAY</span><span class="tot">170 units</span></div>
+          <div class="skurow-s">2 shipments · last 11/02/2026</div>
+          <div class="hist" hidden>
+            <div class="hist-line"><span class="d">11/02/2026</span><span>STOCK-ROOM</span><span class="n">×90</span></div>
+            <div class="hist-line"><span class="d">10/30/2026</span><span>STOCK-ROOM</span><span class="n">×80</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // A: month bands fold
+  document.getElementById('pa').addEventListener('click', (e) => {
+    const mo = e.target.closest('.mo');
+    if (!mo || !mo.dataset.mo) return;
+    const closed = mo.classList.toggle('closed');
+    const body = document.querySelector(`#pa [data-in="${mo.dataset.mo}"]`);
+    if (body) body.hidden = closed;
+  });
+  // B: SKU rows expand to their shipment history
+  document.getElementById('pb').addEventListener('click', (e) => {
+    const row = e.target.closest('.skurow');
+    if (!row) return;
+    const h = row.querySelector('.hist');
+    if (h) h.hidden = !h.hidden;
+  });
+</script>
+
+</body>
+</html>
