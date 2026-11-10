@@ -10881,13 +10881,37 @@ function wfsEditCard(s) {
       </div>`;
 }
 
-async function renderWfsPast() {
-  const shipments = await api.wfsList();
-  wfsPastByKey = new Map(shipments.map(s => [String(s.key || s.id), s]));
+/* the Past Shipments column is organized, not one endless list (owner pick
+   2026-11-10, BOTH options from variants/wfs-past-organized.html):
+   - By date: one band per month with its totals; the newest month starts
+     open and older months folded, so the history is a few bands. A filter
+     match opens every month that holds one.
+   - By SKU: the log rolled up to one row per SKU — total units, shipment
+     count, last date — and a row opens into its shipment history.
+   The filter looks at SKUs, channel SKUs, the note and the station. */
+let wfsPastView = 'date'; // 'date' | 'sku', remembered across sessions
+try { if (localStorage.getItem('wfsPastView') === 'sku') wfsPastView = 'sku'; } catch { /* fresh start */ }
+let wfsPastQ = '';
+const wfsMoOpen = new Set(); // month keys open BY HAND; presence = open
+let wfsMoTouched = false;    // until a band is clicked, only the newest month is open
+let wfsMoKeys = [];          // month keys of the last render, newest first
+const wfsSkuOpen = new Set(); // upper-cased SKUs whose history is open
+
+function wfsCardMatch(s, q) {
+  if (!q) return true;
+  return [s.note, s.station, ...(s.items || []).flatMap(i => [i.sku, i.channelSku])]
+    .some(v => v && String(v).toLowerCase().includes(q));
+}
+const wfsMoKey = (iso) => String(iso || '').slice(0, 7); // YYYY-MM
+function wfsMoLabel(key) {
+  const d = new Date(`${key}-01T12:00:00`);
+  return Number.isNaN(d.getTime()) ? key : d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function wfsDateCard(s) {
+  if (String(s.key || s.id) === wfsEditKey) return wfsEditCard(s);
   const canFix = state && !state.captureOnly;
-  $('wfsPast').innerHTML = shipments.length === 0
-    ? '<p class="dlg-note">No shipments logged yet.</p>'
-    : shipments.map(s => String(s.key || s.id) === wfsEditKey ? wfsEditCard(s) : `
+  return `
       <div class="wfs-card" data-wfskey="${esc(s.key || s.id)}" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
         <div class="wfs-card-h">
           <b>${retDateUS(s.created_at.slice(0, 10))}</b>
@@ -10905,11 +10929,108 @@ async function renderWfsPast() {
             <span class="wfs-card-skus"><span class="mono" title="${esc(i.gtin || '')}">${esc(i.sku)}</span>${i.channelSku && i.channelSku.toUpperCase() !== String(i.sku).toUpperCase() ? `<span class="mono wfs-card-ch" title="Walmart channel SKU">${esc(i.channelSku)}</span>` : ''}</span>
             <span class="n">×${i.qty}</span>
           </div>`).join('')}
-      </div>`).join('');
+      </div>`;
 }
 
-// one delegated handler drives the correction forms inside the panel
+// one row per SKU: how much went to WFS, in how many shipments, when last
+function wfsSkuRollup(rows) {
+  const agg = new Map();
+  for (const s of rows) {
+    for (const i of s.items || []) {
+      const up = String(i.sku || '').toUpperCase();
+      if (!up) continue;
+      let a = agg.get(up);
+      if (!a) agg.set(up, a = { sku: i.sku, units: 0, count: 0, lastAt: '', lines: [] });
+      a.units += Number(i.qty) || 0;
+      a.count += 1;
+      if (String(s.created_at) > a.lastAt) a.lastAt = String(s.created_at);
+      a.lines.push({ at: String(s.created_at), station: s.station || '', qty: Number(i.qty) || 0 });
+    }
+  }
+  return [...agg.values()]
+    .sort((a, b) => b.lastAt.localeCompare(a.lastAt))
+    .map(a => {
+      const up = String(a.sku).toUpperCase();
+      const open = wfsSkuOpen.has(up);
+      return `
+    <div class="wfs-skurow ${open ? 'is-open' : ''}" data-rollup="${esc(up)}" title="Click for this SKU's shipments">
+      <div class="wfs-skurow-h"><span class="mono">${esc(a.sku)}</span><span class="wfs-skurow-tot mono">${a.units.toLocaleString()} units</span></div>
+      <div class="wfs-skurow-s">${a.count} shipment${a.count === 1 ? '' : 's'} · last ${retDateUS(a.lastAt.slice(0, 10))}</div>
+      ${open ? `<div class="wfs-skurow-hist">${a.lines.map(l => `
+        <div class="wfs-hist-line"><span class="mono wfs-hist-d">${retDateUS(l.at.slice(0, 10))}</span><span class="wfs-hist-st">${esc(l.station)}</span><span class="mono wfs-hist-n">×${l.qty}</span></div>`).join('')}</div>` : ''}
+    </div>`;
+    }).join('');
+}
+
+async function renderWfsPast() {
+  const shipments = await api.wfsList();
+  wfsPastByKey = new Map(shipments.map(s => [String(s.key || s.id), s]));
+  $('wfsPastCtl').hidden = shipments.length === 0;
+  $('wfsViewDate').classList.toggle('is-on', wfsPastView === 'date');
+  $('wfsViewSku').classList.toggle('is-on', wfsPastView === 'sku');
+  if (shipments.length === 0) { $('wfsPast').innerHTML = '<p class="dlg-note">No shipments logged yet.</p>'; return; }
+  const q = wfsPastQ.trim().toLowerCase();
+  const rows = shipments.filter(s => wfsCardMatch(s, q));
+  if (!rows.length) { $('wfsPast').innerHTML = `<p class="dlg-note">No shipment matches “${esc(wfsPastQ.trim())}”.</p>`; return; }
+  if (wfsPastView === 'sku') { $('wfsPast').innerHTML = wfsSkuRollup(rows); return; }
+  const months = new Map(); // YYYY-MM -> its shipments, order preserved (newest first)
+  for (const s of rows) {
+    const k = wfsMoKey(s.created_at);
+    if (!months.has(k)) months.set(k, []);
+    months.get(k).push(s);
+  }
+  wfsMoKeys = [...months.keys()];
+  $('wfsPast').innerHTML = wfsMoKeys.map((k, idx) => {
+    const group = months.get(k);
+    const units = group.reduce((a, s) => a + s.items.reduce((x, i) => x + (Number(i.qty) || 0), 0), 0);
+    const open = !!q // a filter opens every month it matched
+      || (wfsMoTouched ? wfsMoOpen.has(k) : idx === 0)
+      || group.some(s => String(s.key || s.id) === wfsEditKey); // never fold an open edit away
+    return `
+      <div class="wfs-mo ${open ? '' : 'is-closed'}" data-mo="${esc(k)}" title="${open ? 'Fold' : 'Open'} ${esc(wfsMoLabel(k))}">
+        <span class="wfs-mo-chev">▾</span><b>${esc(wfsMoLabel(k))}</b>
+        <span class="wfs-mo-tot mono">${group.length} shipment${group.length === 1 ? '' : 's'} · ${units.toLocaleString()} units</span>
+      </div>
+      ${open ? group.map(wfsDateCard).join('') : ''}`;
+  }).join('');
+}
+
+$('wfsViewDate').addEventListener('click', () => {
+  wfsPastView = 'date';
+  try { localStorage.setItem('wfsPastView', 'date'); } catch { /* per-view nicety only */ }
+  renderWfsPast();
+});
+$('wfsViewSku').addEventListener('click', () => {
+  wfsPastView = 'sku';
+  try { localStorage.setItem('wfsPastView', 'sku'); } catch { /* per-view nicety only */ }
+  renderWfsPast();
+});
+$('wfsPastQ').addEventListener('input', () => { wfsPastQ = $('wfsPastQ').value; renderWfsPast(); });
+
+// one delegated handler drives the month bands, the SKU rollups and the
+// correction forms inside the panel
 $('wfsPast').addEventListener('click', async (e) => {
+  const mo = e.target.closest('.wfs-mo');
+  if (mo) {
+    const k = mo.dataset.mo;
+    if (!wfsMoTouched) {
+      // the first hand toggle takes over from "newest month open": seed the
+      // set with the month that was open by default, so it stays as seen —
+      // clicking that open newest month instead folds it (set stays empty)
+      wfsMoTouched = true;
+      if (wfsMoKeys[0] && wfsMoKeys[0] !== k) { wfsMoOpen.add(wfsMoKeys[0]); wfsMoOpen.add(k); }
+    } else if (wfsMoOpen.has(k)) wfsMoOpen.delete(k);
+    else wfsMoOpen.add(k);
+    renderWfsPast();
+    return;
+  }
+  const roll = e.target.closest('.wfs-skurow');
+  if (roll) {
+    const up = roll.dataset.rollup;
+    if (wfsSkuOpen.has(up)) wfsSkuOpen.delete(up); else wfsSkuOpen.add(up);
+    renderWfsPast();
+    return;
+  }
   const card = e.target.closest('.wfs-card');
   if (!card) return;
   const key = card.dataset.wfskey;

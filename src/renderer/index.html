@@ -1443,6 +1443,16 @@
           <span class="wfs-past-h">Past shipments</span>
           <button id="wfsClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
         </div>
+        <!-- organizing the log (owner pick 2026-11-10, both options from the
+             wfs-past-organized sketches): a By date / By SKU toggle and a
+             filter; By date folds into month bands, By SKU rolls the log up -->
+        <div class="wfs-past-ctl" id="wfsPastCtl" hidden>
+          <div class="wfs-seg" role="tablist">
+            <button type="button" id="wfsViewDate" class="is-on">By date</button>
+            <button type="button" id="wfsViewSku">By SKU</button>
+          </div>
+          <input id="wfsPastQ" placeholder="Filter — SKU, note, station…" spellcheck="false" />
+        </div>
         <div id="wfsPast" class="wfs-past"></div>
       </div>
     </div>

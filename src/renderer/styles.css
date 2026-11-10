@@ -3485,6 +3485,33 @@ button.item-info { background: transparent; padding: 0; cursor: pointer; font-fa
 .wfs-card-skus { display: flex; flex-direction: column; min-width: 0; }
 .wfs-card-ch { font-size: 10.5px !important; color: var(--badge-blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* organizing the past-shipments log (owner pick 2026-11-10, both options):
+   the By date / By SKU toggle + filter row, the foldable month bands and
+   the per-SKU rollup rows */
+.wfs-past-ctl { display: flex; flex-direction: column; gap: 7px; margin-bottom: 9px; }
+.wfs-seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: var(--surface); }
+.wfs-seg button { flex: 1; font: 600 11px var(--font); padding: 5px 0; border: none; background: none; color: var(--muted); cursor: pointer; }
+.wfs-seg button.is-on { background: var(--accent); color: #fff; }
+#wfsPastQ { font-size: 11.5px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); width: 100%; }
+#wfsPastQ::placeholder { color: var(--faint); }
+.wfs-mo { display: flex; align-items: baseline; gap: 7px; cursor: pointer; user-select: none; padding: 6px 9px; margin: 2px 0 8px; border-radius: 7px; background: var(--surface); border: 1px solid var(--border); position: sticky; top: 0; z-index: 2; }
+.wfs-mo:hover { background: var(--accent-soft); }
+.wfs-mo b { font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; }
+.wfs-mo-chev { font-size: 9px; color: var(--faint); width: 11px; transition: transform 0.12s; }
+.wfs-mo.is-closed .wfs-mo-chev { transform: rotate(-90deg); }
+.wfs-mo-tot { margin-left: auto; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.wfs-skurow { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; cursor: pointer; user-select: none; }
+.wfs-skurow:hover, .wfs-skurow.is-open { border-color: var(--accent); }
+.wfs-skurow-h { display: flex; align-items: baseline; gap: 8px; }
+.wfs-skurow-h .mono { font-size: 12px; font-weight: 600; }
+.wfs-skurow-tot { margin-left: auto; font-size: 12px !important; color: var(--accent); white-space: nowrap; }
+.wfs-skurow-s { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.wfs-skurow-hist { margin-top: 8px; border-top: 1px solid var(--grid); padding-top: 6px; }
+.wfs-hist-line { display: flex; gap: 8px; font-size: 11px; padding: 2px 0; }
+.wfs-hist-d { color: var(--muted); }
+.wfs-hist-st { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfs-hist-n { margin-left: auto; font-weight: 600; }
+
 /* fixing a past shipment in place (owner 2026-11-10): the card flips into
    a small correction form — SKU + qty per line, note, Save/Cancel/Delete */
 .wfs-card-edit { margin-left: 2px; opacity: 0; }
