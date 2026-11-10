@@ -1664,6 +1664,13 @@ function showPage(page) {
       stockPendingSearch = '';
       $('stockSearch').value = pre;
       $('stockSearchClear').hidden = !pre;
+      // every entry to the tab starts in the organized order (owner
+      // 2026-11-10, after the third "still unorganized" screenshot: an
+      // In-stock header click — the old default sort, so it's muscle
+      // memory — made the whole visit's sheet rank by count and stuck for
+      // the session). A header click still sorts for a look; it just
+      // never outlives the visit.
+      if (switching) stockSort = { key: 'sku', dir: 1 };
       loadStockViews();
       loadStock().then(() => {
         // the load takes a beat: never yank focus from a field the user has
