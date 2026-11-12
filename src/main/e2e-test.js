@@ -1805,8 +1805,14 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('claims: a name with nothing usable is refused', upBad.status === 400, upBad.status);
       const sf = require('./claims.js')._test.sanitizeFolder;
       check('claims: folder names cannot leave the claims folder',
-        sf('../../Windows/x') === 'Windows x' && sf('..\\evil') === 'evil' && sf('con') === 'con_' && sf('  Box 3.  ') === 'Box 3',
-        [sf('../../Windows/x'), sf('..\\evil'), sf('con'), sf('  Box 3.  ')]);
+        sf('../../Windows/x') === 'Windows x' && sf('..\\evil') === 'evil' && sf('con') === '_con' && sf('con.box') === '_con.box' && sf('  Box 3.  ') === 'Box 3',
+        [sf('../../Windows/x'), sf('..\\evil'), sf('con'), sf('con.box'), sf('  Box 3.  ')]);
+      // Windows/Mac folders ignore case: "damaged pallet 11 12" is the same
+      // folder, so numbering must carry on, not restart and overwrite _1
+      const upCase = await (await fetch(`${cbase}/photo?t=${crun.token}&po=${encodeURIComponent('damaged pallet 11 12')}`, { method: 'POST', body: jpeg })).json();
+      check('claims: a name differing only in case reuses the folder and its count',
+        upCase.ok && upCase.folder === 'Damaged pallet 11 12' && /^Damaged pallet 11 12_\d{4}-\d{4}_11\.jpg$/.test(upCase.name)
+          && fs.existsSync(cpath.join(cdir, 'Damaged pallet 11 12', upCase.name)), upCase);
       const cpage = await (await fetch(`${cbase}/up?t=${crun.token}`)).text();
       check('claims: phone page lists today\'s returns as tap chips',
         cpage.includes('Upload Photos') && cpage.includes('119990000000042') && cpage.includes('TEST-SKU'), cpage.length);

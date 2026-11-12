@@ -36,17 +36,30 @@ function sanitizePo(po) {
 // and most punctuation survive; path separators and characters Windows
 // refuses become spaces, so the result can never climb out of the claim
 // photos folder. '' means nothing usable was typed.
-const WIN_RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
+// Windows also refuses these with any extension ("con.box")
+const WIN_RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
 function sanitizeFolder(name) {
   let s = String(name || '').normalize('NFC')
     .replace(/[\x00-\x1f<>:"/\\|?*]/g, ' ')
     .replace(/\s+/g, ' ')
-    .replace(/^[. ]+/, '')
-    .slice(0, 60)
+    .replace(/^[. ]+/, '');
+  s = Array.from(s).slice(0, 60).join('') // never split an emoji in half
     .replace(/[. ]+$/, '');
   if (!s) return '';
-  if (WIN_RESERVED.test(s)) s += '_';
+  if (WIN_RESERVED.test(s)) s = `_${s}`;
   return s;
+}
+
+// "listing" after "Listing" reuses the existing folder's spelling: one folder
+// and one count on every OS (Windows/Mac ignore case, Linux doesn't)
+function resolveFolder(dir, folder) {
+  const want = folder.toLowerCase();
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      if (n.toLowerCase() === want && fs.statSync(path.join(dir, n)).isDirectory()) return n;
+    }
+  } catch { /* first photo ever: nothing to match */ }
+  return folder;
 }
 
 // Walmart PO#s are all digits; only those folders carry the 25 MB case cap
@@ -122,13 +135,15 @@ function stamp(d) {
 }
 
 // numbering continues per PO across sends (and across days): a second batch
-// for the same PO picks up at _3, _4… — max+1, so deletions can't collide
+// for the same PO picks up at _3, _4… — max+1, so deletions can't collide.
+// Case-blind: Windows/Mac folders are, so "Listing" and "listing" are one
+// folder and must share one count (or a same-minute send overwrites)
 function nextIndex(dir, po) {
   let max = 0;
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return 1; }
   for (const n of names) {
-    if (!n.startsWith(`${po}_`)) continue;
+    if (!n.toLowerCase().startsWith(`${po}_`.toLowerCase())) continue;
     const m = n.match(/_(\d+)\.[A-Za-z0-9]+$/);
     if (m) max = Math.max(max, Number(m[1]));
   }
@@ -333,7 +348,7 @@ function phonePage(token, po, pos) {
     <div class="lbl" style="margin-bottom:8px">Today's returns — tap one</div>
     <div style="display:flex;flex-direction:column;gap:8px">${chips || '<div style="font-size:13px;color:#9b9a97">No returns received today yet.</div>'}</div>
     <button class="typelink" id="typeLink">or type a PO# or folder name…</button>
-    <input id="poIn" placeholder="PO# or any folder name" autocomplete="off" spellcheck="false" autocapitalize="words" enterkeyhint="done">
+    <form id="poForm" action="#"><input id="poIn" placeholder="PO# or any folder name" autocomplete="off" spellcheck="false" autocapitalize="words" enterkeyhint="go"></form>
   </div>
   <div class="lock" id="lock"><span class="po" id="lockPo"></span><button id="chg">change</button></div>
   <button id="camBtn"><span class="big">&#128247;</span>Take photo</button>
@@ -368,11 +383,16 @@ function phonePage(token, po, pos) {
     if (c) lock(c.dataset.po);
   });
   $('typeLink').addEventListener('click', function () { $('poIn').classList.add('on'); $('poIn').focus(); });
-  $('poIn').addEventListener('keydown', function (e) {
+  // a form submit, not a keydown: Android keyboards composing a word may not
+  // send a plain Enter keydown, but Go/Enter always submits the form
+  $('poForm').addEventListener('submit', function (e) {
+    e.preventDefault();
     // same clean-up the server does, so the name shown is the folder made
-    // (doubled backslashes: this script lives inside a template literal)
-    var v = e.target.value.replace(/[\\x00-\\x1f<>:"\\/\\\\|?*]/g, ' ').replace(/\\s+/g, ' ').replace(/^[. ]+/, '').slice(0, 60).replace(/[. ]+$/, '');
-    if (e.key === 'Enter' && v) { e.preventDefault(); e.target.blur(); lock(v); }
+    // (doubled backslashes: this script lives inside a template literal);
+    // the server's answer (j.folder) is what the done screen shows
+    var v = $('poIn').value.replace(/[\\x00-\\x1f<>:"\\/\\\\|?*]/g, ' ').replace(/\\s+/g, ' ').replace(/^[. ]+/, '').slice(0, 60).replace(/[. ]+$/, '');
+    if (!v) return;
+    $('poIn').blur(); lock(v);
   });
   $('chg').addEventListener('click', unlock);
   $('camBtn').addEventListener('click', function () { $('camIn').click(); });
@@ -614,8 +634,9 @@ function start(opts) {
 
     if (req.method === 'POST' && u.pathname === '/photo') {
       if (!tokenOk(token, t)) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"expired"}'); return; }
-      const folder = sanitizeFolder(u.searchParams.get('po'));
-      if (!folder) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"type a PO# or folder name"}'); return; }
+      const typed = sanitizeFolder(u.searchParams.get('po'));
+      if (!typed) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"type a PO# or folder name"}'); return; }
+      const folder = resolveFolder(dir, typed);
       const fdir = path.join(dir, folder);
       const chunks = [];
       let size = 0, dead = false;
