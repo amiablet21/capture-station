@@ -7662,7 +7662,7 @@ function retLogRowHtml(r, i, ii, un, num) {
           : `<span class="ret-by-sub" title="Graded at ${esc(r._st)}">${esc(retSyncInfo && r._st === retSyncInfo.station ? 'this station' : r._st)}</span>`) : ''}</td>
       <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note, r.source)}</td>
       <td class="cell-actions"><span class="ret-log-act">
-        ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
+        <button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number || '')}" title="${r.order_number ? 'Upload photos for this PO — they go in a folder named by the PO#' : 'Upload photos — type any folder name on the phone'}">${ICONS.camera}</button>
         <button class="btn-icon is-danger ret-log-del-btn" title="Delete this return">${ICONS.trash}</button>
       </span></td>
     </tr>`;
@@ -13312,8 +13312,9 @@ refresh().then(() => focusScan());
 initBrowserPane();
 
 /* ---------- Upload Photos (claim photos) ---------- */
-// Opened from the 📷 on a returns-log row: QR popover locked to that PO#.
-// Photos land in Documents\Capture Station\claim photos (5-day shelf).
+// Opened from the 📷 on a returns-log row: QR popover locked to that PO#, or
+// open (type any folder name on the phone) when the row has no PO#. Photos
+// land in Documents\Capture Station\claim photos\<PO# or name> (5-day shelf).
 // (The generic corner button was retired 2026-08-12 — redundant per owner.)
 
 async function openClaimsPop(po) {
@@ -13327,7 +13328,7 @@ async function openClaimsPop(po) {
     $('claimsErr').hidden = true;
     $('claimsQr').src = res.qr;
   }
-  $('claimsSub').innerHTML = po ? `<span class="mono">${esc(po)}</span>` : '';
+  $('claimsSub').innerHTML = po ? `📁 <span class="mono">${esc(po)}</span>` : 'Type a PO# or any folder name on the phone';
   pop.hidden = false;
 }
 
@@ -13342,7 +13343,7 @@ document.addEventListener('click', (e) => {
 });
 
 api.on('claims:uploaded', ({ po, name, todayCount }) => {
-  toast(`Photo saved: ${name}`, 3000);
+  toast(`Photo saved in ${po}: ${name}`, 3000);
 });
 
 /* ---------- stock columns: drag a header to rearrange ---------- */
