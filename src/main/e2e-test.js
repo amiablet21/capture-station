@@ -256,8 +256,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
         && targets.scrap === 'S25-128GB-NAVY-SCRAP' && targets.used === '',
       targets);
     db.saveConditionMapping('S25-128GB-NAVY', 'openbox', 'ALT-OPENBOX-BIN');
-    targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
+    // the manual target must be a live listing: a saved mapping whose
+    // target left the inventory is dead and falls through (2026-09-21)
+    targets = db.resolveConditionTargets('S25-128GB-NAVY', [...inv, 'ALT-OPENBOX-BIN']);
     check('manual mapping beats auto-derivation', targets.openbox === 'ALT-OPENBOX-BIN', targets);
+    targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
+    check('a dead manual mapping (target gone) falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
     db.deleteConditionMapping('S25-128GB-NAVY', 'openbox');
     targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
     check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
@@ -365,8 +369,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
       res);
     await exec('loadRetPast()');
     await sleep(250);
-    // history = the RETURNS-2 sheet (13-column header incl. Price, Dispute
-    // Settlement + actions), one row per ITEM LINE (the qty-2 return = 1
+    // history = the RETURNS-2 sheet (12-column header: gutter, the 10 data
+    // columns incl. Price, actions — the Dispute Settlement column left the
+    // sheet; old settle values still import and export), one row per ITEM
+    // LINE (the qty-2 return = 1
     // row, Units column carries the 2), condition dot, edit/delete per
     // row, and the excel-style entry row pinned on top
     const ledgerBits = await exec(`[
@@ -381,12 +387,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
       (document.querySelector('#retPastBox .ret-cell-price') || {}).textContent || '',
     ]`);
     check('history renders the RETURNS-2 sheet, one row per line',
-      ledgerBits[0] === true && ledgerBits[1] === 13
+      ledgerBits[0] === true && ledgerBits[1] === 12
         && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2'
         && ledgerBits[8] === '189.99',
       ledgerBits);
     check('every column is in-place editable, delete stays, no idle inputs',
-      ledgerBits[4] === 11 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
+      ledgerBits[4] === 10 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
     // 24c-bis. the entry row: a singleton that SURVIVES a re-render, with
     // an input in EVERY column (owner 2026-09-09, "type in any column")
     const entryBits = await exec(`[
@@ -396,9 +402,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
       document.querySelectorAll('#retPastBox tr.ws-row .ws-in').length,
       $('ws_date').value,
     ]`);
-    check('entry row: PO cell present, survives re-render, 10 typable columns, date prefills today',
+    // 9 typable cells: every data column but Condition, which is a pill
+    check('entry row: PO cell present, survives re-render, 9 typable columns, date prefills today',
       entryBits[0] === true && entryBits[1] === true && entryBits[2] === 'KEEP-ME'
-        && entryBits[3] === 10 && /^\d{2}\/\d{2}\/\d{4}$/.test(entryBits[4]),
+        && entryBits[3] === 9 && /^\d{2}\/\d{2}\/\d{4}$/.test(entryBits[4]),
       entryBits);
     await exec(`$('wsPo').value = ''; 0;`);
     // 24c-ter. NO-POPUP receiving (owner 2026-09-10): Enter in the row
@@ -471,7 +478,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     }
     check('the second Enter saves the matched receive with the orderId',
       inlineGot && inlineGot.orderId === 'oid-77' && inlineGot.unmatched === false
-        && inlineGot.items[0].price === 149.99 && inlineGot.items[0].settle === 149.99,
+        && inlineGot.items[0].price === 149.99,
       inlineGot);
     // the condition pill opens its 4-pill menu right in the row
     await exec(`$('ws_sku').value = 'S25-128GB-NAVY'; wsRenderCond(); document.querySelector('#wsCond').click(); 0;`);
@@ -617,14 +624,15 @@ module.exports = async function run({ app, win, db, clipboard }) {
         && reGot.price === 189.99 && reGot.receivedBy === 'IM',
       reGot);
     await exec(`retEditApi = window.__reOrig; 0;`);
-    // the condition cell edits through a compact 4-pill menu
+    // the condition cell edits through a compact pill menu that FLOATS over
+    // the table (.ret-emenu-pop on <body>, owner pick 2026-09-21)
     await exec(`loadRetPast()`);
     await sleep(250);
     await exec(`document.querySelector('#retPastBox tr.ret-past-tr td[data-edit="condition"]').click()`);
     await sleep(150);
     const condMenu = await exec(`[
-      document.querySelectorAll('#retPastBox .ret-emenu .ret-emi').length,
-      (document.querySelector('#retPastBox .ret-emi.is-sel') || { dataset: {} }).dataset.cond || '',
+      document.querySelectorAll('.ret-emenu-pop .ret-emi').length,
+      (document.querySelector('.ret-emenu-pop .ret-emi.is-sel') || { dataset: {} }).dataset.cond || '',
     ]`);
     check('the condition cell edits through the 5-pill menu, current one marked',
       condMenu[0] === 5 && condMenu[1] === 'openbox', condMenu);
@@ -999,6 +1007,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
         headers: head ? head.textContent : '',
         summary: $('stockSummary').textContent,
         hiddenBtns: [$('newSkuBtn').hidden, $('recvBtn').hidden],
+        actionsBtn: !!$('stockActionsBtn') && !$('stockActionsBtn').hidden,
+        wfsItem: (() => { const b = document.querySelector('#stockActionsDlg [data-act="wfs"]'); return !!b && !b.hidden; })(),
       };
       stockWfsActive = false; stockCache = null; renderStockChips();
       return out;
@@ -1009,10 +1019,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
       && /At WFS/.test(wfsView.headers) && /At warehouse/.test(wfsView.headers)
       && /WFS FULFILLED/.test(wfsView.summary), wfsView);
     // WFS Shipments came back 2026-09-09 (owner asked for exactly what it
-    // does); New SKU and Receiving stay tucked away
-    check('stock toolbar: New SKU / Receiving hidden, WFS Shipments visible',
+    // does) and sits in the Actions ▾ menu since v1.28.25; New SKU and
+    // Receiving stay tucked away
+    check('stock toolbar: New SKU / Receiving hidden, WFS Shipments in the Actions menu',
       wfsView.hiddenBtns[0] === true && wfsView.hiddenBtns[1] === true
-        && wfsView.hiddenBtns[2] === false, wfsView);
+        && wfsView.actionsBtn === true && wfsView.wfsItem === true, wfsView);
 
     // 34. stock minimums: pure crossing engine, capture-only refusal, Low view
     const lows = db.lowStockCrossings([
@@ -1038,7 +1049,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
       renderStock();
       const out = {
         // the Low stock CHIP was removed (owner request 2026-08-06); the red
-        // Available tint and Min editing stay
+        // Available tint stays. The Min column left the grid in v1.31.18
+        // (owner: "unnecessary") — minimums still drive the tint
         chipGone: !document.querySelector('#stockChips [data-view="low"]'),
         lowRed: !!document.querySelector('#stockList .stock-avail.is-low'),
         minBtn: !!document.querySelector('#stockList .stock-min-btn'),
@@ -1046,8 +1058,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
       stockCache = null; renderStockChips();
       return out;
     })()`);
-    check('low stock: chip removed, red Available tint + Min editing stay',
-      lowView.chipGone === true && lowView.lowRed === true && lowView.minBtn === true,
+    check('low stock: chip removed, red Available tint stays, no Min column',
+      lowView.chipGone === true && lowView.lowRed === true && lowView.minBtn === false,
       lowView);
 
     // 35. day-over-day sales deltas (the Sales tab itself was removed; its
@@ -1102,8 +1114,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
       res && res.open === true && res.sku === 'sh-test-sku' && res.items === 2
         && res.acts[0] === 'SET' && res.acts[1] === 'RETURNED'
         && /^to 4/.test(res.text[0]) && /^2 units \(PO#: PO-77\)/.test(res.text[1])
-        && res.who[0] === 'OFFICE' && res.who[1] === 'FRONT DESK RS'
-        && res.pcs.join(',') === 'Office,Front desk',
+        // computer names fold to the station form ("Front desk" ->
+        // FRONT-DESK) so a machine is listed once (owner 2026-09-24)
+        && res.who[0] === 'OFFICE' && res.who[1] === 'FRONT-DESK RS'
+        && res.pcs.join(',') === 'OFFICE,FRONT-DESK',
       res);
     // the action filter: tick RETURNED, only that row stays
     res = await exec(`(() => { shDlg.acts.add('returned'); renderStockHistory(); return [...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent); })()`);
@@ -1254,7 +1268,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       retTools: (g('e2e:orig-ret').querySelector('.sh-tools') || {}).textContent || '', fixUndone: g('e2e:fix-1').classList.contains('is-deleted') }; })()`);
     check('stock history rows: DELETED pill, the original struck through with a clickable "deleted" mark and no tools, the DELETED line pointing back, the return line pointing to Returns',
       res && res.acts.includes('DELETED') && res.origDeleted === true && res.origMark === 'deleted' && res.origTools === false
-        && /deleted the entry from 9\/21 by STOCK ROOM/.test(res.delBack) && /edit in Returns/.test(res.retTools) && res.fixUndone === true,
+        && /deleted the entry from 9\/21 by STOCK-ROOM/.test(res.delBack) && /edit in Returns/.test(res.retTools) && res.fixUndone === true,
       res);
     // the jump: clicking the DELETED line's pointer flashes the original
     res = await exec(`(() => { document.querySelector('#stockHistBody .sh-line[data-gid="e2e:del-orig"] .sh-goto').click(); return document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add"]').classList.contains('is-flash'); })()`);
@@ -1278,7 +1292,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       document.querySelectorAll('#retPastBox thead .col-grip').length,
     ]`);
     check('returns log: shared width grip + column grips',
-      retGrips[0] === true && retGrips[1] === 11, retGrips);
+      retGrips[0] === true && retGrips[1] === 10, retGrips);
 
     // 37. shipped-orders file import: header detection ignores the "Update
     // Tracking Number" column, per-PO dedupe, bulk fill + conflict report
