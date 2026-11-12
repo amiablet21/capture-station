@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Upload Photos — no PO# needed, one folder per case</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: auto; }
+  body { padding: 0; margin: 0; gap: 0; overflow: auto; display: block; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 8px 16px; background: var(--surface-2); border-bottom: 1px solid var(--border); line-height: 1.55; }
+  .try b { color: var(--text); }
+  .stage { padding: 22px 20px 28px; display: flex; gap: 22px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+  .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .step { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+
+  /* ---------- phone frame ---------- */
+  .phone { width: 272px; height: 560px; background: var(--text); border-radius: 30px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,0.26); }
+  .pscreen { width: 100%; height: 100%; background: var(--canvas); border-radius: 21px; overflow: hidden; display: flex; flex-direction: column; }
+  .pbar { background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; padding: 14px 14px 11px; display: flex; align-items: center; gap: 8px; }
+  .pbar .back { font-size: 15px; opacity: .85; }
+  .pbody { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  .plabel { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); display: flex; align-items: center; gap: 6px; }
+  .plabel .why { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--faint); }
+
+  .pochip { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 7px 10px; position: relative; }
+  .pochip .po { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .pochip .sk { font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+  .pochip .tm { position: absolute; right: 10px; top: 8px; font-size: 9px; color: var(--faint); }
+  .pochip.nopo .po { font-family: var(--font); color: var(--badge-yellow-text); font-size: 11.5px; }
+  .tag { display: inline-block; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 999px; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); vertical-align: 1px; margin-left: 4px; }
+  .ptype { font-size: 10.5px; color: var(--muted); text-align: center; text-decoration: underline; padding: 1px; }
+
+  .or { display: flex; align-items: center; gap: 8px; font-size: 9.5px; color: var(--faint); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin: 2px 0; }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .fchip { display: flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 8px 9px; font-size: 11.5px; font-weight: 500; }
+  .fchip .fi { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex: 0 0 auto; }
+  .fchip .sub { display: block; font-size: 9px; color: var(--faint); font-weight: 400; line-height: 1.2; }
+  .fchip.new { border-style: dashed; color: var(--accent); justify-content: center; font-weight: 600; grid-column: 1 / -1; padding: 7px; }
+
+  /* destination bar (locked) */
+  .dest { border-radius: 12px; padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; }
+  .dest.case { background: var(--accent-soft); }
+  .dest.named { background: var(--badge-blue-bg); }
+  .dest .top { display: flex; align-items: center; gap: 7px; }
+  .dest .kind { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  .dest.case .kind { color: var(--accent-soft-text); }
+  .dest.named .kind { color: var(--badge-blue-text); }
+  .dest .chg { margin-left: auto; font-size: 10px; color: var(--muted); text-decoration: underline; }
+  .dest .name { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent-soft-text); }
+  .dest .path { font-family: var(--mono); font-size: 9px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meter { height: 4px; border-radius: 99px; background: rgba(6,95,70,.14); overflow: hidden; margin-top: 2px; }
+  .meter i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+  .mtxt { font-size: 9px; color: var(--accent-soft-text); display: flex; justify-content: space-between; }
+
+  .nameIn { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1.5px solid var(--badge-blue-text); border-radius: 8px; padding: 6px 8px; box-shadow: 0 0 0 3px rgba(31,108,159,.12); }
+  .nameIn span { font-size: 12.5px; font-weight: 600; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nameIn .caret { display: inline-block; width: 1.5px; height: 14px; background: var(--badge-blue-text); margin-left: 1px; vertical-align: -2px; }
+  .nameIn .pen { flex: 0 0 auto; font-size: 11px; color: var(--badge-blue-text); }
+  .sugg { display: flex; gap: 5px; flex-wrap: wrap; }
+  .sugg span { font-size: 9.5px; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+
+  .pcam { border: 2px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-text); font-size: 13px; font-weight: 600; padding: 15px 10px; text-align: center; }
+  .pcam .big { font-size: 20px; display: block; margin-bottom: 2px; }
+  .pshots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pshot { width: 52px; height: 52px; border-radius: 9px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+  .pshot::after { content: '×'; position: absolute; top: 2px; right: 3px; width: 14px; height: 14px; border-radius: 50%; background: rgba(47,52,55,.6); color: #fff; font-size: 10px; line-height: 14px; text-align: center; }
+  .s1 { background: linear-gradient(140deg, #cfd6d2 0%, #8e9a95 60%, #5f6b66 100%); }
+  .s2 { background: linear-gradient(200deg, #e8e2d6 0%, #b8ab94 70%, #8a7d66 100%); }
+  .s3 { background: linear-gradient(120deg, #d9dee6 0%, #9aa6b8 70%, #6c788a 100%); }
+  .s4 { background: linear-gradient(160deg, #d6cfc4 0%, #a39582 65%, #6f6252 100%); }
+  .psend { margin-top: auto; background: var(--accent); color: #fff; border: none; border-radius: 11px; font-family: var(--font); font-size: 14px; font-weight: 600; padding: 12px; text-align: center; }
+  .psend .to { display: block; font-size: 10px; font-weight: 500; opacity: .85; font-family: var(--mono); }
+  .pnote { font-size: 9.5px; color: var(--faint); text-align: center; line-height: 1.4; }
+
+  .okv { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 0 6px; }
+  .okv .mark { width: 50px; height: 50px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 26px; display: flex; align-items: center; justify-content: center; }
+  .okv h3 { font-size: 15px; font-weight: 600; }
+  .okv .fold { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; }
+  .okv .fold.named { color: var(--badge-blue-text); }
+  .okv .meta { font-size: 10.5px; color: var(--muted); }
+  .btn2 { width: 100%; border-radius: 11px; font-size: 13px; font-weight: 600; padding: 10px; text-align: center; }
+  .btn2.pri { background: var(--accent); color: #fff; }
+  .btn2.sec { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
+  /* ---------- folder explorer ---------- */
+  .folder { width: 640px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 16px rgba(47,52,55,0.06); }
+  .fhead { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+  .fhead .crumbs { font-family: var(--mono); font-size: 10.5px; }
+  .fhead .crumbs b { color: var(--text); }
+  .fcols { display: grid; grid-template-columns: 1fr 96px 132px; padding: 5px 14px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); border-bottom: 1px solid var(--border); }
+  .fr { display: grid; grid-template-columns: 1fr 96px 132px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--border-soft); font-size: 11.5px; }
+  .fr .nm { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .fr .nm .tw { width: 10px; color: var(--faint); font-size: 9px; flex: 0 0 auto; }
+  .fr .nm .mono { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fr .nm .plain { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fr .c2, .fr .c3 { font-size: 10px; color: var(--muted); text-align: right; white-space: nowrap; }
+  .fr.dir { background: var(--surface); }
+  .fr.dir .mono { font-weight: 600; }
+  .fr.file { padding-left: 38px; background: var(--surface-2); }
+  .fr.file .mono { font-weight: 400; color: var(--muted); font-size: 10.5px; }
+  .fr.file .thumb { width: 20px; height: 20px; border-radius: 4px; flex: 0 0 auto; }
+  .fr.dying { opacity: .45; }
+  .ficon { width: 18px; height: 15px; border-radius: 3px; position: relative; flex: 0 0 auto; }
+  .ficon::before { content: ''; position: absolute; left: 0; top: -3px; width: 8px; height: 4px; border-radius: 2px 2px 0 0; background: inherit; }
+  .ficon.case { background: #6fb59a; }
+  .ficon.named { background: #7fb0d4; }
+  .ficon.nopo { background: #e0c272; }
+  .kchip { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 999px; flex: 0 0 auto; }
+  .kchip.case { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .kchip.named { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .kchip.nopo { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .budget { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .budget .bar { width: 36px; height: 4px; border-radius: 99px; background: var(--border); overflow: hidden; }
+  .budget .bar i { display: block; height: 100%; background: var(--accent); }
+  .rules { padding: 10px 14px; font-size: 10.5px; color: var(--muted); background: var(--surface-2); border-top: 1px solid var(--border); line-height: 1.55; }
+  .rules div { display: flex; gap: 7px; align-items: baseline; }
+  .rules div + div { margin-top: 4px; }
+  .rules b { color: var(--text); font-weight: 600; }
+</style></head>
+<body>
+  <div class="try"><b>What changes:</b> the phone no longer forces a PO#. Pick a <b>return</b> (its photos go in a folder named by the PO#), a <b>return logged without a PO#</b>, or a <b>named folder</b> (Inbound damage, Listing, Warehouse… or type your own). Every send lands in <b>its own subfolder</b> of <span class="mono">claim photos</span>, so one case's photos are never mixed with another's.</div>
+
+  <div class="stage">
+    <!-- ① pick -->
+    <div class="col">
+      <span class="step">① Phone opens — pick where photos go</span>
+      <div class="phone"><div class="pscreen">
+        <div class="pbar">Upload Photos</div>
+        <div class="pbody">
+          <span class="plabel">Return case <span class="why">· folder = PO#</span></span>
+          <div class="pochip"><span class="po">119120775455737</span><span class="sk">S26-ULTRA-512GB-BLACK</span><span class="tm">10:42a</span></div>
+          <div class="pochip"><span class="po">119120771799124</span><span class="sk">S25-256GB-SILVERSHADOW</span><span class="tm">10:18a</span></div>
+          <div class="pochip nopo"><span class="po">No PO# <span class="tag">log #1</span></span><span class="sk">X133-64GB-GRAY → OPEN-BOX</span><span class="tm">9:05a</span></div>
+          <span class="ptype">or type a PO#…</span>
+
+          <div class="or">or no PO#</div>
+
+          <span class="plabel">Save to a folder</span>
+          <div class="fgrid">
+            <div class="fchip"><span class="fi" style="background:#FDEBEC">📦</span><span>Inbound damage<span class="sub">used today</span></span></div>
+            <div class="fchip"><span class="fi" style="background:#E1F3FE">🏷️</span><span>Listing</span></div>
+            <div class="fchip"><span class="fi" style="background:#FBF3DB">🏬</span><span>Warehouse</span></div>
+            <div class="fchip"><span class="fi" style="background:#EDF3EC">🗂️</span><span>Misc</span></div>
+            <div class="fchip new">＋ New folder…</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ② case -->
+    <div class="col">
+      <span class="step">② Return case — locked to the PO# folder</span>
+      <div class="phone"><div class="pscreen">
+        <div class="pbar"><span class="back">‹</span>Upload Photos</div>
+        <div class="pbody">
+          <div class="dest case">
+            <div class="top"><span class="kind">Return case</span><span class="chg">change</span></div>
+            <span class="name">119120775455737</span>
+            <span class="path">claim photos › 119120775455737 ›</span>
+            <div class="meter"><i style="width:22%"></i></div>
+            <div class="mtxt"><span>2 already in folder · 5.4 MB</span><span>of 25 MB case limit</span></div>
+          </div>
+          <div class="pcam"><span class="big">📷</span>Take photo</div>
+          <div class="pshots"><div class="pshot s1"></div><div class="pshot s2"></div><div class="pshot s3"></div></div>
+          <div class="pnote">tap a photo to remove it before sending</div>
+          <div class="psend">Send 3 photos<span class="to">→ 📁 119120775455737</span></div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ③ named -->
+    <div class="col">
+      <span class="step">③ No PO# — named folder, rename any time</span>
+      <div class="phone"><div class="pscreen">
+        <div class="pbar"><span class="back">‹</span>Upload Photos</div>
+        <div class="pbody">
+          <div class="dest named">
+            <div class="top"><span class="kind">Folder</span><span class="chg">change</span></div>
+            <div class="nameIn"><span>FedEx pallet – damaged<i class="caret"></i></span><span class="pen">✎</span></div>
+            <span class="path">claim photos › FedEx pallet – damaged ›</span>
+          </div>
+          <div class="sugg"><span>+ today's date</span><span>+ carrier</span><span>+ SKU…</span></div>
+          <div class="pcam"><span class="big">📷</span>Take photo</div>
+          <div class="pshots"><div class="pshot s4"></div><div class="pshot s2"></div><div class="pshot s1"></div><div class="pshot s3"></div></div>
+          <div class="psend">Send 4 photos<span class="to">→ 📁 FedEx pallet – damaged</span></div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ④ done -->
+    <div class="col">
+      <span class="step">④ Sent — stay in the folder or switch</span>
+      <div class="phone"><div class="pscreen">
+        <div class="pbar">Upload Photos</div>
+        <div class="pbody">
+          <div class="okv">
+            <div class="mark">✓</div>
+            <h3>4 photos saved</h3>
+            <span class="fold named">📁 FedEx pallet – damaged</span>
+            <span class="meta">on RETURNS-ROOM-PC · 4 photos in this folder now</span>
+          </div>
+          <div class="btn2 pri">Add more to this folder</div>
+          <div class="btn2 sec">Pick another folder or PO#</div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="stage" style="padding-top:0">
+    <div class="col">
+      <span class="step">⑤ On the PC — one subfolder per case / reason</span>
+      <div class="folder">
+        <div class="fhead">📂 <span class="crumbs">Documents › Capture Station › <b>claim photos</b></span></div>
+        <div class="fcols"><span>Name</span><span style="text-align:right">Size</span><span style="text-align:right">Modified</span></div>
+
+        <div class="fr dir"><span class="nm"><span class="tw">▾</span><span class="ficon case"></span><span class="mono">119120775455737</span><span class="kchip case">case</span></span><span class="c2 budget"><span class="bar"><i style="width:34%"></i></span>8.5 MB</span><span class="c3">today 10:47a</span></div>
+        <div class="fr file"><span class="nm"><span class="thumb s1"></span><span class="mono">119120775455737_1112-1044_1.png</span></span><span class="c2">2.6 MB</span><span class="c3">10:44a</span></div>
+        <div class="fr file"><span class="nm"><span class="thumb s2"></span><span class="mono">119120775455737_1112-1044_2.png</span></span><span class="c2">2.8 MB</span><span class="c3">10:44a</span></div>
+        <div class="fr file"><span class="nm"><span class="thumb s3"></span><span class="mono">119120775455737_1112-1047_3.png</span></span><span class="c2">1.6 MB</span><span class="c3">10:47a</span></div>
+        <div class="fr file"><span class="nm"><span class="thumb s2"></span><span class="mono">119120775455737_1112-1047_4.png</span></span><span class="c2">1.5 MB</span><span class="c3">10:47a</span></div>
+
+        <div class="fr dir"><span class="nm"><span class="tw">▸</span><span class="ficon case"></span><span class="mono">119120771799124</span><span class="kchip case">case</span></span><span class="c2 budget"><span class="bar"><i style="width:20%"></i></span>5.1 MB</span><span class="c3">today 10:21a</span></div>
+
+        <div class="fr dir"><span class="nm"><span class="tw">▾</span><span class="ficon named"></span><span class="plain">FedEx pallet – damaged</span><span class="kchip named">folder</span></span><span class="c2">9.8 MB</span><span class="c3">today 11:05a</span></div>
+        <div class="fr file"><span class="nm"><span class="thumb s4"></span><span class="mono">FedEx pallet – damaged_1112-1105_1.png</span></span><span class="c2">2.4 MB</span><span class="c3">11:05a</span></div>
+        <div class="fr file"><span class="nm"><span class="thumb s2"></span><span class="mono">FedEx pallet – damaged_1112-1105_2.png</span></span><span class="c2">2.5 MB</span><span class="c3">11:05a</span></div>
+        <div class="fr file"><span class="nm"><span class="thumb s1"></span><span class="mono">FedEx pallet – damaged_1112-1105_3.png, _4.png</span></span><span class="c2">4.9 MB</span><span class="c3">11:05a</span></div>
+
+        <div class="fr dir"><span class="nm"><span class="tw">▸</span><span class="ficon nopo"></span><span class="plain">No PO – X133-64GB-GRAY – 1112</span><span class="kchip nopo">no PO#</span></span><span class="c2">3.9 MB</span><span class="c3">today 9:08a</span></div>
+        <div class="fr dir"><span class="nm"><span class="tw">▸</span><span class="ficon named"></span><span class="plain">Listing</span><span class="kchip named">folder</span></span><span class="c2">12.2 MB</span><span class="c3">yesterday</span></div>
+        <div class="fr dir dying"><span class="nm"><span class="tw">▸</span><span class="ficon case"></span><span class="mono">119119354597966</span><span class="kchip case">case</span></span><span class="c2">6.0 MB</span><span class="c3">5 days · goes tonight</span></div>
+
+        <div class="rules">
+          <div><span class="kchip case">case</span><span>Folder name is the <b>PO#</b>. Files are PNGs kept under Walmart's <b>25 MB per case</b>, so you can drag the whole folder into the case upload.</span></div>
+          <div><span class="kchip named">folder</span><span>Name typed or picked on the phone. Same file naming: <span class="mono">FolderName_MMDD-HHMM_n.png</span>.</span></div>
+          <div><span class="kchip nopo">no PO#</span><span>A return logged without a PO#. If you add the PO# to that log row later, the folder is <b>renamed to the PO#</b> on its own.</span></div>
+          <div><span class="kchip" style="background:var(--surface);border:1px solid var(--border);color:var(--muted)">shelf</span><span>Photos older than 5 days are deleted as before; a folder disappears once it's empty.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
