@@ -1975,7 +1975,7 @@ function startLowStockWatcher() {
 /* ---------- claim photos: LAN upload server ---------- */
 
 // The phone scans a QR from the app and shoots straight into
-// Documents\Capture Station\claim photos (kept 5 days). The QR token rotates
+// Documents\Capture Station\claim photos\<PO# or typed name> (kept 5 days). The QR token rotates
 // every app session, so an old QR (or a photo of one) dies on restart.
 let claimsRun = null; // { url, token, port, dir, todayCount, close }
 

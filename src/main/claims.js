@@ -1,13 +1,16 @@
 'use strict';
 // Claim photos: a tiny LAN-only upload server. The warehouse phone scans a QR
-// shown by the app, shoots, and each photo is POSTed straight here — landing as
-// plain files in Documents\Capture Station\claim photos, named
-// PO#_MMDD-HHMM_n.png. Nothing is saved on the phone, nothing leaves the LAN.
-// Files older than KEEP_DAYS are removed when the app starts.
+// shown by the app, shoots, and each photo is POSTed straight here — landing in
+// Documents\Capture Station\claim photos\<folder>\<folder>_MMDD-HHMM_n.png.
+// <folder> is the PO# tapped on the phone, or ANY name typed there (owner
+// 2026-11-12: not every batch has a PO#). Nothing is saved on the phone,
+// nothing leaves the LAN. Files older than KEEP_DAYS are removed (and empty
+// folders with them) at startup and every 6 hours.
 //
 // Walmart's case upload takes the photos as PNGs, capped at 25 MB COMBINED,
-// so case photos are saved as downscaled PNGs and each PO's folder total is
-// held under that budget (see casePng below).
+// so photos are saved as downscaled PNGs and a PO's folder (a name of digits
+// only, i.e. a Walmart PO#) is held under that budget (see casePng below).
+// Folders with any other name are not capped.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -29,6 +32,92 @@ function sanitizePo(po) {
   return String(po || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
 }
 
+// Folder name typed on the phone -> a safe Windows/Mac folder name. Spaces
+// and most punctuation survive; path separators and characters Windows
+// refuses become spaces, so the result can never climb out of the claim
+// photos folder. '' means nothing usable was typed.
+// Windows also refuses these with any extension ("con.box")
+const WIN_RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
+function sanitizeFolder(name) {
+  let s = String(name || '').normalize('NFC')
+    .replace(/[\x00-\x1f<>:"/\\|?*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[. ]+/, '');
+  s = Array.from(s).slice(0, 60).join('') // never split an emoji in half
+    .replace(/[. ]+$/, '');
+  if (!s) return '';
+  if (WIN_RESERVED.test(s)) s = `_${s}`;
+  return s;
+}
+
+// "listing" after "Listing" reuses the existing folder's spelling: one folder
+// and one count on every OS (Windows/Mac ignore case, Linux doesn't)
+function resolveFolder(dir, folder) {
+  const want = folder.toLowerCase();
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      if (n.toLowerCase() === want && fs.statSync(path.join(dir, n)).isDirectory()) return n;
+    }
+  } catch { /* first photo ever: nothing to match */ }
+  return folder;
+}
+
+// Walmart PO#s are all digits; only those folders carry the 25 MB case cap
+function isCaseFolder(folder) {
+  return /^\d+$/.test(folder);
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// every file in the claims folder: loose ones at the top (from before the
+// per-folder layout) plus one level of subfolders
+function allFiles(dir) {
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return out; }
+  for (const n of names) {
+    const f = path.join(dir, n);
+    let st;
+    try { st = fs.statSync(f); } catch { continue; }
+    if (st.isFile()) { out.push({ f, st }); continue; }
+    if (!st.isDirectory()) continue;
+    let sub = [];
+    try { sub = fs.readdirSync(f); } catch { continue; }
+    for (const m of sub) {
+      const g = path.join(f, m);
+      try { const s2 = fs.statSync(g); if (s2.isFile()) out.push({ f: g, st: s2 }); } catch { /* gone */ }
+    }
+  }
+  return out;
+}
+
+// One-time move: loose PO#_MMDD-HHMM_n files saved before the per-folder
+// layout go into their PO#'s folder (mtime survives the rename, so the
+// 5-day shelf still counts from the shot). Anything already there is left.
+function migrateLoose(dir) {
+  let moved = 0;
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return 0; }
+  for (const n of names) {
+    const m = n.match(/^(.+?)_\d{4}-\d{4}_\d+\.[A-Za-z0-9]+$/);
+    if (!m) continue;
+    const f = path.join(dir, n);
+    try {
+      if (!fs.statSync(f).isFile()) continue;
+      const folder = sanitizeFolder(m[1]);
+      if (!folder) continue;
+      const to = path.join(dir, folder, n);
+      if (fs.existsSync(to)) continue;
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.renameSync(f, to);
+      moved++;
+    } catch { /* locked: try again next start */ }
+  }
+  return moved;
+}
+
 // magic-byte sniff — the phone page only offers the camera, but never trust
 // the network: anything that isn't a real image is rejected
 function magicExt(buf) {
@@ -46,13 +135,15 @@ function stamp(d) {
 }
 
 // numbering continues per PO across sends (and across days): a second batch
-// for the same PO picks up at _3, _4… — max+1, so deletions can't collide
+// for the same PO picks up at _3, _4… — max+1, so deletions can't collide.
+// Case-blind: Windows/Mac folders are, so "Listing" and "listing" are one
+// folder and must share one count (or a same-minute send overwrites)
 function nextIndex(dir, po) {
   let max = 0;
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return 1; }
   for (const n of names) {
-    if (!n.startsWith(`${po}_`)) continue;
+    if (!n.toLowerCase().startsWith(`${po}_`.toLowerCase())) continue;
     const m = n.match(/_(\d+)\.[A-Za-z0-9]+$/);
     if (m) max = Math.max(max, Number(m[1]));
   }
@@ -62,25 +153,24 @@ function nextIndex(dir, po) {
 function cleanupOld(dir) {
   const cutoff = Date.now() - KEEP_DAYS * 86400000;
   let removed = 0;
+  for (const { f, st } of allFiles(dir)) {
+    try { if (st.mtimeMs < cutoff) { fs.unlinkSync(f); removed++; } } catch { /* locked or already gone */ }
+  }
+  // a folder goes once its last photo has
   let names = [];
-  try { names = fs.readdirSync(dir); } catch { return 0; }
+  try { names = fs.readdirSync(dir); } catch { return removed; }
   for (const n of names) {
-    const f = path.join(dir, n);
-    try {
-      const st = fs.statSync(f);
-      if (st.isFile() && st.mtimeMs < cutoff) { fs.unlinkSync(f); removed++; }
-    } catch { /* locked or already gone */ }
+    const d = path.join(dir, n);
+    try { if (fs.statSync(d).isDirectory() && !fs.readdirSync(d).length) fs.rmdirSync(d); } catch { /* in use */ }
   }
   return removed;
 }
 
 function todayCount(dir) {
   const today = new Date().toDateString();
-  let names = [];
-  try { names = fs.readdirSync(dir); } catch { return 0; }
   let c = 0;
-  for (const n of names) {
-    try { if (new Date(fs.statSync(path.join(dir, n)).mtimeMs).toDateString() === today) c++; } catch { /* ignore */ }
+  for (const { st } of allFiles(dir)) {
+    if (new Date(st.mtimeMs).toDateString() === today) c++;
   }
   return c;
 }
@@ -215,7 +305,7 @@ function tokenOk(token, t) {
 
 function phonePage(token, po, pos) {
   const chips = pos.map(p =>
-    `<button class="chip" data-po="${p.po}"><span class="po">${p.po}</span><span class="sk">${p.sku || ''}</span><span class="tm">received ${p.tm}</span></button>`).join('');
+    `<button class="chip" data-po="${escHtml(p.po)}"><span class="po">${escHtml(p.po)}</span><span class="sk">${escHtml(p.sku || '')}</span><span class="tm">received ${escHtml(p.tm)}</span></button>`).join('');
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Upload Photos</title>
@@ -231,7 +321,7 @@ function phonePage(token, po, pos) {
   .chip .sk { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #9b9a97; }
   .chip .tm { font-size: 11px; color: #9b9a97; }
   .typelink { font-size: 13px; color: #6b6f76; text-align: center; text-decoration: underline; background: none; border: none; padding: 8px; cursor: pointer; }
-  #poIn { font-family: ui-monospace, Menlo, monospace; font-size: 16px; padding: 12px; border: 1px solid #e0e0dd; border-radius: 10px; width: 100%; display: none; }
+  #poIn { font-size: 16px; padding: 12px; border: 1px solid #e0e0dd; border-radius: 10px; width: 100%; display: none; }
   #poIn.on { display: block; }
   .lock { display: none; align-items: center; gap: 8px; background: #ecf5f0; border-radius: 12px; padding: 12px 14px; }
   .lock.on { display: flex; }
@@ -257,8 +347,8 @@ function phonePage(token, po, pos) {
   <div id="pick">
     <div class="lbl" style="margin-bottom:8px">Today's returns — tap one</div>
     <div style="display:flex;flex-direction:column;gap:8px">${chips || '<div style="font-size:13px;color:#9b9a97">No returns received today yet.</div>'}</div>
-    <button class="typelink" id="typeLink">or type a PO#…</button>
-    <input id="poIn" placeholder="PO#" autocomplete="off" spellcheck="false" enterkeyhint="done">
+    <button class="typelink" id="typeLink">or type a PO# or folder name…</button>
+    <form id="poForm" action="#"><input id="poIn" placeholder="PO# or any folder name" autocomplete="off" spellcheck="false" autocapitalize="words" enterkeyhint="go"></form>
   </div>
   <div class="lock" id="lock"><span class="po" id="lockPo"></span><button id="chg">change</button></div>
   <button id="camBtn"><span class="big">&#128247;</span>Take photo</button>
@@ -275,7 +365,7 @@ function phonePage(token, po, pos) {
   function lock(v) {
     po = v;
     $('pick').style.display = 'none';
-    $('lock').classList.add('on'); $('lockPo').textContent = v;
+    $('lock').classList.add('on'); $('lockPo').textContent = '\uD83D\uDCC1 ' + v;
     $('camBtn').classList.add('on'); $('send').classList.add('on');
     sync();
   }
@@ -293,8 +383,16 @@ function phonePage(token, po, pos) {
     if (c) lock(c.dataset.po);
   });
   $('typeLink').addEventListener('click', function () { $('poIn').classList.add('on'); $('poIn').focus(); });
-  $('poIn').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && e.target.value.trim()) lock(e.target.value.trim().replace(/[^A-Za-z0-9_-]/g, ''));
+  // a form submit, not a keydown: Android keyboards composing a word may not
+  // send a plain Enter keydown, but Go/Enter always submits the form
+  $('poForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    // same clean-up the server does, so the name shown is the folder made
+    // (doubled backslashes: this script lives inside a template literal);
+    // the server's answer (j.folder) is what the done screen shows
+    var v = $('poIn').value.replace(/[\\x00-\\x1f<>:"\\/\\\\|?*]/g, ' ').replace(/\\s+/g, ' ').replace(/^[. ]+/, '').slice(0, 60).replace(/[. ]+$/, '');
+    if (!v) return;
+    $('poIn').blur(); lock(v);
   });
   $('chg').addEventListener('click', unlock);
   $('camBtn').addEventListener('click', function () { $('camIn').click(); });
@@ -310,13 +408,14 @@ function phonePage(token, po, pos) {
   });
   $('send').addEventListener('click', async function () {
     $('send').disabled = true; $('err').style.display = 'none';
-    var sent = 0;
+    var sent = 0, folder = po;
     for (var i = 0; i < files.length; i++) {
       $('send').textContent = 'Sending ' + (i + 1) + ' of ' + files.length + '…';
       try {
         var res = await fetch('/photo?t=' + encodeURIComponent(TOKEN) + '&po=' + encodeURIComponent(po), { method: 'POST', body: files[i] });
         var j = await res.json();
         if (!j.ok) throw new Error(j.error || 'upload failed');
+        if (j.folder) folder = j.folder;
         sent++;
       } catch (err) {
         $('err').textContent = 'Upload failed after ' + sent + ' photo' + (sent === 1 ? '' : 's') + ': ' + err.message + ' — check the Wi-Fi and try again.';
@@ -325,10 +424,10 @@ function phonePage(token, po, pos) {
         return;
       }
     }
-    var done = po;
+    var done = folder;
     files = []; $('shots').innerHTML = '';
     $('camBtn').classList.remove('on'); $('send').classList.remove('on'); $('lock').classList.remove('on');
-    $('okTxt').textContent = sent + ' photo' + (sent === 1 ? '' : 's') + ' sent for ' + done;
+    $('okTxt').textContent = sent + ' photo' + (sent === 1 ? '' : 's') + ' saved in folder ' + done;
     $('ok').classList.add('on');
   });
   $('more').addEventListener('click', unlock);
@@ -453,22 +552,19 @@ function start(opts) {
       }
     } catch { /* sweep is best effort */ }
   };
+  const migrated = migrateLoose(dir);
   const removed = cleanupOld(dir);
   sweepListings();
   // claim PNGs saved before the combined-25MB rule may be full-res and
   // oversized — shrink each to its share of the case budget once at
   // startup, so photos Walmart already refused work without a re-shoot
-  try {
-    for (const n of fs.readdirSync(dir)) {
-      if (!/\.png$/i.test(n)) continue;
-      const f = path.join(dir, n);
-      try {
-        if (fs.statSync(f).size <= CASE_PHOTO_SHARE) continue;
-        const out = casePng(fs.readFileSync(f), CASE_BUDGET);
-        if (out) fs.writeFileSync(f, out);
-      } catch { /* per-file best effort */ }
-    }
-  } catch { /* sweep is best effort */ }
+  for (const { f, st } of allFiles(dir)) {
+    if (!/\.png$/i.test(f) || st.size <= CASE_PHOTO_SHARE) continue;
+    try {
+      const out = casePng(fs.readFileSync(f), CASE_BUDGET);
+      if (out) fs.writeFileSync(f, out);
+    } catch { /* per-file best effort */ }
+  }
   // the shelf life must hold even if the app stays open for days: re-sweep
   // every 6 hours, not only at startup
   const sweeper = setInterval(() => { cleanupOld(dir); sweepListings(); }, 6 * 3600 * 1000);
@@ -483,7 +579,7 @@ function start(opts) {
       if (!tokenOk(token, t)) { res.writeHead(403, { 'Content-Type': 'text/html' }); res.end(expiredPage); return; }
       let pos = [];
       try { pos = listToday(); } catch { /* chips are a convenience, not a dependency */ }
-      const po = sanitizePo(u.searchParams.get('po'));
+      const po = sanitizeFolder(u.searchParams.get('po'));
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(phonePage(token, po, pos));
       return;
@@ -538,8 +634,10 @@ function start(opts) {
 
     if (req.method === 'POST' && u.pathname === '/photo') {
       if (!tokenOk(token, t)) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"expired"}'); return; }
-      const po = sanitizePo(u.searchParams.get('po'));
-      if (!po) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"missing PO"}'); return; }
+      const typed = sanitizeFolder(u.searchParams.get('po'));
+      if (!typed) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"type a PO# or folder name"}'); return; }
+      const folder = resolveFolder(dir, typed);
+      const fdir = path.join(dir, folder);
       const chunks = [];
       let size = 0, dead = false;
       req.on('data', (c) => {
@@ -553,28 +651,31 @@ function start(opts) {
         let ext = magicExt(buf);
         if (!ext) { res.writeHead(415, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"not an image"}'); return; }
         // Walmart wants case images as PNGs, 25 MB combined per case: save a
-        // downscaled PNG sized to what's left of this PO's budget. Formats
-        // Electron can't decode (HEIC) keep their real extension rather than
-        // being lost.
-        const used = caseBytes(dir, po);
+        // downscaled PNG sized to what's left of this PO's budget (named
+        // folders get the same downscale, without the cap). Formats Electron
+        // can't decode (HEIC) keep their real extension rather than being lost.
+        const capped = isCaseFolder(folder);
+        const used = capped ? caseBytes(fdir, folder) : 0;
         const png = casePng(buf, Math.max(0, CASE_BUDGET - used));
         if (png) { buf = png; ext = '.png'; }
-        if (used + buf.length > CASE_BUDGET) {
+        if (capped && used + buf.length > CASE_BUDGET) {
           res.writeHead(413, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: `this PO's photos already fill Walmart's 25 MB case limit (${(used / 1048576).toFixed(1)} MB stored) — delete some from the claim photos folder first` }));
+          res.end(JSON.stringify({ ok: false, error: `this PO's photos already fill Walmart's 25 MB case limit (${(used / 1048576).toFixed(1)} MB stored) — delete some from its folder first` }));
           return;
         }
-        const name = `${po}_${stamp(new Date())}_${nextIndex(dir, po)}${ext}`;
+        let name;
         try {
-          fs.writeFileSync(path.join(dir, name), buf);
+          fs.mkdirSync(fdir, { recursive: true });
+          name = `${folder}_${stamp(new Date())}_${nextIndex(fdir, folder)}${ext}`;
+          fs.writeFileSync(path.join(fdir, name), buf);
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false, error: err.message }));
           return;
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, name }));
-        if (opts.onUpload) { try { opts.onUpload({ po, name, todayCount: todayCount(dir) }); } catch { /* notify is best-effort */ } }
+        res.end(JSON.stringify({ ok: true, name, folder }));
+        if (opts.onUpload) { try { opts.onUpload({ po: folder, folder, name, todayCount: todayCount(dir) }); } catch { /* notify is best-effort */ } }
       });
       return;
     }
@@ -588,7 +689,7 @@ function start(opts) {
     server.listen(opts.port ?? 0, '0.0.0.0', () => {
       const port = server.address().port;
       resolve({
-        server, token, port, dir, removed, listingDir,
+        server, token, port, dir, removed, migrated, listingDir,
         url: `http://${lanIp()}:${port}/up?t=${token}`,
         listingUrl: (sku) => `http://${lanIp()}:${port}/lup?t=${token}&sku=${encodeURIComponent(sanitizePo(sku))}`,
         todayCount: () => todayCount(dir),
@@ -598,4 +699,4 @@ function start(opts) {
   });
 }
 
-module.exports = { start, _test: { sanitizePo, magicExt, nextIndex, cleanupOld, stamp, todayCount, jpegOrientation, caseBytes, casePng, CASE_BUDGET } };
+module.exports = { start, _test: { sanitizePo, sanitizeFolder, isCaseFolder, migrateLoose, magicExt, nextIndex, cleanupOld, stamp, todayCount, jpegOrientation, caseBytes, casePng, CASE_BUDGET } };

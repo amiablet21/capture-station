@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.25 highlights
+
+- **Upload Photos takes any folder name, not only a PO#.** On the phone, "or type a PO# or folder name…" accepts anything (spaces and words included), and every send lands in its own folder under `claim photos`: a tapped or typed PO# makes a folder named by the PO#, anything else makes a folder with that name. Files inside keep the `Name_MMDD-HHMM_n.png` naming. Walmart's 25 MB per-case cap still applies to PO# folders (all digits); named folders are not capped. Returns-log rows without a PO# now have the 📷 too (it opens the phone unlocked, to type a name). Loose photos from before move into their PO#'s folder on first start, and the 5-day shelf now also removes empty folders.
+
 ## v1.31.24 highlights
 
 - **Export SKUs + 30-day sales** (Stock → Actions): every Linnworks SKU with its last 30 days of sales, built for deciding what to buy (and to hand to Claude for a ranked buy list). An Excel workbook with three sheets: **SKUs** (one row per item, worst first: status (Out of stock, Order now, Order soon, On order, Covered, Not selling, Dropship, Not linked), available, in orders, at WFS, on hand, due in, min, units sold over 30 / 14 / 7 days, per day, trend, days left, out-by date, suggested order (lead + cover days of pace, less on hand and due in, rounded up to 5), cost / order cost / margin on a Cost station, average price, revenue, units per channel, units sold from WFS, last sold), **Daily** (units per local day for each SKU that sold) and **About** (the window, the reorder settings and how each figure is worked out). CSV saves the sheets as three files. The sales come from the same cache as the Overview, so a station that has already loaded it exports quickly.
