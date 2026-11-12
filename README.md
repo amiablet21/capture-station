@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.139 highlights
+
+- **Marked shows the reason** (owner: "just like Not received"): Recovery › Reconcile › Marked gains the Reason column (the return reason and who issued the refund) before Mark, with the same sort and filter as on Not received. Mark keeps its chip and date; the rest of its detail shows on hover. Which rows are Marked, their order and the counts are unchanged.
+
 ## v1.32.138 highlights
 
 - **Upload Photos takes any folder name, not only a PO#** (owner: "doesn't strictly have to be PO#, I can write anything"). On the phone, "or type a PO# or folder name…" accepts anything (spaces and words included), and every send lands in its own folder under `claim photos`: a tapped or typed PO# makes a folder named by the PO#, anything else makes a folder with that name. Files inside keep the `Name_MMDD-HHMM_n.png` naming, and a name that differs only in case reuses the existing folder. Walmart's 25 MB per-case cap still applies to PO# folders (all digits); named folders are not capped. Returns-log rows without a PO# now have the 📷 too (it opens the phone unlocked, to type a name). Loose photos from before move into their PO#'s folder on first start, and the 5-day shelf now also removes empty folders.

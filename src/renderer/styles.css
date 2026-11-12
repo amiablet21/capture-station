@@ -5457,9 +5457,11 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-reconcile th:nth-child(8) { width: 108px; }  /* Days left — room for the funnel (owner 2026-10-13: "glitching") */
 .rc-table-reconcile th:nth-child(9) { width: 236px; }  /* Reason · who issued it */
 .rc-table-reconcile th:nth-child(10) { width: 64px; }
-/* the Marked tab has no countdown: Mark takes the eighth column, ⋯ the ninth */
-.rc-table-reconcile.is-marked th:nth-child(8) { width: 380px; }
-.rc-table-reconcile.is-marked th:nth-child(9) { width: 64px; }
+/* the Marked tab has no countdown: Reason takes the eighth column (as wide
+   as on Not received), Mark the ninth, ⋯ the tenth */
+.rc-table-reconcile.is-marked th:nth-child(8) { width: 236px; }
+.rc-table-reconcile.is-marked th:nth-child(9) { width: 190px; }  /* the chip + date; the rest shows on hover */
+.rc-table-reconcile.is-marked th:nth-child(10) { width: 64px; }
 /* the Walmart paid tab: payout and the gap take the countdown's place */
 .rc-table-reconcile.is-paid th:nth-child(8) { width: 250px; }
 .rc-table-reconcile.is-paid th:nth-child(9) { width: 112px; }

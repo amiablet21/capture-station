@@ -2666,13 +2666,14 @@ function rcRenderReconcile() {
   const head = '<th class="rc-g">#</th>' + fTh('po', 'PO #', false, true) + fTh('type', 'Type', false, true) + fTh('sku', 'Item', false, true)
     + fTh('units', 'Units', true, false, 1) + fTh('refundTs', 'Refunded', false) + fTh('amount', 'Net refund', true)
     + (isMarked ? '' : isPaid ? fTh('paid', 'Walmart paid', true) + fTh('gap', 'Still lost', true) : fTh('left', 'Days left', true, false, 1))
-    + (isMarked ? fTh('markText', 'Mark', false, true) : fTh('reasonText', 'Reason', false, true)) + '<th></th>';
+    // Marked shows the reason too (owner 2026-11-12: "just like Not received")
+    + fTh('reasonText', 'Reason', false, true) + (isMarked ? fTh('markText', 'Mark', false, true) : '') + '<th></th>';
   const markCell = (it) => {
     const never = it.status === 'never_shipped'; const loss = it.status === 'loss';
     const paidBack = loss && (Number(it.settlementSeen) || 0) > 0 ? `Walmart paid ${rcMoney(it.settlementSeen)} · ${rcMoney(it.lostAmount || 0)} lost` : '';
     const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(loss ? it.writtenOffAt : never ? it.neverShippedAt : it.receivedManualAt), paidBack, loss ? 'cost charged on Profit' : ''].filter(Boolean).join(' · ');
     const label = loss ? 'Loss' : never ? 'Never shipped' : 'Received';
-    return `<span class="rc-mark-chip ${loss ? 'is-loss' : never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
+    return { html: `<span class="rc-mark-chip ${loss ? 'is-loss' : never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`, title: [label, who].filter(Boolean).join(' · ') };
   };
   // an open case (owner 2026-10-13, design B): a navy bar on the row's edge,
   // a flag by the PO that opens the case card, the case's age after the reason
@@ -2688,7 +2689,8 @@ function rcRenderReconcile() {
       <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
       <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
       ${isMarked ? '' : isPaid ? rcPaidCells(it) : rcDaysCell(it)}
-      <td class="${isMarked ? '' : 'rc-muted'}" title="${esc(isMarked ? '' : [String(it.reason || ''), it.refundedBy ? `refunded by: ${it.refundedBy}` : ''].filter(Boolean).join(' · '))}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase())) + rcIssuerWord(it) + caseSub(it)}</td>
+      <td class="rc-muted" title="${esc([String(it.reason || ''), it.refundedBy ? `refunded by: ${it.refundedBy}` : ''].filter(Boolean).join(' · '))}">${esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase())) + rcIssuerWord(it) + caseSub(it)}</td>
+      ${isMarked ? (m => `<td title="${esc(m.title)}">${m.html}</td>`)(markCell(it)) : ''}
       <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
     </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="11">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
   $('rcBucketTable').classList.toggle('is-marked', isMarked);
