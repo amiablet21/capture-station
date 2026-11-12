@@ -1725,7 +1725,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     }
 
     // 42. claim photos: LAN upload server — 5-day shelf, token gate, magic
-    // bytes, PO-continuing file numbering
+    // bytes, PO-continuing file numbering, one subfolder per PO# / typed name
     {
       const claims = require('./claims.js');
       const cpath = require('path');
@@ -1735,13 +1735,22 @@ module.exports = async function run({ app, win, db, clipboard }) {
       fs.writeFileSync(oldFile, Buffer.alloc(16, 0xff));
       const oldSec = (Date.now() - 6 * 86400000) / 1000;
       fs.utimesSync(oldFile, oldSec, oldSec);
+      // a recent loose file from before the per-folder layout moves into its PO# folder
+      const looseFile = cpath.join(cdir, '119990000000077_1101-0900_1.jpg');
+      fs.writeFileSync(looseFile, Buffer.alloc(16, 0xff));
+      const looseSec = (Date.now() - 2 * 86400000) / 1000; // inside the shelf, not today
+      fs.utimesSync(looseFile, looseSec, looseSec);
       const uploads = [];
       const crun = await claims.start({
         dir: cdir, port: 0,
         listToday: () => [{ po: '119990000000042', sku: 'TEST-SKU', tm: '9:00a' }],
         onUpload: (u) => uploads.push(u),
       });
-      check('claims: 5-day cleanup removed the old file', !fs.existsSync(oldFile) && crun.removed === 1, crun.removed);
+      check('claims: 5-day cleanup removed the old file (and its emptied folder)',
+        !fs.existsSync(oldFile) && crun.removed === 1 && !fs.existsSync(cpath.join(cdir, 'OLDPO')), crun.removed);
+      check('claims: loose files from before the folder layout move into their PO# folder',
+        fs.existsSync(cpath.join(cdir, '119990000000077', '119990000000077_1101-0900_1.jpg'))
+          && !fs.existsSync(cpath.join(cdir, '119990000000077_1101-0900_1.jpg')), crun.migrated);
       const cbase = `http://127.0.0.1:${crun.port}`;
       // a real-enough JPEG (magic bytes + padding past the sniff window)
       const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0)]);
@@ -1757,7 +1766,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
         up1.ok && up2.ok
           && /^119990000000042_\d{4}-\d{4}_1\.jpg$/.test(up1.name)
           && /^119990000000042_\d{4}-\d{4}_2\.jpg$/.test(up2.name)
-          && fs.existsSync(cpath.join(cdir, up2.name)),
+          && up2.folder === '119990000000042'
+          && fs.existsSync(cpath.join(cdir, '119990000000042', up2.name)),
         { up1, up2 });
       check('claims: upload events carried the running day count',
         uploads.length === 2 && uploads[1].todayCount === 2, uploads);
@@ -1767,20 +1777,41 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const realJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
       const up3 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: realJpeg })).json();
       check('claims: real photos re-encode to PNG',
-        up3.ok && /_3\.png$/.test(up3.name) && fs.existsSync(cpath.join(cdir, up3.name)), up3);
+        up3.ok && /_3\.png$/.test(up3.name) && fs.existsSync(cpath.join(cdir, '119990000000042', up3.name)), up3);
       // Walmart caps a case's images at 25 MB combined: a PO whose folder
       // already fills the budget refuses the next photo with a clear error
       const fullPo = '119990000000099';
       const claimsBudget = require('./claims.js')._test.CASE_BUDGET;
-      fs.writeFileSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`), Buffer.alloc(claimsBudget));
+      fs.mkdirSync(cpath.join(cdir, fullPo), { recursive: true });
+      fs.writeFileSync(cpath.join(cdir, fullPo, `${fullPo}_0101-0900_1.png`), Buffer.alloc(claimsBudget));
       const upFull = await fetch(`${cbase}/photo?t=${crun.token}&po=${fullPo}`, { method: 'POST', body: realJpeg });
       const upFullBody = await upFull.json();
       check('claims: Walmart 25 MB combined case budget refuses the overflow photo',
         upFull.status === 413 && /25 MB/.test(upFullBody.error || ''), { status: upFull.status, upFullBody });
-      fs.unlinkSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`));
+      fs.unlinkSync(cpath.join(cdir, fullPo, `${fullPo}_0101-0900_1.png`));
+      // anything typed instead of a PO#: its own folder, spaces kept, path
+      // characters made safe, and no 25 MB case cap (not a Walmart PO#)
+      const named = 'Damaged pallet 11/12';
+      const upN = await (await fetch(`${cbase}/photo?t=${crun.token}&po=${encodeURIComponent(named)}`, { method: 'POST', body: jpeg })).json();
+      check('claims: a typed name (not a PO#) gets its own folder',
+        upN.ok && upN.folder === 'Damaged pallet 11 12'
+          && /^Damaged pallet 11 12_\d{4}-\d{4}_1\.jpg$/.test(upN.name)
+          && fs.existsSync(cpath.join(cdir, 'Damaged pallet 11 12', upN.name)), upN);
+      fs.writeFileSync(cpath.join(cdir, 'Damaged pallet 11 12', 'Damaged pallet 11 12_0101-0900_9.png'), Buffer.alloc(claimsBudget));
+      const upN2 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=${encodeURIComponent(named)}`, { method: 'POST', body: jpeg })).json();
+      check('claims: named folders are not held to the 25 MB case cap', upN2.ok && /_10\.jpg$/.test(upN2.name), upN2);
+      fs.unlinkSync(cpath.join(cdir, 'Damaged pallet 11 12', 'Damaged pallet 11 12_0101-0900_9.png'));
+      const upBad = await fetch(`${cbase}/photo?t=${crun.token}&po=${encodeURIComponent('../..')}`, { method: 'POST', body: jpeg });
+      check('claims: a name with nothing usable is refused', upBad.status === 400, upBad.status);
+      const sf = require('./claims.js')._test.sanitizeFolder;
+      check('claims: folder names cannot leave the claims folder',
+        sf('../../Windows/x') === 'Windows x' && sf('..\\evil') === 'evil' && sf('con') === 'con_' && sf('  Box 3.  ') === 'Box 3',
+        [sf('../../Windows/x'), sf('..\\evil'), sf('con'), sf('  Box 3.  ')]);
       const cpage = await (await fetch(`${cbase}/up?t=${crun.token}`)).text();
       check('claims: phone page lists today\'s returns as tap chips',
         cpage.includes('Upload Photos') && cpage.includes('119990000000042') && cpage.includes('TEST-SKU'), cpage.length);
+      check('claims: phone page offers typing any folder name',
+        cpage.includes('or type a PO# or folder name'), cpage.length);
       await crun.close();
     }
 
