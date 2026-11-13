@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.140 highlights
+
+- **Orders knows when the Ship tab already made the label** (owner: "you made a shipping label for this in the ship tab already, do you mean to use this?"). An order waiting for tracking whose PO# is Reference #1 on a live ship-to-customer label from the Ship tab shows **Label made in Ship tab · Use** in its Tracking cell: one press puts that tracking on the order and buys nothing. Pressing Ship anyway opens the drawer with the question at the top (service, account, tracking, time, package, cost; **Use this label** or **Reprint it**), and the buy button reads **Create a second label**. A used label becomes the line's own (Reprint / Void on the line; Void takes the tracking back off). Return labels, voided labels and labels for another PO# are never offered. Labels live on the computer that made them, so only this station's Ship-tab labels are seen.
+- **A created label finishes the Ship form** (owner: "the contents of the previous label are still there"). A bar across the form says the label is created, with a clear **＋ New label** button; the old PO#, address, weight and references sit dimmed and locked under it. Scanning the next PO# (or typing the first key) starts a clean label by itself: weight, declared value and references no longer carry over. **Keep these details** unlocks the form as it stands, for a second box or the return label on the same order.
+
 ## v1.32.139 highlights
 
 - **Marked shows the reason** (owner: "just like Not received"): Recovery › Reconcile › Marked gains the Reason column (the return reason and who issued the refund) before Mark, with the same sort and filter as on Not received. Mark keeps its chip and date; the rest of its detail shows on hover. Which rows are Marked, their order and the counts are unchanged.

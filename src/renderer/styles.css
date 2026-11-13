@@ -5853,6 +5853,19 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .sp-label img.is-tall { width: 240px; height: auto; }
 .sp-label .none { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 12px; padding: 20px; text-align: center; }
 .sp-done-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+/* New label moved to the bar across the form: Print takes the full width */
+.sp-done-acts #spDonePrint { grid-column: 1 / -1; }
+/* a finished label (owner 2026-11-12): the bar across the form, the old
+   details dimmed and locked under it */
+.sp-donebar { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: var(--accent-soft); border-bottom: 1px solid var(--border); border-radius: 12px 12px 0 0; }
+.sp-donebar[hidden] { display: none; }
+.sp-donebar .ok { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 13px; flex: none; }
+.sp-donebar .t { min-width: 0; }
+.sp-donebar .t b { font-size: 14px; display: block; }
+.sp-donebar .t b .mono { font-family: var(--mono); }
+.sp-donebar .t > span { font-size: 12px; color: var(--muted); }
+.sp-donebar .btn { margin-left: auto; height: 38px; padding: 0 20px; font-size: 13.5px; font-weight: 600; white-space: nowrap; flex: none; }
+.sp-card.is-done > .sp-sec { opacity: .42; pointer-events: none; user-select: none; }
 .sp-done-acts .btn { height: 40px; padding: 0 14px; font-size: 13.5px; font-weight: 600; }
 .sp-done-acts .btn-ghost { color: var(--text); background: var(--surface); }
 
@@ -6015,6 +6028,27 @@ tr.os-open > td { background: var(--accent-soft); }
 .osd-rates .sp-rate.is-on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 .osd-rates .sv { font-size: 13px; font-weight: 600; }
 .osd-rates .os-empty { min-height: 120px; }
+/* this PO# already has a label from the Ship tab (owner 2026-11-12): the
+   chip on the Orders line, the notice at the top of the Ship drawer */
+.os-made-row { display: flex; align-items: center; width: 100%; min-width: 0; }
+.os-made-row .os-btn { flex: none; }
+.os-made { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; font-family: var(--font); font-size: 12px; color: var(--badge-yellow-text); background: var(--badge-yellow-bg); border-radius: 999px; padding: 2px 3px 2px 8px; white-space: nowrap; }
+.os-made .t { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.os-made button { font-family: var(--font); font-size: 11.5px; font-weight: 700; color: #fff; background: var(--accent); border: none; border-radius: 999px; padding: 2px 11px; cursor: pointer; flex: none; }
+.os-made button:hover { background: var(--accent-hover); }
+.os-have { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; background: var(--badge-yellow-bg); border: 1px solid #EBD9A4; border-radius: 14px; padding: 14px 16px; }
+.os-have[hidden], .os-have-or[hidden] { display: none; }
+.os-have-ic { width: 38px; height: 38px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; color: var(--badge-yellow-text); }
+.os-have-ic svg { width: 20px; height: 20px; }
+.os-have-t b { font-size: 14px; display: block; letter-spacing: -.01em; }
+.os-have-t .q { font-size: 12.5px; color: var(--badge-yellow-text); font-weight: 600; }
+.os-have-t .d { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px 14px; }
+.os-have-t .d .mono { color: var(--text); font-weight: 600; }
+.os-have-a { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.os-have-a .btn { padding: 9px 18px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.os-have-or { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin: -4px 0; }
+.os-have-or::before, .os-have-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+@media (max-width: 760px) { .os-have { grid-template-columns: minmax(0, 1fr); } .os-have-ic { display: none; } .os-have-a { flex-direction: row; } }
 .osd-f { display: flex; align-items: center; gap: 14px; padding: 14px 20px; background: var(--surface); border-top: 1px solid var(--border); }
 .osd-sum { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .osd-sum b { color: var(--text); }

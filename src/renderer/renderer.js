@@ -135,6 +135,7 @@ if (!window.api) {
     orderShipSavePkg: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipRates: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipCreate: async () => ({ ok: false, error: 'Preview mode' }),
+    orderShipUseLabel: async () => ({ ok: false, error: 'Preview mode' }),
     lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     lowUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     overviewData: async () => ({ ok: false, error: 'Preview mode' }),
@@ -263,6 +264,16 @@ function trackingCell(row) {
         + '<button class="tracking-cancel" data-act="cancelwait" title="Stop waiting for this order\'s tracking (Esc)">✕</button>';
     }
     const ship = osCanShip(row) ? `<button class="os-btn${os && os.rowId === row.id ? ' is-on' : ''}" data-act="ship" title="Make the label here">${os && os.rowId === row.id ? 'Close' : 'Ship'}</button>` : '';
+    // a live label already made for this PO# in the Ship tab: offer its
+    // tracking in place of buying a second one (owner 2026-11-12)
+    const have = ship ? osTabLabel(row) : null;
+    if (have) {
+      // one flex row exactly as wide as the cell: the column's width is
+      // fixed and clips, so the chip's text shortens rather than the whole
+      // chip dropping out of sight
+      return `<span class="os-made-row">${ship}<span class="os-made" title="${esc(osHaveLine(have))}"><span class="t">Label made in Ship tab</span>`
+        + `<button type="button" data-act="uselabel" data-label="${have.id}" title="Put ${esc(have.tracking)} on this order. Nothing is bought.">Use</button></span></span>`;
+    }
     return ship + '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
   }
   const label = row.carrier ? `${esc(row.carrier)} ${esc(row.tracking)}` : esc(row.tracking);
@@ -1114,6 +1125,7 @@ $('rowsBody').addEventListener('click', async (e) => {
   if (!row) return;
 
   if (btn.dataset.act === 'ship') { osToggle(row); return; }
+  if (btn.dataset.act === 'uselabel') { osUseLabel(row.id, Number(btn.dataset.label)); return; }
   if (btn.dataset.act === 'lreprint') { spOpenPrint(Number(btn.dataset.label)); return; }
   if (btn.dataset.act === 'lvoid') { spVoidFromRow(Number(btn.dataset.label), row); return; }
   if (btn.dataset.act === 'substitute') {
@@ -16149,8 +16161,50 @@ function spSelectedRate() {
   return r ? { ...r, acct: a } : null;
 }
 
+// After a label is created the form is FINISHED (owner 2026-11-12: "the
+// contents of the previous label are still there"): a bar across its top
+// says so with a clear New label button, and the old details sit dimmed and
+// locked, so the next label is never typed over the last one's weight,
+// value and references. "Keep these details" unlocks them as they are, for
+// a second box or a return label on the same order.
+function spRenderDoneBar() {
+  const bar = $('spDoneBar');
+  const on = !!sp.done;
+  $('spForm').classList.toggle('is-done', on);
+  $('spForm').querySelectorAll(':scope > .sp-sec').forEach(sec => { sec.inert = on; });
+  bar.hidden = !on;
+  if (!on) { bar.innerHTML = ''; return; }
+  const l = sp.done.label || {};
+  const what = l.kind === 'return' ? 'Return label created' : 'Label created';
+  bar.innerHTML = `<span class="ok">✓</span>
+    <div class="t"><b>${what}${l.reference ? ` for <span class="mono">${esc(l.reference)}</span>` : ''}</b>
+      <span>This label is finished. Press New label, or ${sp.src === 'po' ? 'scan the next PO#' : 'start typing the next address'} and it starts fresh on its own. <button class="sp-link" id="spBarKeep" type="button">Keep these details</button></span></div>
+    <button class="btn btn-primary" id="spBarNew" type="button">＋ New label</button>`;
+  $('spBarNew').onclick = spReset;
+  $('spBarKeep').onclick = spKeepDetails;
+}
+// another label with the same details (a second box, or the return label
+// for the order just shipped): the form unlocks as it stands and re-rates
+function spKeepDetails() {
+  sp.done = null; sp.pick = ''; sp.createErr = '';
+  spRenderAll();
+  spScheduleRates(0);
+  $('spWt').focus(); $('spWt').select();
+}
+// with a finished label showing, the next scan or the first key typed starts
+// a clean label: the form resets, the PO# (or name) box takes the focus and
+// the key lands in it. Space and Enter are left to the focused button.
+document.addEventListener('keydown', (e) => {
+  if (!sp.done || activePage !== 'ship' || e.defaultPrevented || e.altKey) return;
+  if (document.querySelector('dialog[open]') || (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]'))) return;
+  const paste = (e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'v';
+  if (!paste && (e.ctrlKey || e.metaKey || e.key.length !== 1 || e.key === ' ')) return;
+  spReset();
+}, true);
+
 function spRenderRates() {
   const el = $('spRates');
+  spRenderDoneBar();
   if (sp.done) { spRenderDone(); return; }
   const head = (right = '') => `<div class="sp-sec"><div class="sp-h">Rates ${sp.info && sp.info.test ? '<span class="sp-test">Test mode</span>' : ''}<span class="sp-h-r">${right}</span></div></div>`;
   if (sp.ratesLoading) {
@@ -16237,7 +16291,6 @@ function spRenderDone() {
     <div class="sp-label">${gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/gif;base64,${gif}" alt="UPS label" />` : '<div class="none">UPS sent no label image. The shipment exists; void it from the list below if it is not needed.</div>'}</div>
     <div class="sp-done-acts">
       <button class="btn btn-primary" id="spDonePrint" type="button">Print</button>
-      <button class="btn btn-secondary" id="spAgain" type="button">New label</button>
       <button class="btn btn-ghost" id="spDonePdf" type="button">Save PDF</button>
       <button class="btn btn-ghost" id="spDoneCopy" type="button">Copy tracking</button>
     </div>
@@ -16245,7 +16298,6 @@ function spRenderDone() {
   $('spDonePrint').onclick = () => spOpenPrint(l.id);
   $('spDonePdf').onclick = () => spPdf(l.id);
   $('spDoneCopy').onclick = async () => { await api.copyText(l.tracking); toast('Tracking copied'); };
-  $('spAgain').onclick = spReset;
 }
 
 async function spPrint(id, opts) {
@@ -16577,9 +16629,64 @@ function osCanShip(row) {
   return !!(state && !state.captureOnly && state.pages && state.pages.ship && !row.tracking && row.status !== 'synced');
 }
 
+/* A label already made for this PO# in the Ship tab (owner 2026-11-12:
+   "you made a shipping label for this in the ship tab already, do you mean
+   to use this?"). The Orders line says so with a one-press Use, and the Ship
+   drawer asks before a second label is bought. Use buys nothing: the
+   label's tracking lands on the line and the label becomes the line's. */
+var OS_BOX = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>';
+function osTabLabel(row) {
+  return (state && state.tabLabels && state.tabLabels[row.id]) || null;
+}
+// "UPS Ground · DWS account", "Today 10:42 AM", "1.1 lb · 9x6x3", "$9.12"
+function osHaveParts(l) {
+  const d = l.at ? new Date(l.at) : null;
+  const ok = d && !Number.isNaN(d.getTime());
+  const today = ok && d.toDateString() === new Date().toDateString();
+  const when = ok ? `${today ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${fmtTime(l.at)}` : '';
+  const pkg = [Number(l.weight) > 0 ? `${Number(l.weight)} lb` : '', l.dims ? String(l.dims).replace(/x/gi, ' × ') : ''].filter(Boolean).join(' · ');
+  return {
+    svc: [l.service, l.account ? `${l.account} account` : ''].filter(Boolean).join(' · '),
+    when, pkg, cost: l.cost == null ? '' : spMoney(l.cost),
+  };
+}
+function osHaveLine(l) {
+  const p = osHaveParts(l);
+  return [`Made in the Ship tab: ${l.tracking}`, p.svc, p.when, p.pkg, p.cost].filter(Boolean).join(' · ');
+}
+// the drawer's notice; hidden when this line has no Ship-tab label
+function osRenderHave() {
+  const el = $('osHave');
+  const l = os && os.have;
+  el.hidden = !l;
+  $('osHaveOr').hidden = !l;
+  if (!l) { el.innerHTML = ''; return; }
+  const p = osHaveParts(l);
+  el.innerHTML = `<div class="os-have-ic">${OS_BOX}</div>
+    <div class="os-have-t"><b>You already made a label for this order in the Ship tab.</b><span class="q">Do you mean to use it?</span>
+      <div class="d">${[p.svc ? `<span>${esc(p.svc)}</span>` : '', `<span class="mono">${esc(l.tracking)}</span>`, p.when ? `<span>${esc(p.when)}</span>` : '', p.pkg ? `<span>${esc(p.pkg)}</span>` : '', p.cost ? `<span>${esc(p.cost)}</span>` : ''].join('')}</div></div>
+    <div class="os-have-a"><button class="btn btn-primary" id="osHaveUse" type="button" ${os.using ? 'disabled' : ''}>${os.using ? 'Adding…' : 'Use this label'}</button>
+      <button class="sp-link" id="osHavePrint" type="button">Reprint it</button></div>`;
+  $('osHaveUse').onclick = () => osUseLabel(os.rowId, l.id);
+  $('osHavePrint').onclick = () => spOpenPrint(l.id);
+}
+async function osUseLabel(rowId, labelId) {
+  if (os && os.rowId === rowId) { if (os.using || os.creating) return; os.using = true; osRenderHave(); }
+  const res = await api.orderShipUseLabel(rowId, labelId).catch(e => ({ ok: false, error: e.message }));
+  if (os && os.rowId === rowId) os.using = false;
+  if (!res || !res.ok) {
+    toast((res && res.error) || 'Could not use that label.', 5000);
+    if (os && os.rowId === rowId) osRenderHave();
+    return;
+  }
+  // the state push that carries the tracking usually closed the drawer already
+  if (os && os.rowId === rowId) osClose();
+  toast(`Tracking added from the Ship-tab label ${res.tracking}`, 4000);
+}
+
 async function osToggle(row) {
   if (os && os.rowId === row.id) { osClose(); return; }
-  os = { rowId: row.id, po: row.order_number, channel: row.channel, loading: true, rates: null, err: '', via: '', pick: '', seq: 0, key: '', saved: null };
+  os = { rowId: row.id, po: row.order_number, channel: row.channel, loading: true, rates: null, err: '', via: '', pick: '', seq: 0, key: '', saved: null, have: osTabLabel(row), using: false };
   // the box presets come from Settings › Shipping
   if (!sp.info) { const info = await api.shipInfo(); sp.info = info && info.ok ? info : null; }
   if (!os || os.rowId !== row.id) return;
@@ -16635,6 +16742,9 @@ function osReattach() {
   const row = state && state.rows.find(r => r.id === os.rowId);
   if (!row || row.tracking) { if (!os.creating) { os = null; osHideDrawer(); } return; }
   if (tr) tr.classList.add('os-open');
+  // the Ship-tab label was voided (or one was just made) while the drawer is open
+  const have = osTabLabel(row);
+  if ((have && have.id) !== (os.have && os.have.id)) { os.have = have; osRenderHave(); osRenderRates(); }
 }
 
 // the drawer's fixed parts, filled from what the Orders list already knows;
@@ -16667,6 +16777,7 @@ function osFillDrawer(row) {
   os.ref2Auto = '';
   $('osPkTag').innerHTML = '';
   $('osdSum').innerHTML = '';
+  osRenderHave();
   osRenderRates();
 }
 
@@ -16823,17 +16934,22 @@ function osRenderRates() {
   chips.innerHTML = srcs.length > 1 ? [['', 'All'], ...srcs.map(s => [s.id, s.name])]
     .map(([k, t]) => `<button type="button" data-via="${esc(k)}" class="${os.via === k ? 'is-on' : ''}">${esc(t)}</button>`).join('') : '';
   const btn = $('osCreate');
+  // with a Ship-tab label waiting above, buying here is a second label: say
+  // so, and step the button back so it is not pressed by habit
+  const buyText = os.have ? 'Create a second label' : 'Create label';
+  btn.classList.toggle('btn-primary', !os.have);
+  btn.classList.toggle('btn-secondary', !!os.have);
   const errEl = $('osErr');
   const fails = srcs.filter(s => !s.ok && !s.notSet).map(s => `${s.name}: ${s.error}`);
   errEl.textContent = os.err || fails.join(' · ');
   if (os.loading) {
     box.innerHTML = '<div class="os-empty">Getting rates…<div class="sp-loadbar"><i></i></div></div>';
-    btn.disabled = true; btn.textContent = 'Create label'; $('osdSum').innerHTML = '';
+    btn.disabled = true; btn.textContent = buyText; $('osdSum').innerHTML = '';
     return;
   }
   if (!os.party || !(osPkg().weight > 0) || !os.rates) {
     box.innerHTML = `<div class="os-empty">${os.party ? 'Enter the weight' : ''}</div>`;
-    btn.disabled = true; btn.textContent = 'Create label'; $('osdSum').innerHTML = '';
+    btn.disabled = true; btn.textContent = buyText; $('osdSum').innerHTML = '';
     return;
   }
   const list = osAllRates().filter(r => !os.via || r.via === os.via);
@@ -16849,7 +16965,7 @@ function osRenderRates() {
     : '<div class="os-empty">No rates</div>';
   const sel = list.find(r => r.key === os.pick);
   btn.disabled = !sel || os.creating;
-  btn.textContent = os.creating ? 'Creating label…' : 'Create label';
+  btn.textContent = os.creating ? 'Creating label…' : buyText;
   $('osdSum').innerHTML = sel ? `<b>${esc(sel.name)}</b> · ${esc(sel.viaName)}<span class="mono">${spMoney(sel.price)}</span>` : '';
 }
 

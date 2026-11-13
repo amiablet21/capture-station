@@ -1283,6 +1283,22 @@ function shipLabelsForRows() {
   const since = localDay(new Date(Date.now() - 30 * 86400000));
   return open().prepare(`SELECT id, row_id, tracking FROM ship_labels WHERE row_id > 0 AND (voided_at IS NULL OR voided_at = '') AND day >= ? ORDER BY id`).all(since);
 }
+// read-only: live ship-to-customer labels made in the Ship tab (no Orders
+// line behind them) in the last 30 days, newest first. The Orders page
+// offers one to the order whose PO# it carries as Reference #1, so the
+// same order is not labelled twice (owner 2026-11-12).
+function shipLabelsMadeInTab({ test = false } = {}) {
+  const since = localDay(new Date(Date.now() - 30 * 86400000));
+  return open().prepare(`SELECT id, created_at, reference, account_name, service_name, tracking, cost, weight, dims, carrier
+    FROM ship_labels WHERE kind = 'ship' AND row_id = 0 AND reference <> '' AND tracking <> '' AND test = ?
+      AND (voided_at IS NULL OR voided_at = '') AND day >= ? ORDER BY id DESC`).all(test ? 1 : 0, since);
+}
+// a Ship-tab label taken by an Orders line: from here on it is that line's
+// label (Reprint / Void on the line, Void takes the tracking back off)
+function shipLabelSetRow(id, rowId) {
+  open().prepare('UPDATE ship_labels SET row_id = ? WHERE id = ?').run(Number(rowId) || 0, Number(id));
+  return shipLabelGet(id);
+}
 // a Walmart label's image can arrive after the purchase
 function shipLabelSetImage(id, b64) {
   open().prepare('UPDATE ship_labels SET label_gif = ? WHERE id = ?').run(String(b64 || ''), Number(id));
@@ -1335,5 +1351,5 @@ module.exports = {
   wsGid, wsUpsertCustomer, wsListCustomers, wsGetCustomer, wsUpsertInvoice, wsListInvoices, wsGetInvoice, wsNextNumber, wsCleanLines,
   wsUpsertSerial, wsListSerials, wsGetSerial, wsSerialCounts, wsOwnRows,
   costUpsert, costsAll, costGet, costOwnRows, costLogRows,
-  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelFind, shipLabelsForRows, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
+  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelFind, shipLabelsForRows, shipLabelsMadeInTab, shipLabelSetRow, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
 };

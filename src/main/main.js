@@ -123,11 +123,12 @@ function buildState() {
   const cfg = config.load();
   const current = currentRowId ? db.getRow(currentRowId) : null;
   if (!current) currentRowId = null;
+  const rows = cfg.captureOnly ? db.todayRows() : db.activeRows();
   return {
     // Sync mode: processed rows leave the active list (see History); the list
     // also carries over unpushed rows from previous days so nothing is missed.
     // Capture-only mode: plain view of today's captures, as before.
-    rows: cfg.captureOnly ? db.todayRows() : db.activeRows(),
+    rows,
     todayCount: db.todayRows().length,
     todayProcessed: db.todayRows().filter(r => r.status === 'synced').length,
     currentRowId,
@@ -145,6 +146,7 @@ function buildState() {
     returnUrlTemplates: cfg.returnUrlTemplates || {},
     shipCutoff: cfg.shipCutoff || '16:00',
     rowLabels: rowLabelsFor(cfg),
+    tabLabels: tabLabelsFor(cfg, rows),
     locations: {
       primaryId: cfg.linnworks.locationId || '',
       primaryName: cfg.linnworks.locationName || '',
@@ -161,6 +163,29 @@ function rowLabelsFor(cfg) {
   try {
     const out = {};
     for (const l of db.shipLabelsForRows()) out[l.row_id] = { id: l.id, tracking: l.tracking };
+    return out;
+  } catch { return {}; }
+}
+
+// order line -> a live label already made for its PO# in the Ship tab, so
+// the line can take that tracking instead of buying a second label (owner
+// 2026-11-12). Only lines still waiting for tracking; the newest label wins.
+const poKey = (v) => String(v || '').trim().toUpperCase();
+function tabLabelsFor(cfg, rows) {
+  if (cfg.captureOnly || !(cfg.pages && cfg.pages.ship)) return {};
+  try {
+    const open = rows.filter(r => !r.tracking && r.status !== 'synced' && poKey(r.order_number));
+    if (!open.length) return {};
+    const byPo = new Map();
+    for (const l of db.shipLabelsMadeInTab({ test: !!(cfg.ups || {}).test })) {
+      const k = poKey(l.reference);
+      if (!byPo.has(k)) byPo.set(k, l); // newest first
+    }
+    const out = {};
+    for (const r of open) {
+      const l = byPo.get(poKey(r.order_number));
+      if (l) out[r.id] = { id: l.id, tracking: l.tracking, service: l.service_name, account: l.account_name, cost: l.cost, at: l.created_at, weight: l.weight, dims: l.dims };
+    }
     return out;
   } catch { return {}; }
 }
@@ -7892,6 +7917,25 @@ exit 1
     } catch (e) {
       return { ok: false, error: e.message };
     }
+  });
+
+  // Use the label already made for this PO# in the Ship tab (owner
+  // 2026-11-12): nothing is bought; its tracking lands on the order like a
+  // scan and the label becomes this line's (Reprint / Void on the line)
+  ipcMain.handle('orderShip:useLabel', (_e, { rowId, labelId } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const { row, error } = orderRowFor(rowId);
+    if (error) return { ok: false, error };
+    const l = db.shipLabelGet(labelId);
+    if (!l || l.voided_at) return { ok: false, error: 'That label is gone or was voided.' };
+    if (l.kind !== 'ship' || !l.tracking) return { ok: false, error: 'That is not a ship-to-customer label.' };
+    if (l.row_id) return { ok: false, error: 'That label already belongs to another order line.' };
+    if (poKey(l.reference) !== poKey(row.order_number)) return { ok: false, error: 'That label was made for a different PO#.' };
+    db.shipLabelSetRow(l.id, row.id);
+    db.setTracking(row.id, l.tracking, classifyTracking(l.tracking) || l.carrier || '');
+    if (currentRowId === row.id) currentRowId = null;
+    pushState();
+    return { ok: true, tracking: l.tracking, labelId: l.id };
   });
 
   // Settings › General › Browser: the link (with its key), whether it runs,

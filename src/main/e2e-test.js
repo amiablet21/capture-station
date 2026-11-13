@@ -2191,6 +2191,99 @@ module.exports = async function run({ app, win, db, clipboard }) {
             many.n === 2 && many.btn && many.open && many.title === 'Print 2 labels' && many.ids === 2 && many.none.ok === false, many);
           r = await exec(`api.orderShipPrep(${wRow.id})`);
           check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
+
+          // A label already made for the PO# in the Ship tab (owner
+          // 2026-11-12): the Orders line offers its tracking, the drawer asks
+          // before a second label is bought, Use buys nothing
+          {
+            const tPo = '21-99001-55501';
+            const tRow = db.createRow({ channel: 'ebay', orderNumber: tPo, origin: '' });
+            const oRow = db.createRow({ channel: 'ebay', orderNumber: '21-99001-55502', origin: '' });
+            let st = await exec('api.getState()');
+            check('tab label: nothing offered while the Ship tab has no label for the PO#', st.tabLabels && !st.tabLabels[tRow.id], st.tabLabels);
+            const tRet = await exec(`api.shipCreate(${JSON.stringify({ accountId: 'b', serviceCode: '03', kind: 'return', party: cust, pkg: { weight: 1.1 }, value: 0, reference: tPo, fromPo: true, source: 'EBAY' })})`);
+            st = await exec('api.getState()');
+            check('tab label: a return label for the PO# is never offered', tRet.ok && !st.tabLabels[tRow.id], st.tabLabels);
+            const tMade = await exec(`api.shipCreate(${JSON.stringify({ accountId: 'b', serviceCode: '03', serviceName: 'UPS Ground', kind: 'ship', party: cust, pkg: { weight: 1.1, length: 9, width: 6, height: 3 }, value: 0, reference: tPo, fromPo: true, source: 'EBAY', price: 9.1 })})`);
+            st = await exec('api.getState()');
+            const off = st.tabLabels[tRow.id];
+            check('tab label: a ship-to-customer label made in the Ship tab is offered to the line with its PO#',
+              tMade.ok && off && off.id === tMade.label.id && off.tracking === tMade.label.tracking && off.account === 'Company Two' && !st.tabLabels[oRow.id], { off, made: tMade.ok ? tMade.label : tMade });
+            r = await exec(`api.orderShipUseLabel(${tRow.id}, ${tRet.label.id})`);
+            check('tab label: a return label cannot be put on an order', !r.ok && /ship-to-customer/.test(r.error), r);
+            r = await exec(`api.orderShipUseLabel(${oRow.id}, ${tMade.label.id})`);
+            check('tab label: a label for another PO# is refused', !r.ok && /different PO#/.test(r.error) && db.getRow(oRow.id).tracking === '', r);
+            await exec(`(async () => { showPage('capture'); setCapHist(false); state = await api.getState(); render(); })()`);
+            await sleep(400);
+            const tUi = await exec(`(async () => {
+              const tr = document.querySelector('#rowsBody tr[data-id="${tRow.id}"]');
+              const chip = tr && tr.querySelector('.os-made');
+              const out = { chip: !!chip, chipText: chip ? chip.textContent : '', otherChip: !!document.querySelector('#rowsBody tr[data-id="${oRow.id}"] .os-made'), shipBtn: !!(tr && tr.querySelector('.os-btn')) };
+              tr.querySelector('.os-btn').click(); await new Promise(r => setTimeout(r, 900));
+              out.notice = !$('osHave').hidden && /already made a label/.test($('osHave').textContent) && $('osHave').textContent.includes(${JSON.stringify('1ZE2E0000000000001')});
+              out.buy = $('osCreate').textContent; out.buyStepsBack = $('osCreate').classList.contains('btn-secondary') && !$('osCreate').classList.contains('btn-primary');
+              osClose();
+              document.querySelector('#rowsBody tr[data-id="${oRow.id}"] .os-btn').click(); await new Promise(r => setTimeout(r, 900));
+              out.plain = $('osHave').hidden && $('osHaveOr').hidden && $('osCreate').textContent === 'Create label' && $('osCreate').classList.contains('btn-primary');
+              osClose();
+              return out; })()`);
+            check('tab label: the Orders line shows the chip with Use, only on the line whose PO# has the label',
+              tUi.chip && /Label made in Ship tab/.test(tUi.chipText) && /Use/.test(tUi.chipText) && tUi.shipBtn && !tUi.otherChip, tUi);
+            check('tab label: the Ship drawer asks first, and buying becomes "Create a second label"',
+              tUi.notice && tUi.buy === 'Create a second label' && tUi.buyStepsBack && tUi.plain, tUi);
+            const bought = upsSeen.filter(x => x.url.endsWith('/ship')).length;
+            await exec(`document.querySelector('#rowsBody tr[data-id="${tRow.id}"] .os-made button').click()`);
+            await sleep(600);
+            st = await exec('api.getState()');
+            const tNow = db.getRow(tRow.id);
+            check('tab label: Use puts the tracking on the order, buys nothing, and the label becomes the line\'s',
+              tNow.tracking === tMade.label.tracking && tNow.status !== 'synced' && upsSeen.filter(x => x.url.endsWith('/ship')).length === bought
+                && db.shipLabelGet(tMade.label.id).row_id === tRow.id && !st.tabLabels[tRow.id] && st.rowLabels[tRow.id] && st.rowLabels[tRow.id].id === tMade.label.id,
+              { tNow, tabLabels: st.tabLabels, rowLabel: st.rowLabels[tRow.id] });
+            r = await exec(`api.orderShipUseLabel(${tRow.id}, ${tMade.label.id})`);
+            check('tab label: a line that has tracking cannot take a label again', !r.ok && /already has tracking/.test(r.error), r);
+            r = await exec(`api.shipVoid(${tMade.label.id})`);
+            check('tab label: voiding the used label takes the tracking back off the order', r.ok && db.getRow(tRow.id).tracking === '', r);
+            await exec(`api.shipVoid(${tRet.label.id})`);
+            db.deleteRow(tRow.id); db.deleteRow(oRow.id);
+          }
+
+          // Ship tab: a created label finishes the form (owner 2026-11-12)
+          {
+            const fin = await exec(`(async () => {
+              showPage('ship'); await new Promise(r => setTimeout(r, 500));
+              spReset();
+              $('spPo').value = '108829451230774'; $('spWt').value = '1.1'; $('spVal').value = '189.99'; $('spRef2').value = 'OLD-REF2';
+              sp.poKey = '108829451230774'; sp.order = { source: 'WALMART', total: 189.99, items: [{ sku: 'X133-128GB-GRAY', quantity: 1 }], party: ${JSON.stringify(cust)} };
+              sp.party = { ...sp.order.party };
+              sp.done = { label: { id: 1, tracking: '1ZE2E0000000000001', reference: '108829451230774', kind: 'ship' }, gif: '', size: null };
+              spRenderAll();
+              const secs = [...document.querySelectorAll('#spForm > .sp-sec')];
+              const out = { bar: !$('spDoneBar').hidden && /Label created for/.test($('spDoneBar').textContent) && $('spDoneBar').textContent.includes('108829451230774'),
+                newBtn: !!$('spBarNew'), locked: $('spForm').classList.contains('is-done') && secs.length > 0 && secs.every(x => x.inert), noOldBtn: !$('spAgain'), print: !!$('spDonePrint') };
+              // Keep these details: the form unlocks exactly as it stands
+              $('spBarKeep').click();
+              out.kept = !sp.done && $('spDoneBar').hidden && !secs.some(x => x.inert) && $('spWt').value === '1.1' && $('spRef2').value === 'OLD-REF2' && $('spPo').value === '108829451230774';
+              // finished again, then the first key typed starts a clean label
+              sp.done = { label: { id: 1, tracking: '1ZE2E0000000000001', reference: '108829451230774', kind: 'ship' }, gif: '', size: null };
+              spRenderAll(); document.activeElement && document.activeElement.blur();
+              document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+              out.spaceIgnored = !!sp.done;
+              document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+              out.typed = !sp.done && $('spDoneBar').hidden && !$('spForm').classList.contains('is-done') && document.activeElement === $('spPo')
+                && $('spPo').value === '' && $('spWt').value === '' && $('spVal').value === '' && $('spRef2').value === '' && !sp.order;
+              // and the button does the same
+              sp.done = { label: { id: 1, tracking: '1ZE2E0000000000001', reference: '', kind: 'ship' }, gif: '', size: null };
+              $('spWt').value = '2.2'; spRenderAll();
+              $('spBarNew').click();
+              out.button = !sp.done && $('spWt').value === '' && $('spDoneBar').hidden;
+              return out; })()`);
+            check('ship: a created label finishes the form (bar with New label, old details locked, New label only on the bar)',
+              fin.bar && fin.newBtn && fin.locked && fin.noOldBtn && fin.print, fin);
+            check('ship: Keep these details unlocks the form as it stands', fin.kept, fin);
+            check('ship: New label, or the first key typed, starts a clean label (weight, value, references cleared; Space left alone)',
+              fin.spaceIgnored && fin.typed && fin.button, fin);
+          }
           if (process.env.CAPTURE_E2E_SHOT) {
             win.setSize(1360, 900);
             await exec(`(async () => { const b = document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn'); b.click(); await new Promise(r => setTimeout(r, 700));

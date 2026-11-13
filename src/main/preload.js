@@ -190,6 +190,7 @@ contextBridge.exposeInMainWorld('api', {
   orderShipSavePkg: (key, pkg) => ipcRenderer.invoke('orderShip:savePkg', { key, pkg }),
   orderShipRates: (payload) => ipcRenderer.invoke('orderShip:rates', payload),
   orderShipCreate: (payload) => ipcRenderer.invoke('orderShip:create', payload),
+  orderShipUseLabel: (rowId, labelId) => ipcRenderer.invoke('orderShip:useLabel', { rowId, labelId }),
   lowIgnore: (sku, pace) => ipcRenderer.invoke('overview:lowIgnore', { sku, pace }),
   lowUnignore: () => ipcRenderer.invoke('overview:lowUnignore'),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),

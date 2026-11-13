@@ -331,6 +331,10 @@
       <button class="btn-icon osd-ic osd-x" id="osdClose" type="button" title="Close (Esc)">✕</button>
     </div>
     <div class="osd-b">
+      <!-- this PO# already has a live label from the Ship tab (owner
+           2026-11-12): ask before a second one is bought -->
+      <div class="os-have" id="osHave" hidden></div>
+      <div class="os-have-or" id="osHaveOr" hidden>or buy a different label</div>
       <div class="osd-col">
         <section class="osd-bx"><div class="osd-t">Customer</div><div id="osAddr"></div></section>
         <section class="osd-bx"><div class="osd-t">Order</div><div class="osd-dates" id="osdDates"></div></section>
@@ -390,7 +394,10 @@
   <section id="shipPage" class="ship-page" hidden>
     <div id="spBanner" class="sp-banner" hidden></div>
     <div class="sp-grid">
-      <div class="sp-card">
+      <div class="sp-card" id="spForm">
+        <!-- a label was just created (owner 2026-11-12): the form is
+             finished and locked, New label starts the next one clean -->
+        <div class="sp-donebar" id="spDoneBar" hidden></div>
         <div class="sp-sec">
           <div class="sp-h">1 · Start from</div>
           <div class="sp-seg">
