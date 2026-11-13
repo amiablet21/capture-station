@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.141 highlights
+
+- **Stock opens highest stock first** (owner: "on startup, I always want stock to initially be highest stock to lowest"). The Stock tab starts sorted by In stock, largest count at the top, at launch and on every entry to the tab. This replaces natural SKU order (v1.32.135–137) as the opening order; that order is still one click away on the SKU header. A header click still sorts for the visit only, and the All view still keeps New above Open Box, Used and Scrap whatever is sorted.
+
 ## v1.32.140 highlights
 
 - **Orders knows when the Ship tab already made the label** (owner: "you made a shipping label for this in the ship tab already, do you mean to use this?"). An order waiting for tracking whose PO# is Reference #1 on a live ship-to-customer label from the Ship tab shows **Label made in Ship tab · Use** in its Tracking cell: one press puts that tracking on the order and buys nothing. Pressing Ship anyway opens the drawer with the question at the top (service, account, tracking, time, package, cost; **Use this label** or **Reprint it**), and the buy button reads **Create a second label**. A used label becomes the line's own (Reprint / Void on the line; Void takes the tracking back off). Return labels, voided labels and labels for another PO# are never offered. Labels live on the computer that made them, so only this station's Ship-tab labels are seen.

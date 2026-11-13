@@ -2284,6 +2284,37 @@ module.exports = async function run({ app, win, db, clipboard }) {
             check('ship: New label, or the first key typed, starts a clean label (weight, value, references cleared; Space left alone)',
               fin.spaceIgnored && fin.typed && fin.button, fin);
           }
+
+          // Stock opens highest stock first, every visit (owner 2026-11-12)
+          {
+            const lv = (n) => [{ locationId: 'L1', stockLevel: n, inOrders: 0, due: 0, minimumLevel: 0, available: n }];
+            const seed = { ok: true, locationId: 'L1', locationName: 'Warehouse', items: [
+              { stockItemId: 's1', sku: 'A15-64GB-BLK', title: 'A', barcode: '', category: '', image: '', levels: lv(12) },
+              { stockItemId: 's2', sku: 'X230-128GB-GRAY', title: 'B', barcode: '', category: '', image: '', levels: lv(754) },
+              { stockItemId: 's3', sku: 'X133-64GB-GRAY', title: 'C', barcode: '', category: '', image: '', levels: lv(852) },
+              { stockItemId: 's4', sku: 'OPEN-BOX-X133-64GB-GRAY', title: 'D', barcode: '', category: '', image: '', levels: lv(900) },
+            ] };
+            const so = await exec(`(async () => {
+              const order = () => [...document.querySelectorAll('#stockList tbody tr .cell-level .stock-num-btn')].map(b => b.dataset.sku).join(',');
+              const out = { fresh: JSON.stringify(stockSortDefault()) };
+              showPage('capture'); showPage('stock'); await new Promise(r => setTimeout(r, 400));
+              stockUnlistedActive = false; stockDsActive = false; stockWfsActive = false; stockLowActive = false; stockActiveView = null; $('stockSearch').value = '';
+              stockSeed(${JSON.stringify(seed)});
+              out.opens = order(); out.sort = JSON.stringify(stockSort);
+              out.arrow = /In stock ▾/.test(document.querySelector('#stockList th[data-sort="stockLevel"]').textContent);
+              // a header click sorts for a look, and the next visit opens highest-first again
+              stockSort = { key: 'sku', dir: 1 }; renderStock(); out.bySku = order();
+              showPage('capture'); showPage('stock'); await new Promise(r => setTimeout(r, 400));
+              stockSeed(${JSON.stringify(seed)});
+              out.again = order(); out.sortAgain = JSON.stringify(stockSort);
+              showPage('capture');
+              return out; })()`);
+            const want = 'X133-64GB-GRAY,X230-128GB-GRAY,A15-64GB-BLK,OPEN-BOX-X133-64GB-GRAY';
+            check('stock: the tab opens highest stock first (New stays above Open Box), with the In stock arrow',
+              so.fresh === '{"key":"stockLevel","dir":-1}' && so.opens === want && so.sort === so.fresh && so.arrow, so);
+            check('stock: a header sort lasts the visit only; the next visit opens highest stock first again',
+              so.bySku === 'A15-64GB-BLK,X133-64GB-GRAY,X230-128GB-GRAY,OPEN-BOX-X133-64GB-GRAY' && so.again === want && so.sortAgain === so.fresh, so);
+          }
           if (process.env.CAPTURE_E2E_SHOT) {
             win.setSize(1360, 900);
             await exec(`(async () => { const b = document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn'); b.click(); await new Promise(r => setTimeout(r, 700));

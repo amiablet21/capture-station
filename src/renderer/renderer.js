@@ -1676,13 +1676,13 @@ function showPage(page) {
       stockPendingSearch = '';
       $('stockSearch').value = pre;
       $('stockSearchClear').hidden = !pre;
-      // every entry to the tab starts in the organized order (owner
-      // 2026-11-10, after the third "still unorganized" screenshot: an
-      // In-stock header click — the old default sort, so it's muscle
-      // memory — made the whole visit's sheet rank by count and stuck for
-      // the session). A header click still sorts for a look; it just
-      // never outlives the visit.
-      if (switching) stockSort = { key: 'sku', dir: 1 };
+      // every entry to the tab starts in the opening order: highest stock
+      // first (owner 2026-11-12: "on startup, I always want stock to
+      // initially be highest stock to lowest"; this replaces the natural
+      // SKU order of 2026-11-10 as the opening order). A header click
+      // still sorts for a look; it just never outlives the visit. The All
+      // view keeps New above Open Box / Used / Scrap whatever is sorted.
+      if (switching) stockSort = stockSortDefault();
       loadStockViews();
       loadStock().then(() => {
         // the load takes a beat: never yank focus from a field the user has
@@ -4511,7 +4511,7 @@ $('stockChips').addEventListener('click', (e) => {
     stockLowActive = true;
     stockWfsActive = false;
     stockActiveView = null;
-    if (stockSort.key === 'home') stockSort = { key: 'sku', dir: 1 };
+    if (stockSort.key === 'home') stockSort = stockSortDefault();
   } else if (chip.dataset.view === 'ds') {
     stockDsActive = true;
     stockWfsActive = false;
@@ -4527,7 +4527,7 @@ $('stockChips').addEventListener('click', (e) => {
     stockUnlistedActive = wasUnlisted;
     stockActiveView = chip.dataset.view === 'new' ? STOCK_VIEW_NEW
       : chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
-    if (stockSort.key === 'home') stockSort = { key: 'sku', dir: 1 };
+    if (stockSort.key === 'home') stockSort = stockSortDefault();
   }
   renderStockChips();
   renderStock();
@@ -4628,7 +4628,10 @@ const STOCK_COLS = {
   // WFS view only: your own warehouse count beside Walmart's
   home: { label: 'At warehouse', get: r => (r.home ? r.home.stockLevel : 0) },
 };
-let stockSort = { key: 'sku', dir: 1 }; // default: natural SKU order (owner 2026-11-10; was highest stock first)
+// the opening order: In stock, highest first (owner 2026-11-12; natural SKU
+// order from 2026-11-10 is one click away on the SKU header)
+const stockSortDefault = () => ({ key: 'stockLevel', dir: -1 });
+let stockSort = stockSortDefault();
 
 // user-adjusted column widths, persisted across sessions
 let stockColWidths = {};
