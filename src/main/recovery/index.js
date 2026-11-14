@@ -17,7 +17,7 @@ const { parseReport } = require('./parseReport');
 const { findIssues, returnsToWarehouseRows } = require('./reconcile');
 const { classify, toSummary, buildRunWorkbook } = require('./classify');
 const { formatPeriod, periodFromReportName, parsePeriodLabel } = require('./period');
-const { parseWfsInventory, gtinKey } = require('./wfsinv');
+const { parseWfsInventory, gtinKey, unwrap } = require('./wfsinv');
 const { conditionOfSku } = require('../skucond');
 
 let deps = null; // { retsync, listReturns, config, archiveDir, station, by, wfsShipments }
@@ -426,12 +426,28 @@ function wfsInventory(id) {
   const byKey = new Map();
   const byGtin = new Map();
   const bySku = new Map();
-  for (const r of store.wfsReportRows(id)) {
+  const shipList = typeof deps.wfsShipments === 'function' ? (deps.wfsShipments() || []) : [];
+  // the report often names a GTIN and no SKU: the shipments log knows which
+  // Walmart SKU (and Linnworks SKU) went out under that GTIN
+  const skuOfGtin = new Map();
+  for (const s of shipList) {
+    for (const it of Array.isArray(s.items) ? s.items : []) {
+      const gk = gtinKey(it.gtin);
+      if (gk && !skuOfGtin.has(gk) && (it.channelSku || it.sku)) skuOfGtin.set(gk, { channelSku: it.channelSku || '', lwSku: it.sku || '' });
+    }
+  }
+  for (const raw of store.wfsReportRows(id)) {
+    // reports imported before the cleanup kept ="…" wrappers and the
+    // column-description line; both are dropped here so no re-import is needed
+    const r = { ...raw, gtin: unwrap(raw.gtin), sku: unwrap(raw.sku), itemId: unwrap(raw.itemId) };
     const gk = gtinKey(r.gtin);
+    if (!gk && !r.sku) continue;
+    if (!gk && /\s/.test(r.gtin) && rep.fields.every((f) => !Number(r.q[f]))) continue;
     const key = gk || `SKU:${String(r.sku).toUpperCase()}`;
     let row = byKey.get(key);
     if (!row) {
-      row = { key, sku: r.sku, name: r.name, gtin: r.gtin, itemId: r.itemId, fcs: [], q: {}, shipped: 0, inReport: true };
+      const known = gk ? skuOfGtin.get(gk) : null;
+      row = { key, sku: r.sku || (known && known.channelSku) || '', lwSku: (known && known.lwSku) || '', name: r.name, gtin: r.gtin, itemId: r.itemId, fcs: [], q: {}, shipped: 0, inReport: true };
       for (const f of rep.fields) row.q[f] = 0;
       byKey.set(key, row);
       if (gk) byGtin.set(gk, row);
@@ -445,8 +461,7 @@ function wfsInventory(id) {
   let shipments = 0;
   const dated = !!(rep.start && rep.end);
   if (dated) {
-    const list = typeof deps.wfsShipments === 'function' ? (deps.wfsShipments() || []) : [];
-    for (const s of list) {
+    for (const s of shipList) {
       const day = localDay(s.created_at);
       if (!day || day < rep.start || day > rep.end) continue;
       shipments++;

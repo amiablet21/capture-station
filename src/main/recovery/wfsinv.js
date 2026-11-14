@@ -119,6 +119,13 @@ function periodFromName(name) {
 }
 
 const gtinKey = (g) => String(g || '').replace(/\D/g, '').replace(/^0+/, '');
+// Excel-safe exports wrap long numbers as ="00884400936080" so they keep
+// their leading zeros; the value is what sits inside the quotes
+const unwrap = (v) => { const s = String(v ?? '').trim(); const m = /^="(.*)"$/.exec(s); return m ? m[1].trim() : s; };
+// Walmart's file carries a second header line that describes each column
+// ("Global Trade Item Number (GTIN)", "Title of the product"…): a line is an
+// item only when a quantity column holds a number
+const QTY_RX = /^\(?-?[\d,]+(\.\d+)?\)?$/;
 
 /**
  * Parse the report text.
@@ -136,7 +143,7 @@ function parseWfsInventory(text, name = '') {
   if (!(map.sku || map.gtin) || fields.length < 2) {
     throw new Error(`This does not look like the WFS Inventory Reconciliation report (Seller Center → WFS → Reports). Its columns are: ${columns.join(', ')}`);
   }
-  const get = (r, f) => (map[f] ? r[map[f]] : '');
+  const get = (r, f) => (map[f] ? unwrap(r[map[f]]) : '');
 
   let pStart = null; let pEnd = null;
   const groups = new Map();
@@ -144,6 +151,7 @@ function parseWfsInventory(text, name = '') {
     const sku = String(get(r, 'sku') || '').trim();
     const gtin = String(get(r, 'gtin') || '').trim();
     if (!sku && !gtin) continue; // a totals line or a note
+    if (!fields.some((f) => QTY_RX.test(String(get(r, f)).trim()))) continue; // the column-description line
     const dFrom = isoDay(get(r, 'startDate')) || isoDay(get(r, 'date'));
     const dTo = isoDay(get(r, 'endDate')) || isoDay(get(r, 'date')) || dFrom;
     if (dFrom && (!pStart || dFrom < pStart)) pStart = dFrom;
@@ -173,4 +181,4 @@ function parseWfsInventory(text, name = '') {
   return { period, fields, unknown, columns, map, rows: out, rawRows: rows.length };
 }
 
-module.exports = { parseWfsInventory, mapColumns, isoDay, gtinKey, QTY_FIELDS };
+module.exports = { parseWfsInventory, mapColumns, isoDay, gtinKey, unwrap, QTY_FIELDS };

@@ -2015,11 +2015,7 @@ function rcRender() {
   const need = rc.data.today ? rc.data.today.needsAction : 0;
   $('rcNeedCount').textContent = String(need);
   $('rcNeedCount').hidden = !need;
-  for (const b of document.querySelectorAll('.rc-subtab')) b.classList.toggle('is-active', b.dataset.rcsub === rc.sub);
-  $('rcImport').hidden = rc.sub !== 'import';
-  $('rcReconcile').hidden = rc.sub !== 'reconcile';
-  $('rcProfit').hidden = rc.sub !== 'profit';
-  $('rcWfs').hidden = rc.sub !== 'wfs';
+  rcShowSub();
   $('rcExportBtn').hidden = rc.sub !== 'notreceived';
   rcRenderImport();
   rcRenderReconcile();
@@ -3105,12 +3101,26 @@ function rcAnchor(dlg, r) {
 }
 
 /* ----- wiring ----- */
+// a sub-tab switches the moment it is clicked — underline and screen —
+// and fills in once its data arrives (before, a click while the page was
+// still loading, or after a failed load, did nothing at all)
+function rcShowSub() {
+  for (const b of document.querySelectorAll('.rc-subtab')) b.classList.toggle('is-active', b.dataset.rcsub === rc.sub);
+  $('rcImport').hidden = rc.sub !== 'import';
+  $('rcReconcile').hidden = rc.sub !== 'reconcile';
+  $('rcProfit').hidden = rc.sub !== 'profit';
+  $('rcWfs').hidden = rc.sub !== 'wfs';
+}
 for (const b of document.querySelectorAll('[data-rcsub]')) {
   b.addEventListener('click', async () => {
+    if (rc.sub === b.dataset.rcsub) return;
     rc.sub = b.dataset.rcsub;
-    if (!rc.data) return;
-    if (rc.sub === 'profit' && !rc.profit) await rcLoadProfit();
-    if (rc.sub === 'wfs' && !rc.wfs) await rcLoadWfs();
+    rcShowSub();
+    if (!rc.data) { await rcLoad(); return; }
+    const seq = rc.seq;
+    if (rc.sub === 'profit' && !rc.profit) await rcLoadProfit(seq);
+    if (rc.sub === 'wfs' && !rc.wfs) await rcLoadWfs(seq);
+    if (seq !== rc.seq) return;
     rcRender();
   });
 }
@@ -3326,6 +3336,22 @@ $('rcWfsMenu').addEventListener('click', async (e) => {
   rcWfsProgress('');
   await rcLoad();
 });
+// the three tabs over the WFS table (their listener and the received mark
+// went missing in v1.32.82, leaving the tabs and Mark received dead)
+$('rcWfsTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcwfstab]');
+  if (!b || b.dataset.rcwfstab === rc.wfsTab) return;
+  rc.wfsTab = b.dataset.rcwfstab;
+  rcRenderWfs();
+});
+async function rcWfsSetReceived(key, received) {
+  const r = await api.wfsReceived(key, received).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not save that.', 4000); return; }
+  const s = (rc.wfsShip || []).find(x => x.key === key);
+  if (s) s.received_at = r.receivedAt || '';
+  rcRenderWfs();
+  toast(received ? 'Marked received' : 'Back on Not received');
+}
 $('rcWfsTable').addEventListener('click', async (e) => {
   const rv = e.target.closest('[data-rcwfsrecv]');
   if (rv) { await rcWfsSetReceived(rv.dataset.rcwfsrecv, true); return; }

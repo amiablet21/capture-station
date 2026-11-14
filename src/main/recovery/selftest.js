@@ -379,6 +379,12 @@ module.exports = function run(check) {
     const daily = parseWfsInventory(['Date,SKU,Fulfillment Center,Beginning Qty,Units Received,Units Sold,Ending Qty',
       '2026-09-02,X,FC1,8,0,3,5', '2026-09-01,X,FC1,10,0,2,8', '2026-09-03,X,FC1,5,4,1,8'].join('\n'));
     check('wfs: a daily file takes the first day\'s start, the last day\'s end, sums the rest', daily.rows.length === 1 && daily.rows[0].q.start === 10 && daily.rows[0].q.end === 8 && daily.rows[0].q.sold === 6 && daily.rows[0].q.recv === 4 && daily.period.start === '2026-09-01', daily.rows[0]);
+    // Walmart's own download (owner 2026-11-14 screenshot): a line describing
+    // each column under the header, and GTINs wrapped Excel-style as ="…"
+    const wmShape = parseWfsInventory(['Start Date,End Date,GTIN,Product Name,Starting Quantity,Received,Sold,Ending Quantity',
+      'Start of the period,End of the period,Global Trade Item Number (GTIN),Title of the product,Units at the start,Units received,Units sold,Units at the end',
+      '11/01/2026,11/10/2026,"=""00884400936080""",Samsung Galaxy Tab A9+,75,48,25,98'].join('\n'));
+    check('wfs: the column-description line is skipped and ="…" GTINs unwrapped', wmShape.rows.length === 1 && wmShape.rows[0].gtin === '00884400936080' && wmShape.rows[0].q.end === 98, wmShape.rows);
     let wfsErr = '';
     try { parseWfsInventory('PO,Amount\n1,2'); } catch (e) { wfsErr = e.message; }
     check('wfs: a file that is not the report says so and lists its columns', /does not look like/.test(wfsErr) && /PO, Amount/.test(wfsErr), wfsErr);
