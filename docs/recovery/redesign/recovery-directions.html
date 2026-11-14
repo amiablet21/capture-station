@@ -1,0 +1,368 @@
+<title>Recovery Redesign Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column of notes, each direction drawn inside an "app frame" that uses DWS Stock's own tokens */
+:root {
+  --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8; --border: #EAEAEA;
+  --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+  --accent: #1E3A66; --accent-soft: #E4EAF4;
+  --red: #9F2F2D; --red-bg: #FDEBEC; --amber: #956400; --amber-bg: #FBF3DB;
+  --green: #346538; --green-bg: #EDF3EC; --blue: #1F6C9F; --blue-bg: #E1F3FE;
+  --page: #EFEDE8; --note-bg: #FFFFFF;
+  --font: 'Geist', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas: #1C1D1F; --surface: #242528; --surface-2: #2A2B2E; --border: #36383C;
+  --text: #E6E5E2; --muted: #A09E99; --faint: #6F6D69;
+  --accent: #8FB0E3; --accent-soft: #273550;
+  --red: #F08C88; --red-bg: #3A2324; --amber: #E2BC62; --amber-bg: #372F1C;
+  --green: #8CC492; --green-bg: #213025; --blue: #7CC0EA; --blue-bg: #1D3140;
+  --page: #151618; --note-bg: #1E1F22; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --canvas: #1C1D1F; --surface: #242528; --surface-2: #2A2B2E; --border: #36383C;
+  --text: #E6E5E2; --muted: #A09E99; --faint: #6F6D69;
+  --accent: #8FB0E3; --accent-soft: #273550;
+  --red: #F08C88; --red-bg: #3A2324; --amber: #E2BC62; --amber-bg: #372F1C;
+  --green: #8CC492; --green-bg: #213025; --blue: #7CC0EA; --blue-bg: #1D3140;
+  --page: #151618; --note-bg: #1E1F22; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.55; margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 40px; }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 20px; margin: 0; text-wrap: balance; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); font-size: 15px; }
+header.top { display: flex; flex-direction: column; gap: 10px; }
+
+.note { background: var(--note-bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; }
+.issues { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 28px; }
+.issues li { display: flex; gap: 10px; }
+.issues li b { display: block; }
+.issues .why { color: var(--muted); font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-top: 7px; background: var(--faint); }
+.dot.red { background: var(--red); } .dot.amber { background: var(--amber); } .dot.green { background: var(--green); } .dot.navy { background: var(--accent); }
+.fixed { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--green-bg); color: var(--green); font-weight: 500; }
+
+section.dir { display: flex; flex-direction: column; gap: 16px; }
+.dir-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.dir-tag { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px; }
+.pros { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 28px; font-size: 13.5px; }
+.pros div b { display: block; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.pros ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+
+/* ---- the app frame ---- */
+.frame { background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.frame-bar { display: flex; align-items: center; gap: 22px; padding: 14px 20px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.frame-bar .ttl { font-size: 18px; font-weight: 600; padding-bottom: 12px; }
+.subtabs { display: flex; gap: 20px; flex-wrap: wrap; }
+.subtab { font: inherit; font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: 0; padding: 0 0 11px; border-bottom: 2px solid transparent; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline; }
+.subtab:hover { color: var(--text); }
+.subtab.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.subtab:focus-visible, .btn:focus-visible, .row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cnt { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--red); }
+.cnt.calm { color: var(--muted); }
+.bar-right { margin-left: auto; display: flex; gap: 8px; padding-bottom: 10px; align-items: center; }
+.btn { font: inherit; font-size: 12.5px; font-weight: 500; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: 5px 11px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.ghost { background: none; }
+.frame-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.card-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.card-head h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.card-head .sub { color: var(--muted); font-size: 12px; }
+.card-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.scroll-x { overflow-x: auto; }
+.muted { color: var(--muted); } .faint { color: var(--faint); } .small { font-size: 12px; }
+
+/* A: action list */
+.todo { list-style: none; margin: 0; padding: 0; }
+.todo li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 14px 16px; border-top: 1px solid var(--border); }
+.todo li:first-child { border-top: 0; }
+.todo .lead { font-weight: 600; }
+.todo .clause { color: var(--muted); }
+.todo .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.src { padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
+.src .k { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.src .v { font-weight: 600; }
+.drop-hint { border: 1px dashed var(--faint); border-radius: 8px; padding: 10px 14px; color: var(--muted); font-size: 12.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* B: flow summary + flow rows */
+.flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; }
+.flow .st { padding: 12px 18px; display: flex; flex-direction: column; gap: 2px; min-width: 110px; }
+.flow .st + .st { border-left: 1px solid var(--border); }
+.flow .k { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.flow .n { font-family: var(--mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.flow .n.pos { color: var(--green); } .flow .n.end { color: var(--accent); }
+.flow .d { font-size: 11.5px; color: var(--muted); }
+.ship { list-style: none; margin: 0; padding: 0; }
+.ship li { display: grid; grid-template-columns: 74px minmax(0,1fr) auto auto; gap: 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 13px; }
+.ship li:first-child { border-top: 0; }
+.age { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.age.amber { background: var(--amber-bg); color: var(--amber); } .age.red { background: var(--red-bg); color: var(--red); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+td { padding: 11px 14px; border-top: 1px solid var(--border); vertical-align: middle; }
+tbody tr:first-child td { border-top: 0; }
+.r { text-align: right; }
+.sku { font-family: var(--mono); font-weight: 500; font-size: 12.5px; }
+.pname { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+.eq { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+.eq .op { color: var(--faint); padding: 0 3px; }
+.eq .in { color: var(--green); } .eq .out { color: var(--text); } .eq .adj { color: var(--blue); } .eq .end { color: var(--accent); font-weight: 600; }
+.eq .lbl { font-family: var(--font); font-size: 10.5px; color: var(--muted); margin-left: 2px; }
+.status { display: inline-flex; gap: 7px; align-items: baseline; white-space: nowrap; }
+.status .dot { margin-top: 0; align-self: center; }
+.stack { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); min-width: 120px; }
+.stack i { display: block; height: 100%; }
+.stack .s-keep { background: var(--accent); opacity: .55; }
+.stack .s-new { background: var(--green); }
+.stack .s-sold { background: var(--faint); opacity: .7; }
+.row-btn { font: inherit; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+.row-btn:hover { background: var(--surface-2); color: var(--text); }
+tr.detail td { background: var(--surface-2); padding: 10px 14px 14px 46px; }
+.dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px 20px; font-size: 12.5px; }
+.dl span { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dotted var(--border); padding-bottom: 2px; }
+.dl b { font-family: var(--mono); font-weight: 500; }
+.quiet-row td { color: var(--muted); font-size: 12.5px; text-align: center; background: var(--surface-2); }
+
+/* C: compact ledger */
+.ledger td.num, .ledger th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.ledger td.z { color: var(--faint); }
+.ledger td.endc { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+.ledger th.endc { background: var(--accent-soft); color: var(--accent); }
+.ledger td.pos { color: var(--green); }
+.ledger tfoot td { font-weight: 600; background: var(--surface-2); border-top: 1px solid var(--border); }
+.check { font-size: 12px; white-space: nowrap; }
+.check.ok { color: var(--green); } .check.warn { color: var(--amber); } .check.bad { color: var(--red); }
+.toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); cursor: pointer; }
+
+.rec { border-left: 0; background: var(--accent-soft); border-color: transparent; }
+.rec h2 { color: var(--accent); }
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.example { font-size: 11.5px; color: var(--muted); font-style: italic; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 24px; }
+  .frame-body { padding: 12px; }
+  .bar-right { margin-left: 0; }
+  .todo li { grid-template-columns: 14px minmax(0,1fr); }
+  .todo li .btn { grid-column: 2; justify-self: start; }
+  .ship li { grid-template-columns: 64px minmax(0,1fr); }
+  .ship li > :nth-child(n+3) { grid-column: 2; justify-self: start; }
+  .flow .st { min-width: 50%; }
+  .flow .st + .st { border-left: 0; }
+}
+@media (prefers-reduced-motion: no-preference) { .subtab, .btn, .row-btn { transition: color .15s, background .15s, border-color .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">DWS Stock · Recovery · step 1 of 4</span>
+    <h1>Three ways to make Recovery readable</h1>
+    <p class="lede">Each direction is drawn with your Nov 1 – Nov 10 WFS report from the screenshot. Dollar amounts and SKU names on refunds are examples. Tabs and rows in the frames are clickable.</p>
+  </header>
+
+  <section class="note" aria-labelledby="issues-h">
+    <h2 id="issues-h">What makes the page hard to read today</h2>
+    <ul class="issues">
+      <li><span class="dot red"></span><div><b>Tabs inside tabs</b><span class="why">Recovery › WFS Inventory › Not received is three levels deep. The 41 shipments that need you are hidden behind two clicks.</span></div></li>
+      <li><span class="dot red"></span><div><b>Import is a screen, not an action</b><span class="why">You visit a whole tab to drop a file, then go to another tab to see what it changed.</span></div></li>
+      <li><span class="dot amber"></span><div><b>Eleven number columns, mostly dashes</b><span class="why">Lost, Found, Removed, Returned, Moved are empty on almost every row but take half the width.</span></div></li>
+      <li><span class="dot amber"></span><div><b>The answer isn't on screen</b><span class="why">You want to know “did Walmart lose anything?”. The table makes you add 75 + 48 − 25 in your head to check the 98.</span></div></li>
+      <li><span class="dot amber"></span><div><b>Signs flip</b><span class="why">Sold shows as −25 in Walmart's file but Lost/Removed are positive. Every out-flow should read the same way.</span></div></li>
+      <li><span class="dot navy"></span><div><b>Shipped vs received is a faint tint</b><span class="why">Tab A9+ shows 48 received with nothing logged as shipped in those days. Today that is a small amber dot in the legend.</span></div></li>
+    </ul>
+    <div class="fixed" aria-label="Already fixed">
+      <span class="chip">Fixed in v1.32.142: WFS tabs click again</span>
+      <span class="chip">“Mark received” works again</span>
+      <span class="chip">GTIN description row removed</span>
+      <span class="chip">=“0088…” shows as a SKU</span>
+    </div>
+  </section>
+
+  <!-- ================= A ================= -->
+  <section class="dir" aria-labelledby="a-h">
+    <div class="dir-head"><span class="dir-tag">A</span><h2 id="a-h">Action inbox</h2><span class="muted">Recovery opens on what needs you, across refunds and WFS</span></div>
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="ttl">Recovery</span>
+        <nav class="subtabs" data-group="a">
+          <button class="subtab on" type="button">To do <span class="cnt">17</span></button>
+          <button class="subtab" type="button">Refunds <span class="cnt calm">41</span></button>
+          <button class="subtab" type="button">WFS stock</button>
+          <button class="subtab" type="button">Profit</button>
+        </nav>
+        <div class="bar-right"><button class="btn primary" type="button">Import report</button></div>
+      </div>
+      <div class="frame-body">
+        <div class="card">
+          <div class="card-head"><h4>Needs you</h4><span class="sub">most urgent first</span></div>
+          <ul class="todo">
+            <li><span class="dot red"></span><div><span class="lead">14 refunds to file with Walmart</span> <span class="clause">· $2,431.60 · the first window closes in 6 days</span><div class="meta">Seller-fulfilled returns that never came back. Opens Refunds › To file.</div></div><button class="btn" type="button">Review</button></li>
+            <li><span class="dot red"></span><div><span class="lead">1 WFS shipment not received after 30 days</span> <span class="clause">· 20 units of X230-128GB-GRAY</span><div class="meta">Logged Oct 10 · open a case with WFS or mark it received.</div></div><button class="btn" type="button">Review</button></li>
+            <li><span class="dot amber"></span><div><span class="lead">1 WFS shipment past 20 days</span> <span class="clause">· 60 units of SM-X133-64GB-GREY</span><div class="meta">Still inside Walmart's normal receiving time.</div></div><button class="btn" type="button">Review</button></li>
+            <li><span class="dot amber"></span><div><span class="lead">Tab A9+ received 48 with no shipment logged</span> <span class="clause">· Nov 1 – Nov 10</span><div class="meta">A shipment may have been logged under another SKU, or before Nov 1.</div></div><button class="btn" type="button">Check</button></li>
+          </ul>
+        </div>
+        <div class="sources">
+          <div class="card src"><span class="k">Payment period</span><span class="v">Oct 25 – Nov 7, 2026</span><span class="small muted">imported Nov 10 · 41 refunds read</span></div>
+          <div class="card src"><span class="k">WFS inventory report</span><span class="v">Nov 1 – Nov 10, 2026</span><span class="small muted">7 SKUs · 227 units at WFS</span></div>
+          <div class="card src"><span class="k">Profit, this period</span><span class="v mono">$4,812.30</span><span class="small muted">18.4% margin · opens Profit</span></div>
+        </div>
+        <div class="drop-hint"><b>Drop any Walmart CSV here.</b> The app tells payment periods and WFS inventory reports apart by their columns, so there is one import for both.</div>
+      </div>
+    </div>
+    <div class="pros">
+      <div><b>Good for</b><ul><li>Opening the page and knowing in five seconds what to do</li><li>Import stops being a tab; one button, or drop anywhere</li><li>One level of tabs; every count on a tab means “needs you”</li></ul></div>
+      <div><b>Trade-off</b><ul><li>A new home screen to learn</li><li>Refunds, WFS stock and Profit still need their own redesign (B or C below)</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ================= B ================= -->
+  <section class="dir" aria-labelledby="b-h">
+    <div class="dir-head"><span class="dir-tag">B</span><h2 id="b-h">WFS stock as a flow</h2><span class="muted">Each SKU reads as one sum: what was there, what came in, what left, what's left</span></div>
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="ttl">WFS stock</span>
+        <div class="bar-right"><button class="btn" type="button">Nov 1 – Nov 10, 2026 ▾</button><button class="btn" type="button" aria-label="Import report">Import</button></div>
+      </div>
+      <div class="frame-body">
+        <div class="card flow" aria-label="Totals for the report">
+          <div class="st"><span class="k">On hand Nov 1</span><span class="n">196</span><span class="d">7 SKUs</span></div>
+          <div class="st"><span class="k">Received</span><span class="n pos">+108</span><span class="d">0 logged as shipped in these days</span></div>
+          <div class="st"><span class="k">Sold</span><span class="n">−78</span><span class="d">7.8 a day</span></div>
+          <div class="st"><span class="k">Lost / found</span><span class="n pos">+1</span><span class="d">1 found · 0 lost</span></div>
+          <div class="st"><span class="k">At WFS Nov 10</span><span class="n end">227</span><span class="d">checks out: 196 + 108 − 78 + 1</span></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h4>Shipments on their way</h4><span class="sub">3 not received · oldest first</span><div class="right"><span class="small muted">no inner tabs: this block only shows while something is pending</span></div></div>
+          <ul class="ship">
+            <li><span class="age red">35 days</span><span><span class="sku">X230-128GB-GRAY</span> <span class="muted">× 20 · Oct 10 · PHL5s</span></span><button class="btn" type="button">Open case</button><button class="btn ghost" type="button">Received</button></li>
+            <li><span class="age amber">25 days</span><span><span class="sku">SM-X133-64GB-GREY</span> <span class="muted">× 60 · Oct 20 · DFW5s</span></span><button class="btn" type="button">Track</button><button class="btn ghost" type="button">Received</button></li>
+            <li><span class="age">3 days</span><span><span class="sku">SM-X133-64GB-GREY</span> <span class="muted">× 120 · Nov 11 · PHL5s</span></span><button class="btn" type="button">Track</button><button class="btn ghost" type="button">Received</button></li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-head"><h4>By SKU</h4><span class="sub">4 with movement · 3 empty hidden</span><div class="right"><span class="small muted">click a row for every column Walmart sent</span></div></div>
+          <div class="scroll-x">
+            <table id="flowTable">
+              <thead><tr><th>Item</th><th>The sum</th><th>Mix at WFS</th><th>Check</th><th></th></tr></thead>
+              <tbody>
+                <tr><td><div class="sku">X210-64GB-GRAY</div><div class="pname">Galaxy Tab A9+ 11" 128GB Gray Wi-Fi</div></td>
+                  <td class="eq">75<span class="op">+</span><span class="in">48</span><span class="lbl">in</span><span class="op">−</span><span class="out">25</span><span class="lbl">sold</span><span class="op">=</span><span class="end">98</span></td>
+                  <td><div class="stack" title="50 kept from Nov 1 · 48 new · 25 sold"><i class="s-keep" style="width:41%"></i><i class="s-new" style="width:39%"></i><i class="s-sold" style="width:20%"></i></div></td>
+                  <td><span class="status"><span class="dot amber"></span>48 in, none logged as shipped</span></td>
+                  <td class="r"><button class="row-btn" type="button" data-detail="d1" aria-expanded="false" aria-label="Show every column">▸</button></td></tr>
+                <tr class="detail" id="d1" hidden><td colspan="5"><div class="dl"><span>On hand Nov 1<b>75</b></span><span>Shipped (log)<b>0</b></span><span>Received<b>48</b></span><span>Sold<b>25</b></span><span>Customer returns<b>0</b></span><span>Lost<b>0</b></span><span>Found<b>0</b></span><span>Removed<b>0</b></span><span>Returned to you<b>0</b></span><span>Moved<b>0</b></span><span>At WFS Nov 10<b>98</b></span><span>GTIN<b>00884400936080</b></span></div></td></tr>
+                <tr><td><div class="sku">SM-X133-64GB-GREY</div><div class="pname">Galaxy Tab S10 Lite with S-Pen 128GB</div></td>
+                  <td class="eq">68<span class="op">+</span><span class="in">60</span><span class="lbl">in</span><span class="op">−</span><span class="out">50</span><span class="lbl">sold</span><span class="op">+</span><span class="adj">1</span><span class="lbl">found</span><span class="op">=</span><span class="end">79</span></td>
+                  <td><div class="stack" title="18 kept · 60 new · 50 sold"><i class="s-keep" style="width:14%"></i><i class="s-new" style="width:47%"></i><i class="s-sold" style="width:39%"></i></div></td>
+                  <td><span class="status"><span class="dot green"></span>Balanced</span></td>
+                  <td class="r"><button class="row-btn" type="button" data-detail="d2" aria-expanded="false" aria-label="Show every column">▸</button></td></tr>
+                <tr class="detail" id="d2" hidden><td colspan="5"><div class="dl"><span>On hand Nov 1<b>68</b></span><span>Received<b>60</b></span><span>Sold<b>50</b></span><span>Found<b>1</b></span><span>Lost<b>0</b></span><span>At WFS Nov 10<b>79</b></span><span>GTIN<b>00731875679328</b></span></div></td></tr>
+                <tr><td><div class="sku">X826-128GB-GRAY</div><div class="pname">Galaxy Tab S10 FE+ 128GB 13.1"</div></td>
+                  <td class="eq">17<span class="op">−</span><span class="out">3</span><span class="lbl">sold</span><span class="op">=</span><span class="end">14</span></td>
+                  <td><div class="stack"><i class="s-keep" style="width:82%"></i><i class="s-sold" style="width:18%"></i></div></td>
+                  <td><span class="status"><span class="dot green"></span>Balanced · about 6 weeks left</span></td>
+                  <td class="r"><button class="row-btn" type="button" data-detail="d3" aria-expanded="false" aria-label="Show every column">▸</button></td></tr>
+                <tr class="detail" id="d3" hidden><td colspan="5"><div class="dl"><span>On hand Nov 1<b>17</b></span><span>Sold<b>3</b></span><span>At WFS Nov 10<b>14</b></span><span>GTIN<b>00356146194333</b></span></div></td></tr>
+                <tr><td><div class="sku">X520-128GB-GRAY</div><div class="pname">Galaxy Tab S10 FE 10.9" Widescreen</div></td>
+                  <td class="eq">36<span class="op">=</span><span class="end">36</span></td>
+                  <td><div class="stack"><i class="s-keep" style="width:100%"></i></div></td>
+                  <td><span class="status"><span class="dot"></span>No sales in 10 days</span></td>
+                  <td class="r"><button class="row-btn" type="button" data-detail="d4" aria-expanded="false" aria-label="Show every column">▸</button></td></tr>
+                <tr class="detail" id="d4" hidden><td colspan="5"><div class="dl"><span>On hand Nov 1<b>36</b></span><span>At WFS Nov 10<b>36</b></span><span>GTIN<b>00887276992280</b></span></div></td></tr>
+                <tr class="quiet-row"><td colspan="5">3 SKUs with 0 units all period (S10 Lite 10.9, A11+, …) · show</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="example">SKU names are examples matched from GTINs; the app will use the names in your WFS Shipments log.</p>
+      </div>
+    </div>
+    <div class="pros">
+      <div><b>Good for</b><ul><li>The arithmetic is on screen, so you can see why 98 is 98</li><li>Only the movements that happened are written</li><li>“Check” answers the real question per SKU</li><li>Pending shipments sit on top instead of behind a tab</li></ul></div>
+      <div><b>Trade-off</b><ul><li>Harder to sort by a single column like Lost (still possible from the header menu)</li><li>Exporting to Excel stays column-by-column</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ================= C ================= -->
+  <section class="dir" aria-labelledby="c-h">
+    <div class="dir-head"><span class="dir-tag">C</span><h2 id="c-h">Compact ledger</h2><span class="muted">Keep a table, fold 11 columns into 6, add a Check column</span></div>
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="ttl">WFS stock</span>
+        <nav class="subtabs" data-group="c">
+          <button class="subtab on" type="button">By SKU</button>
+          <button class="subtab" type="button">Shipments <span class="cnt">3</span></button>
+        </nav>
+        <div class="bar-right"><label class="toggle"><input type="checkbox" id="cAll"> Show every Walmart column</label><button class="btn" type="button">Nov 1 – Nov 10 ▾</button></div>
+      </div>
+      <div class="frame-body">
+        <div class="card scroll-x">
+          <table class="ledger" id="ledger">
+            <thead><tr><th>Item</th><th class="num">Start</th><th class="num">In</th><th class="num">Sold</th><th class="num">Other out</th><th class="num">Adjust</th><th class="num endc">At WFS</th><th>Check</th></tr></thead>
+            <tbody>
+              <tr><td><div class="sku">X210-64GB-GRAY</div><div class="pname">Galaxy Tab A9+ 11" 128GB Gray</div></td><td class="num">75</td><td class="num pos">+48</td><td class="num">−25</td><td class="num z">–</td><td class="num z">–</td><td class="num endc">98</td><td><span class="check warn">● 48 in, 0 shipped</span></td></tr>
+              <tr><td><div class="sku">SM-X133-64GB-GREY</div><div class="pname">Galaxy Tab S10 Lite with S-Pen</div></td><td class="num">68</td><td class="num pos">+60</td><td class="num">−50</td><td class="num z">–</td><td class="num pos">+1</td><td class="num endc">79</td><td><span class="check ok">● Balanced</span></td></tr>
+              <tr><td><div class="sku">X826-128GB-GRAY</div><div class="pname">Galaxy Tab S10 FE+ 128GB</div></td><td class="num">17</td><td class="num z">–</td><td class="num">−3</td><td class="num z">–</td><td class="num z">–</td><td class="num endc">14</td><td><span class="check ok">● Balanced</span></td></tr>
+              <tr><td><div class="sku">X520-128GB-GRAY</div><div class="pname">Galaxy Tab S10 FE 10.9"</div></td><td class="num">36</td><td class="num z">–</td><td class="num z">–</td><td class="num z">–</td><td class="num z">–</td><td class="num endc">36</td><td><span class="check">● No sales</span></td></tr>
+            </tbody>
+            <tfoot><tr><td>4 SKUs · 3 empty hidden</td><td class="num">196</td><td class="num pos">+108</td><td class="num">−78</td><td class="num">0</td><td class="num pos">+1</td><td class="num endc">227</td><td><span class="check warn">1 to check</span></td></tr></tfoot>
+          </table>
+        </div>
+        <p class="small muted">In = received + customer returns. Other out = lost + damaged + removed + returned to you. Adjust = found + moved + other. Every out-flow is written with a minus.</p>
+      </div>
+    </div>
+    <div class="pros">
+      <div><b>Good for</b><ul><li>Closest to today, least to relearn</li><li>Every column still sorts; Excel export is a straight copy</li><li>The full 11 columns are one tick away</li></ul></div>
+      <div><b>Trade-off</b><ul><li>Still a grid of numbers; the story is less obvious than B</li><li>Keeps one inner tab (Shipments)</li></ul></div>
+    </div>
+  </section>
+
+  <section class="note rec" aria-labelledby="rec-h">
+    <h2 id="rec-h">My recommendation: A + B</h2>
+    <p>Use A's structure for the whole page (To do · Refunds · WFS stock · Profit, one Import button) and B for the WFS stock tab. It fixes the two biggest problems, depth and arithmetic, and the To do list gives the counts on the tabs a single meaning.</p>
+    <ol class="steps">
+      <li>Build the new tab bar and a single Import that reads both file types.</li>
+      <li>Build the To do home from data the app already has (refund windows, shipment ages, shipped vs received).</li>
+      <li>Rebuild WFS stock as B. Keep a “Show every column” switch so nothing Walmart sends is lost.</li>
+      <li>Refunds and Profit keep their current tables for now, then get the same pass.</li>
+    </ol>
+    <p class="small">Reply with A, B, C or a mix (for example “A with C for WFS”), plus anything you want changed, and I'll build it in the app.</p>
+  </section>
+</div>
+
+<script>
+// sub-tab pills inside each frame (visual only)
+document.querySelectorAll('.subtabs').forEach(nav => nav.addEventListener('click', e => {
+  const b = e.target.closest('.subtab'); if (!b) return;
+  nav.querySelectorAll('.subtab').forEach(x => x.classList.toggle('on', x === b));
+}));
+// B: a row opens every column Walmart sent
+document.getElementById('flowTable').addEventListener('click', e => {
+  const b = e.target.closest('[data-detail]'); if (!b) return;
+  const d = document.getElementById(b.dataset.detail);
+  d.hidden = !d.hidden; b.textContent = d.hidden ? '▸' : '▾'; b.setAttribute('aria-expanded', String(!d.hidden));
+});
+// C: the full-column switch widens the ledger back to Walmart's 11 columns
+document.getElementById('cAll').addEventListener('change', e => {
+  const t = document.getElementById('ledger');
+  const full = ['Start', 'Shipped', 'Received', 'Sold', 'Cust. returns', 'Lost', 'Found', 'Removed', 'Returned', 'Moved', 'At WFS'];
+  const rows = [[75, 0, 48, 25, 0, 0, 0, 0, 0, 0, 98], [68, 0, 60, 50, 0, 0, 1, 0, 0, 0, 79], [17, 0, 0, 3, 0, 0, 0, 0, 0, 0, 14], [36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36]];
+  if (!t.dataset.compact) t.dataset.compact = t.innerHTML;
+  if (!e.target.checked) { t.innerHTML = t.dataset.compact; return; }
+  const items = [...t.querySelectorAll('tbody tr td:first-child')].map(td => td.innerHTML);
+  t.innerHTML = '<thead><tr><th>Item</th>' + full.map((h, i) => `<th class="num${i === 10 ? ' endc' : ''}">${h}</th>`).join('') + '</tr></thead><tbody>'
+    + rows.map((r, i) => `<tr><td>${items[i]}</td>` + r.map((n, j) => `<td class="num${j === 10 ? ' endc' : n === 0 ? ' z' : ''}">${n === 0 && j !== 10 ? '–' : n}</td>`).join('') + '</tr>').join('') + '</tbody>';
+});
+</script>
