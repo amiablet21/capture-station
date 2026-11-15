@@ -191,6 +191,7 @@ contextBridge.exposeInMainWorld('api', {
   orderShipRates: (payload) => ipcRenderer.invoke('orderShip:rates', payload),
   orderShipCreate: (payload) => ipcRenderer.invoke('orderShip:create', payload),
   orderShipUseLabel: (rowId, labelId) => ipcRenderer.invoke('orderShip:useLabel', { rowId, labelId }),
+  orderShipUseShared: (rowId, station, tracking) => ipcRenderer.invoke('orderShip:useShared', { rowId, station, tracking }),
   lowIgnore: (sku, pace) => ipcRenderer.invoke('overview:lowIgnore', { sku, pace }),
   lowUnignore: () => ipcRenderer.invoke('overview:lowUnignore'),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),

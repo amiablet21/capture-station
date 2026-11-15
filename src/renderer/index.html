@@ -407,6 +407,7 @@
           <div id="spPoPane" class="sp-pane">
             <input id="spPo" class="sp-po-in mono" placeholder="Paste or scan a PO#, then Enter" autocomplete="off" spellcheck="false" />
             <div id="spOrder"></div>
+            <div id="spHave" class="sp-have" hidden></div>
           </div>
           <div id="spManPane" class="sp-pane" hidden>
             <div class="sp-book"><span class="sp-book-l">Address book</span><span id="spBook" class="sp-book-list"></span>
@@ -484,14 +485,14 @@
         <h4>Labels</h4><span id="spLogSum" class="sp-note"></span>
         <button id="spPrintSel" class="btn btn-primary sp-print-sel" type="button" hidden>Print selected</button>
         <div class="sp-chips" id="spLogKind">
-          <button class="is-on" data-k="" type="button">All</button><button data-k="ship" type="button">Ship</button><button data-k="return" type="button">Return</button>
+          <button class="is-on" data-k="" type="button">All</button><button data-k="ship" type="button">Ship</button><button data-k="return" type="button">Return</button><button data-k="dup" class="sp-dupchip" type="button" title="PO#s with more than one live label, across every computer and both accounts" hidden>Duplicates</button>
         </div>
         <select id="spLogRange" class="input sp-range">
           <option value="0">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option>
         </select>
       </div>
       <table class="sp-table">
-        <thead><tr><th class="sel"><input type="checkbox" id="spLogAll" title="Select all" /></th><th>Time</th><th>Reference</th><th>Type</th><th>Service</th><th>Account</th><th>Tracking</th><th class="num">Value</th><th class="num">Cost</th><th></th></tr></thead>
+        <thead><tr><th class="sel"><input type="checkbox" id="spLogAll" title="Select all" /></th><th>Time</th><th>Reference</th><th>Type</th><th>Service</th><th>Account</th><th id="spLogPcTh" title="The computer that made the label" hidden>Computer</th><th>Tracking</th><th class="num">Value</th><th class="num">Cost</th><th></th></tr></thead>
         <tbody id="spLogBody"></tbody>
       </table>
       <div id="spLogEmpty" class="sp-empty">No labels yet today.</div>

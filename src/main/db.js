@@ -1293,6 +1293,23 @@ function shipLabelsMadeInTab({ test = false } = {}) {
     FROM ship_labels WHERE kind = 'ship' AND row_id = 0 AND reference <> '' AND tracking <> '' AND test = ?
       AND (voided_at IS NULL OR voided_at = '') AND day >= ? ORDER BY id DESC`).all(test ? 1 : 0, since);
 }
+// read-only: every live ship-to-customer label made on this computer in the
+// last 30 days, newest first, whichever screen made it (row_id 0 = the Ship
+// tab). The duplicate check reads these: a PO# with a live label is not
+// labelled again without a deliberate override (owner 2026-11-14).
+function shipLabelsLive({ test = false } = {}) {
+  const since = localDay(new Date(Date.now() - 30 * 86400000));
+  return open().prepare(`SELECT id, created_at, reference, row_id, account_name, service_name, tracking, cost, weight, dims, carrier
+    FROM ship_labels WHERE kind = 'ship' AND reference <> '' AND tracking <> '' AND test = ?
+      AND (voided_at IS NULL OR voided_at = '') AND day >= ? ORDER BY id DESC`).all(test ? 1 : 0, since);
+}
+// read-only: this computer's labels since a day, without their images, each
+// with the Linnworks part id of the order line it was bought for ('' = Ship
+// tab, or an unsplit order). This is what the shared label record publishes.
+function shipLabelsForShare(sinceDay) {
+  return open().prepare(`SELECT ${SHIP_LIST_COLS.split(', ').map(c => `l.${c}`).join(', ')}, COALESCE(r.lw_order_id, '') AS part
+    FROM ship_labels l LEFT JOIN rows r ON r.id = l.row_id WHERE l.day >= ? ORDER BY l.id`).all(String(sinceDay || ''));
+}
 // a Ship-tab label taken by an Orders line: from here on it is that line's
 // label (Reprint / Void on the line, Void takes the tracking back off)
 function shipLabelSetRow(id, rowId) {
@@ -1351,5 +1368,5 @@ module.exports = {
   wsGid, wsUpsertCustomer, wsListCustomers, wsGetCustomer, wsUpsertInvoice, wsListInvoices, wsGetInvoice, wsNextNumber, wsCleanLines,
   wsUpsertSerial, wsListSerials, wsGetSerial, wsSerialCounts, wsOwnRows,
   costUpsert, costsAll, costGet, costOwnRows, costLogRows,
-  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelFind, shipLabelsForRows, shipLabelsMadeInTab, shipLabelSetRow, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
+  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelFind, shipLabelsForRows, shipLabelsMadeInTab, shipLabelsLive, shipLabelsForShare, shipLabelSetRow, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
 };

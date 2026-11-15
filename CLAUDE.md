@@ -35,7 +35,7 @@ DWS Stock's history panel does not read Linnworks. It reads `stocklog-<STATION>.
 - **On a PC synced to the Drive folder:** pass `--stocklog "G:\My Drive\returns-sync\stocklog-<NAME>.jsonl"` to append directly.
 - **In a cloud session:** `receive` writes `stocklog-<NAME>.jsonl` locally (git-ignored). Upload its lines to that folder through the Google Drive connector. Append to an existing file rather than replacing it.
 
-Other files there: `stockimports-<STATION>.jsonl` (the app's bulk-import history, the receiving record), `captures-`, `returns-`, `chansales-`, `presence-` and more. Each station only appends to its own files, and every station reads all of them.
+Other files there: `stockimports-<STATION>.jsonl` (the app's bulk-import history, the receiving record), `shiplabels-<STATION>.jsonl` (every label a station made, without the image; the duplicate-label check on every computer reads them, `src/main/labelshare.js`), `captures-`, `returns-`, `chansales-`, `presence-` and more. Each station only appends to its own files, and every station reads all of them.
 
 ## How the business reads the numbers
 

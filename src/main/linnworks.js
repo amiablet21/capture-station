@@ -95,6 +95,10 @@ function labelOrder(o, status, ref) {
     reference: o.GeneralInfo ? t(o.GeneralInfo.ReferenceNum) || ref : ref,
     source: o.GeneralInfo ? t(o.GeneralInfo.Source) : '',
     status,
+    // what Linnworks already holds for the shipment (the Ship tab warns
+    // before a label is made for an order that is already shipped)
+    tracking: t((o.ShippingInfo || {}).TrackingNumber),
+    processedOn: '', // filled by findOrderForLabel for an order that is already processed
     orderedOn: dayOf(gi.ReceivedDate),
     deliverBy: dayOf(sd.To) || dayOf(sd.From),
     shipBy: dayOf(gi.DespatchByDate),
@@ -804,7 +808,11 @@ class LinnworksClient {
     if (!done || !done.orderId) return null;
     const full = await this.call('Orders/GetOrdersById', { pkOrderIds: [done.orderId] });
     const order = (full || [])[0];
-    return order ? labelOrder(order, 'processed', ref) : null;
+    if (!order) return null;
+    const out = labelOrder(order, 'processed', ref);
+    out.processedOn = dayOf(done.processedOn);
+    if (!out.tracking) out.tracking = String(done.tracking || '').trim();
+    return out;
   }
 
   // Sales page: every processed-order item line in a date window.

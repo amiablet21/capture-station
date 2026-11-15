@@ -6046,6 +6046,28 @@ tr.os-open > td { background: var(--accent-soft); }
 .os-have-t .d .mono { color: var(--text); font-weight: 600; }
 .os-have-a { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .os-have-a .btn { padding: 9px 18px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.os-have-far { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+/* the Ship tab's own notice: the PO# already has a label, on any computer */
+.sp-have { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; margin-top: 10px; background: var(--badge-yellow-bg); border: 1px solid #EBD9A4; border-radius: 10px; padding: 12px 14px; }
+.sp-have[hidden] { display: none; }
+.sp-have-ic { width: 32px; height: 32px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; color: var(--badge-yellow-text); }
+.sp-have-ic svg { width: 17px; height: 17px; }
+.sp-have-t b { font-size: 13.5px; display: block; letter-spacing: -.01em; }
+.sp-have-t .q { font-size: 12px; color: var(--badge-yellow-text); font-weight: 600; }
+.sp-have-t .l { margin-top: 6px; display: grid; gap: 3px; }
+.sp-have-t .r { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
+.sp-have-t .r .w { font-weight: 700; color: var(--text); }
+.sp-have-t .r .mono { color: var(--text); font-weight: 600; }
+/* Labels table: which computer made the label, and PO#s with two live labels */
+.sp-table td.pc { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.sp-table td.pc.is-me { color: var(--faint); }
+/* the extra column must not push the table past its card */
+.sp-table.is-shared th, .sp-table.is-shared td { padding-left: 8px; padding-right: 8px; }
+.sp-table.is-shared th.sel, .sp-table.is-shared td.sel { padding-left: 16px; padding-right: 0; }
+.sp-table tr.is-far td { color: var(--muted); }
+.sp-dup { font-family: var(--font); font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; margin-left: 6px; background: var(--neg-bg); color: var(--neg-text); white-space: nowrap; }
+.sp-chips .sp-dupchip { color: var(--neg-text); }
+.sp-chips .sp-dupchip[hidden] { display: none; }
 .os-have-or { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin: -4px 0; }
 .os-have-or::before, .os-have-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 @media (max-width: 760px) { .os-have { grid-template-columns: minmax(0, 1fr); } .os-have-ic { display: none; } .os-have-a { flex-direction: row; } }

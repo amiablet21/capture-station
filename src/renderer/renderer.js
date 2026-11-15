@@ -136,6 +136,7 @@ if (!window.api) {
     orderShipRates: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipCreate: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipUseLabel: async () => ({ ok: false, error: 'Preview mode' }),
+    orderShipUseShared: async () => ({ ok: false, error: 'Preview mode' }),
     lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     lowUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     overviewData: async () => ({ ok: false, error: 'Preview mode' }),
@@ -264,15 +265,16 @@ function trackingCell(row) {
         + '<button class="tracking-cancel" data-act="cancelwait" title="Stop waiting for this order\'s tracking (Esc)">✕</button>';
     }
     const ship = osCanShip(row) ? `<button class="os-btn${os && os.rowId === row.id ? ' is-on' : ''}" data-act="ship" title="Make the label here">${os && os.rowId === row.id ? 'Close' : 'Ship'}</button>` : '';
-    // a live label already made for this PO# in the Ship tab: offer its
-    // tracking in place of buying a second one (owner 2026-11-12)
+    // a live label already made for this PO# — in the Ship tab, or on
+    // another computer (owner 2026-11-14): offer its tracking in place of
+    // buying a second one (owner 2026-11-12)
     const have = ship ? osTabLabel(row) : null;
     if (have) {
       // one flex row exactly as wide as the cell: the column's width is
       // fixed and clips, so the chip's text shortens rather than the whole
       // chip dropping out of sight
-      return `<span class="os-made-row">${ship}<span class="os-made" title="${esc(osHaveLine(have))}"><span class="t">Label made in Ship tab</span>`
-        + `<button type="button" data-act="uselabel" data-label="${have.id}" title="Put ${esc(have.tracking)} on this order. Nothing is bought.">Use</button></span></span>`;
+      return `<span class="os-made-row">${ship}<span class="os-made${have.station ? ' is-far' : ''}" title="${esc(osHaveLine(have))}"><span class="t">${esc(osHaveChip(have))}</span>`
+        + `<button type="button" data-act="uselabel" data-label="${esc(String(have.id))}" data-station="${esc(have.station || '')}" data-trk="${esc(have.tracking)}" title="Put ${esc(have.tracking)} on this order. Nothing is bought.">Use</button></span></span>`;
     }
     return ship + '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
   }
@@ -1125,7 +1127,11 @@ $('rowsBody').addEventListener('click', async (e) => {
   if (!row) return;
 
   if (btn.dataset.act === 'ship') { osToggle(row); return; }
-  if (btn.dataset.act === 'uselabel') { osUseLabel(row.id, Number(btn.dataset.label)); return; }
+  if (btn.dataset.act === 'uselabel') {
+    // a label made here is taken over by its id; another computer's by its tracking
+    osUseLabel(row.id, btn.dataset.station ? { station: btn.dataset.station, tracking: btn.dataset.trk } : Number(btn.dataset.label));
+    return;
+  }
   if (btn.dataset.act === 'lreprint') { spOpenPrint(Number(btn.dataset.label)); return; }
   if (btn.dataset.act === 'lvoid') { spVoidFromRow(Number(btn.dataset.label), row); return; }
   if (btn.dataset.act === 'substitute') {
@@ -15867,11 +15873,14 @@ const sp = {
   creating: false,
   createErr: '',
   done: null, // { label, gif, size } once a label is bought
+  have: null, // { ref, list }: labels the PO# in Reference #1 already has, on any computer
   book: [],
   log: [],
   logKind: '',
   logDays: 0,
   freshId: 0,
+  shared: false, // the sync folder is on: the Labels table lists every computer
+  dups: {}, // PO# -> live labels, for PO#s with more than one
 };
 
 // the cheapest rate wears a gold star (owner pick B, 2026-10-20)
@@ -15988,8 +15997,56 @@ function spApplyBox(remember = true) {
 function spRenderAll() {
   spRenderSource();
   spRenderOrder();
+  spRenderHave();
   spRenderAddrs();
   spRenderRates();
+}
+
+/* The PO# already has a label (owner 2026-11-14: twelve orders went out
+   twice because nothing said so). The list covers every computer: labels
+   made here, labels the others published to the shared folder, tracking
+   another computer put on the order, and an order Linnworks already shows
+   as shipped. Only for a ship-to-customer label; a return label is always a
+   second label. */
+function spHaveList() {
+  if (sp.kind !== 'ship') return [];
+  const ref = spRefText();
+  const list = sp.have && ref && sp.have.ref === ref ? sp.have.list.slice() : [];
+  const o = sp.order;
+  if (sp.src === 'po' && o && o.status === 'processed') list.push({ station: '', kind: 'linnworks', tracking: o.tracking || '', at: o.processedOn || '' });
+  return list;
+}
+function spHaveRow(l) {
+  if (l.kind === 'linnworks') {
+    return `<div class="r"><span class="w">Linnworks</span><span>already processed${l.at ? ` on ${esc(spDayLabel(l.at))}` : ''}</span>${l.tracking ? `<span class="mono">${esc(l.tracking)}</span>` : ''}</div>`;
+  }
+  const p = osHaveParts(l);
+  const where = l.station || (l.kind === 'tab' ? 'Ship tab, this computer' : 'This computer');
+  return `<div class="r"><span class="w">${esc(where)}</span><span class="mono">${esc(l.tracking)}</span>`
+    + `${l.kind === 'tracking' ? '<span>tracking on the order</span>' : (p.svc ? `<span>${esc(p.svc)}</span>` : '')}${p.when ? `<span>${esc(p.when)}</span>` : ''}${p.cost ? `<span>${esc(p.cost)}</span>` : ''}</div>`;
+}
+function spRenderHave() {
+  const el = $('spHave');
+  const list = sp.done ? [] : spHaveList();
+  el.hidden = !list.length;
+  if (!list.length) { el.innerHTML = ''; return; }
+  const labels = list.filter(l => l.kind !== 'linnworks');
+  const head = labels.length
+    ? `This PO# already has ${labels.length === 1 ? (labels[0].kind === 'tracking' ? 'tracking' : 'a label') : `${labels.length} labels`}.`
+    : 'Linnworks already shows this order as shipped.';
+  el.innerHTML = `<div class="sp-have-ic">${OS_BOX}</div><div class="sp-have-t"><b>${esc(head)}</b>`
+    + '<span class="q">Another label means a second package can go to the same buyer.</span>'
+    + `<div class="l">${list.map(spHaveRow).join('')}</div></div>`;
+}
+// buying anyway takes a deliberate yes
+function spConfirmSecond(list) {
+  const l = list.find(x => x.kind !== 'linnworks');
+  if (l) return osConfirmSecond(l, spRefText());
+  return rcConfirm({
+    title: 'Create a second label?',
+    body: `${spRefText()} is already processed in Linnworks${list[0].tracking ? ` with tracking ${list[0].tracking}` : ''}. A second label means a second package can go to the same buyer.`,
+    ok: 'Create a second label',
+  });
 }
 
 function spRenderSource() {
@@ -16131,6 +16188,7 @@ async function spLookup() {
   }
   sp.lookupMsg = '';
   sp.order = res.order;
+  sp.have = { ref, list: res.have || [] };
   spSetMkt(spMktOf(res.order.source)); // the order's own marketplace, changeable
   sp.party = { ...res.order.party };
   spRenderAll();
@@ -16275,7 +16333,7 @@ function spRenderRates() {
   let autoPrint = false;
   try { autoPrint = localStorage.getItem('spAutoPrint') === '1'; } catch { /* default off */ }
   html += `<div class="sp-buy">
-    <button class="btn btn-primary" id="spCreate" type="button" ${sel && !sp.creating ? '' : 'disabled'}>${sp.creating ? 'Creating label…' : `Create label${sel ? ` · ${spMoney(sel.price)}` : ''}`}</button>
+    <button class="btn ${spHaveList().length ? 'btn-secondary' : 'btn-primary'}" id="spCreate" type="button" ${sel && !sp.creating ? '' : 'disabled'}>${sp.creating ? 'Creating label…' : `${spHaveList().length ? 'Create a second label' : 'Create label'}${sel ? ` · ${spMoney(sel.price)}` : ''}`}</button>
     <label class="check sp-autoprint"><input id="spAutoPrint" type="checkbox" ${autoPrint ? 'checked' : ''} /> Print as soon as it's created</label>
     ${sp.createErr ? `<div class="err">${esc(sp.createErr)}</div>` : ''}</div>`;
   el.innerHTML = html;
@@ -16287,23 +16345,35 @@ function spRenderRates() {
 
 async function spCreate(sel) {
   if (sp.creating) return;
+  // the PO# already has a label: a second one takes a deliberate yes
+  const have = spHaveList();
+  const ref = spRefText();
+  if (have.length) {
+    const yes = await spConfirmSecond(have);
+    if (!yes || sp.creating || sp.done || spRefText() !== ref) return;
+  }
   sp.creating = true;
   sp.createErr = '';
   spRenderRates();
   const res = await api.shipCreate({
     accountId: sel.acct.id, serviceCode: sel.code, serviceName: sel.name, price: sel.price,
     kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0,
-    reference: spRefText(), reference2: $('spRef2').value.trim(), fromPo: sp.src === 'po' && !!sp.order, source: sp.mkt || '',
+    reference: ref, reference2: $('spRef2').value.trim(), fromPo: sp.src === 'po' && !!sp.order, source: sp.mkt || '',
     saveAddress: sp.src === 'man' && $('spMSave').checked, addressId: sp.src === 'man' ? sp.addressId : null,
+    second: have.length > 0,
   });
   sp.creating = false;
   if (!res.ok) {
     sp.createErr = res.error || 'UPS did not create the label.';
+    // a label for this PO# turned up since the lookup (or the reference was
+    // typed by hand): nothing was bought, the notice shows what it has
+    if (res.duplicate && res.have) { sp.have = { ref, list: res.have }; spRenderHave(); }
     spRenderRates();
     return;
   }
   sp.done = res;
   sp.freshId = res.label.id;
+  spRenderHave();
   spRenderRates();
   spLoadLog();
   if (sp.src === 'man' && $('spMSave').checked) spLoadBook();
@@ -16416,6 +16486,8 @@ function spRenderBook() {
 async function spLoadLog() {
   const res = await api.shipList(sp.logDays);
   sp.log = (res && res.labels) || [];
+  sp.shared = !!(res && res.shared);
+  sp.dups = (res && res.dups) || {};
   spRenderLog();
 }
 
@@ -16432,27 +16504,46 @@ function spSetMkt(m) {
 }
 $('spMkt').addEventListener('change', () => spSetMkt($('spMkt').value));
 
+// how many live labels a row's PO# has, when it has more than one
+function spDupCount(l) {
+  if (l.kind !== 'ship' || l.voided_at || !l.reference) return 0;
+  return sp.dups[String(l.reference).trim().toUpperCase()] || 0;
+}
 function spRenderLog() {
-  const rows = sp.log.filter(l => !sp.logKind || l.kind === sp.logKind);
+  const dupOnly = sp.logKind === 'dup';
+  const rows = sp.log.filter(l => (dupOnly ? spDupCount(l) > 0 : !sp.logKind || l.kind === sp.logKind));
+  if (dupOnly) rows.sort((a, b) => String(a.reference).localeCompare(String(b.reference)) || String(a.created_at).localeCompare(String(b.created_at)));
   const live = rows.filter(l => !l.voided_at);
   const spend = live.reduce((t, l) => t + (Number(l.cost) || 0), 0);
   const range = { 0: 'today', 7: 'last 7 days', 30: 'last 30 days' }[sp.logDays] || '';
-  $('spLogSum').textContent = `${range} · ${live.length} label${live.length === 1 ? '' : 's'} · ${spMoney(spend)}`;
+  $('spLogSum').textContent = `${range} · ${live.length} label${live.length === 1 ? '' : 's'} · ${spMoney(spend)}${sp.shared ? ' · every computer' : ''}`;
   $('spLogEmpty').hidden = rows.length > 0;
-  $('spLogEmpty').textContent = `No labels ${range === 'today' ? 'yet today' : `in the ${range}`}.`;
+  $('spLogEmpty').textContent = dupOnly ? `No PO# has more than one live label in the ${range === 'today' ? 'last 30 days' : range}.` : `No labels ${range === 'today' ? 'yet today' : `in the ${range}`}.`;
+  // the Computer column and the Duplicates chip only mean something with the shared folder on, or a duplicate made here
+  const nDup = Object.keys(sp.dups).length;
+  $('spLogPcTh').hidden = !sp.shared;
+  $('spLogPcTh').closest('table').classList.toggle('is-shared', sp.shared); // one more column: tighter cells
+  const dupBtn = $('spLogKind').querySelector('[data-k="dup"]');
+  dupBtn.hidden = !nDup && !dupOnly;
+  dupBtn.textContent = nDup ? `Duplicates · ${nDup}` : 'Duplicates';
   $('spLogBody').innerHTML = rows.map(l => {
     const t = new Date(l.created_at);
     const when = sp.logDays ? `${t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${fmtTime(l.created_at)}` : fmtTime(l.created_at);
     const mk = spMktOf(l.source);
+    const nDupRow = spDupCount(l);
     const ref = (l.reference ? `${esc(l.reference)}${l.from_po ? '' : '<small>· no PO#</small>'}` : `${esc(l.party_name)}<small>· no ref</small>`)
-      + (mk ? `<span class="sp-mk">${mk}</span>` : '');
+      + (mk ? `<span class="sp-mk">${mk}</span>` : '')
+      + (nDupRow ? `<span class="sp-dup" title="This PO# has ${nDupRow} live labels across every computer and both accounts">${nDupRow} labels</span>` : '');
+    // a label made on another computer is reprinted and voided there
+    const far = !!l.remote;
+    const pc = sp.shared ? `<td class="pc${far ? '' : ' is-me'}">${esc(l.station || '')}</td>` : '';
     const kind = l.voided_at ? '<span class="sp-k void">Voided</span>' : `<span class="sp-k ${l.kind}">${l.kind === 'return' ? 'Return' : 'Ship'}</span>`;
-    return `<tr class="${l.voided_at ? 'is-void' : ''}${l.id === sp.freshId ? ' is-fresh' : ''}" data-id="${l.id}">`
-      + `<td class="sel">${l.voided_at ? '' : `<input type="checkbox" data-sel="${l.id}" ${spSel.has(l.id) ? 'checked' : ''} />`}</td>`
+    return `<tr class="${l.voided_at ? 'is-void' : ''}${l.id === sp.freshId ? ' is-fresh' : ''}${far ? ' is-far' : ''}${nDupRow ? ' is-dup' : ''}" data-id="${esc(String(l.id))}">`
+      + `<td class="sel">${l.voided_at || far ? '' : `<input type="checkbox" data-sel="${l.id}" ${spSel.has(l.id) ? 'checked' : ''} />`}</td>`
       + `<td class="m">${esc(when)}</td><td class="m">${ref}</td><td>${kind}${l.test ? ' <span class="sp-test">Test</span>' : ''}</td>`
-      + `<td>${esc(l.service_name)}</td><td>${esc(l.account_name)}</td><td class="m">${esc(l.tracking)}</td>`
+      + `<td>${esc(l.service_name)}</td><td>${esc(l.account_name)}</td>${pc}<td class="m">${esc(l.tracking)}</td>`
       + `<td class="num">${l.value ? spMoney(l.value) : '—'}</td><td class="num">${spMoney(l.cost)}</td>`
-      + `<td><div class="sp-acts">${l.voided_at ? '' : `<button class="sp-link" data-act="print" type="button">Reprint</button><button class="sp-link" data-act="pdf" type="button">PDF</button>${spDownloadLink(l)}<button class="sp-link v" data-act="void" type="button">Void</button>`}</div></td></tr>`;
+      + `<td${far ? ` title="Reprint or void this label on ${esc(l.station)}, the computer that made it"` : ''}><div class="sp-acts">${l.voided_at || far ? '' : `<button class="sp-link" data-act="print" type="button">Reprint</button><button class="sp-link" data-act="pdf" type="button">PDF</button>${spDownloadLink(l)}<button class="sp-link v" data-act="void" type="button">Void</button>`}</div></td></tr>`;
   }).join('');
   sp.freshId = 0;
   spSelSync();
@@ -16513,6 +16604,9 @@ $('spLogKind').addEventListener('click', (e) => {
   if (!b) return;
   sp.logKind = b.dataset.k;
   $('spLogKind').querySelectorAll('button').forEach(x => x.classList.toggle('is-on', x === b));
+  // two labels for one PO# are rarely made the same day: Duplicates looks
+  // back over the 30 days the check itself covers
+  if (sp.logKind === 'dup' && sp.logDays !== 30) { sp.logDays = 30; $('spLogRange').value = '30'; spLoadLog(); return; }
   spRenderLog();
 });
 $('spLogRange').addEventListener('change', () => { sp.logDays = Number($('spLogRange').value) || 0; spLoadLog(); });
@@ -16679,9 +16773,41 @@ function osHaveParts(l) {
     when, pkg, cost: l.cost == null ? '' : spMoney(l.cost),
   };
 }
+// where the label the order already has came from (owner 2026-11-14: a
+// label made on another computer counts the same as one made here)
+function osHaveChip(l) {
+  // the computer's name leads: the Tracking column is a fixed width and trims
+  // the end of the chip, and the name is the part that must survive
+  if (l.station) return l.kind === 'tracking' ? `${l.station} tracking` : `${l.station} label`;
+  return l.kind === 'tab' ? 'Label made in Ship tab' : 'Label made on this computer';
+}
+function osHaveWhere(l) {
+  if (l.station) return l.kind === 'tracking' ? `Tracking added on ${l.station}` : `Made on ${l.station}`;
+  return l.kind === 'tab' ? 'Made in the Ship tab' : 'Made on this computer';
+}
 function osHaveLine(l) {
   const p = osHaveParts(l);
-  return [`Made in the Ship tab: ${l.tracking}`, p.svc, p.when, p.pkg, p.cost].filter(Boolean).join(' · ');
+  return [`${osHaveWhere(l)}: ${l.tracking}`, p.svc, p.when, p.pkg, p.cost, l.more ? `+${l.more} more` : ''].filter(Boolean).join(' · ');
+}
+// the notice's headline and the one-line question under it
+function osHaveSay(l) {
+  if (l.station && l.kind === 'tracking') {
+    return { b: `${l.station} already put tracking on this order.`, q: l.processed ? 'It was processed there. Use it so the order does not ship twice.' : 'Use it so the order does not ship twice.' };
+  }
+  if (l.station) return { b: `This order already has a label, made on ${l.station}.`, q: 'Use it so the order does not ship twice.' };
+  if (l.kind === 'tab') return { b: 'You already made a label for this order in the Ship tab.', q: 'Do you mean to use it?' };
+  return { b: 'This order already has a label, made on this computer.', q: 'Do you mean to use it?' };
+}
+// buying anyway takes a deliberate yes, naming the label the order has
+function osConfirmSecond(l, po) {
+  const p = osHaveParts(l);
+  const made = l.station ? `made on ${l.station}` : (l.kind === 'tab' ? 'made in the Ship tab' : 'made on this computer');
+  const what = l.kind === 'tracking' ? `tracking ${l.tracking}, added on ${l.station}` : `a label, ${l.tracking}, ${made}`;
+  return rcConfirm({
+    title: 'Create a second label?',
+    body: `${po ? `${po} ` : 'This order '}already has ${what}${p.when ? ` (${p.when})` : ''}. A second label means a second package can go to the same buyer.`,
+    ok: 'Create a second label',
+  });
 }
 // the drawer's notice; hidden when this line has no Ship-tab label
 function osRenderHave() {
@@ -16691,17 +16817,22 @@ function osRenderHave() {
   $('osHaveOr').hidden = !l;
   if (!l) { el.innerHTML = ''; return; }
   const p = osHaveParts(l);
+  const say = osHaveSay(l);
+  // a label made on another computer is reprinted (and voided) there
   el.innerHTML = `<div class="os-have-ic">${OS_BOX}</div>
-    <div class="os-have-t"><b>You already made a label for this order in the Ship tab.</b><span class="q">Do you mean to use it?</span>
-      <div class="d">${[p.svc ? `<span>${esc(p.svc)}</span>` : '', `<span class="mono">${esc(l.tracking)}</span>`, p.when ? `<span>${esc(p.when)}</span>` : '', p.pkg ? `<span>${esc(p.pkg)}</span>` : '', p.cost ? `<span>${esc(p.cost)}</span>` : ''].join('')}</div></div>
-    <div class="os-have-a"><button class="btn btn-primary" id="osHaveUse" type="button" ${os.using ? 'disabled' : ''}>${os.using ? 'Adding…' : 'Use this label'}</button>
-      <button class="sp-link" id="osHavePrint" type="button">Reprint it</button></div>`;
-  $('osHaveUse').onclick = () => osUseLabel(os.rowId, l.id);
-  $('osHavePrint').onclick = () => spOpenPrint(l.id);
+    <div class="os-have-t"><b>${esc(say.b)}</b><span class="q">${esc(say.q)}</span>
+      <div class="d">${[p.svc ? `<span>${esc(p.svc)}</span>` : '', `<span class="mono">${esc(l.tracking)}</span>`, p.when ? `<span>${esc(p.when)}</span>` : '', p.pkg ? `<span>${esc(p.pkg)}</span>` : '', p.cost ? `<span>${esc(p.cost)}</span>` : '', l.more ? `<span>+${l.more} more for this PO#</span>` : ''].join('')}</div></div>
+    <div class="os-have-a"><button class="btn btn-primary" id="osHaveUse" type="button" ${os.using ? 'disabled' : ''}>${os.using ? 'Adding…' : (l.kind === 'tracking' ? 'Use this tracking' : 'Use this label')}</button>
+      ${l.station ? `<span class="os-have-far">Reprint it on ${esc(l.station)}</span>` : '<button class="sp-link" id="osHavePrint" type="button">Reprint it</button>'}</div>`;
+  $('osHaveUse').onclick = () => osUseLabel(os.rowId, l.station ? { station: l.station, tracking: l.tracking } : l.id);
+  if ($('osHavePrint')) $('osHavePrint').onclick = () => spOpenPrint(l.id);
 }
-async function osUseLabel(rowId, labelId) {
+// have: the id of a label made on this computer, or { station, tracking }
+// for one another computer made
+async function osUseLabel(rowId, have) {
   if (os && os.rowId === rowId) { if (os.using || os.creating) return; os.using = true; osRenderHave(); }
-  const res = await api.orderShipUseLabel(rowId, labelId).catch(e => ({ ok: false, error: e.message }));
+  const far = have && typeof have === 'object';
+  const res = await (far ? api.orderShipUseShared(rowId, have.station, have.tracking) : api.orderShipUseLabel(rowId, have)).catch(e => ({ ok: false, error: e.message }));
   if (os && os.rowId === rowId) os.using = false;
   if (!res || !res.ok) {
     toast((res && res.error) || 'Could not use that label.', 5000);
@@ -16710,7 +16841,7 @@ async function osUseLabel(rowId, labelId) {
   }
   // the state push that carries the tracking usually closed the drawer already
   if (os && os.rowId === rowId) osClose();
-  toast(`Tracking added from the Ship-tab label ${res.tracking}`, 4000);
+  toast(far ? `Tracking ${res.tracking} added from ${res.station}. Nothing was bought.` : `Tracking added from the Ship-tab label ${res.tracking}`, 4000);
 }
 
 async function osToggle(row) {
@@ -16898,6 +17029,9 @@ async function osPrep() {
   if (!res.ok) { os.loading = false; os.err = res.error; osRenderRates(); $('osAddr').innerHTML = `<span class="os-err">${esc(res.error)}</span>`; return; }
   Object.assign(os, { party: res.party, value: res.value, walmart: res.walmart, key: res.key || '', saved: res.saved || null,
     orderedOn: res.orderedOn || '', deliverBy: res.deliverBy || '', shipBy: res.shipBy || os.shipBy || '' });
+  // the shared folder as it is right now: a label another computer made a
+  // moment ago shows before anything is bought
+  if (res.have !== undefined) { os.have = res.have || null; osRenderHave(); }
   osShowDeliver();
   const p = res.party;
   osRenderCustomer({ name: p.name, company: p.company, lines: [[p.line1, p.line2].filter(Boolean).join(', '), `${p.city}, ${p.state} ${p.zip}`], phone: p.phone });
@@ -17003,15 +17137,27 @@ async function osCreate() {
   const sel = osAllRates().find(r => r.key === os.pick);
   if (!sel) return;
   const rowId = os.rowId;
+  // the order already has a label: a second one takes a deliberate yes
+  const second = !!os.have;
+  if (second) {
+    const yes = await osConfirmSecond(os.have, os.po);
+    if (!yes || !os || os.rowId !== rowId || os.creating) return;
+  }
   os.creating = true; os.err = '';
   osRenderRates();
   const res = await api.orderShipCreate({
     rowId, via: sel.via, code: sel.code, name: sel.name, carrier: sel.carrier || '', price: sel.price,
-    party: os.party, pkg: osPkg(), value: parseFloat($('osVal').value) || 0, reference2: $('osRef2').value.trim(),
+    party: os.party, pkg: osPkg(), value: parseFloat($('osVal').value) || 0, reference2: $('osRef2').value.trim(), second,
   });
   const mine = os && os.rowId === rowId;
   if (!res.ok) {
-    if (mine) { os.creating = false; os.err = res.error; osRenderRates(); }
+    if (mine) {
+      os.creating = false; os.err = res.error;
+      // a label for this PO# turned up while the drawer was open: nothing was
+      // bought, the notice appears and the button becomes "second label"
+      if (res.duplicate && res.have) { os.have = res.have; osRenderHave(); }
+      osRenderRates();
+    }
     return;
   }
   // the state push that carries the new tracking may already have closed

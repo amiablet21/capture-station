@@ -2248,6 +2248,211 @@ module.exports = async function run({ app, win, db, clipboard }) {
             db.deleteRow(tRow.id); db.deleteRow(oRow.id);
           }
 
+          // The shared label record (owner 2026-11-14): a label or tracking
+          // another computer has for the PO# shows on the Orders line, both
+          // buy paths refuse a second label without a deliberate yes, Use
+          // buys nothing, and this computer's labels reach the shared folder
+          {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dws-share-'));
+            await exec(`api.setConfig({ returnsSync: { folder: ${JSON.stringify(dir)}, station: 'E2E-HERE' } })`);
+            await sleep(400);
+            const sPo = 'PO-211-90000000000000001';
+            const cPo = 'PO-211-90000000000000002';
+            const sRow = db.createRow({ channel: 'temu', orderNumber: sPo, origin: '' });
+            const cRow = db.createRow({ channel: 'temu', orderNumber: cPo, origin: '' });
+            const qRow = db.createRow({ channel: 'temu', orderNumber: 'PO-211-90000000000000003', origin: '' });
+            // what another computer's app writes for a label it made
+            const farLabel = (station, id, over = {}) => fs.appendFileSync(path.join(dir, `shiplabels-${station}.jsonl`), JSON.stringify({
+              op: 'put', id, ts: Date.now(), row: {
+                created_at: new Date().toISOString(), day: db.localDay(), kind: 'ship', reference: sPo, from_po: 1, source: 'TEMU',
+                account_id: 'a', account_name: 'Digital World Shop', service_code: '03', service_name: 'UPS Ground', tracking: '1ZFAR0000000000017',
+                carrier: 'UPS', cost: 9.5, value: 0, weight: 1.2, dims: '9x6x3', party_name: 'Maria Delgado', test: 0, voided_at: '', row_id: 0, part: '', ...over,
+              },
+            }) + '\n');
+            const shipCount = () => upsSeen.filter(x => x.url.endsWith('/ship')).length;
+            const buyRow = (rowId, more = {}) => exec(`api.orderShipCreate(${JSON.stringify({ rowId, via: 'b', code: '03', name: 'UPS Ground', price: 9.1, party: cust, pkg: { weight: 1.1 }, value: 0, ...more })})`);
+            const buyTab = (more = {}) => exec(`api.shipCreate(${JSON.stringify({ accountId: 'b', serviceCode: '03', serviceName: 'UPS Ground', kind: 'ship', party: cust, pkg: { weight: 1.1 }, value: 0, reference: sPo, fromPo: true, source: 'TEMU', price: 9.1, ...more })})`);
+
+            let list = await exec('api.shipList(0)');
+            let st = await exec('api.getState()');
+            check('shared labels: nothing is offered before another computer has a label', list.shared === true && list.station === 'E2E-HERE' && !st.tabLabels[sRow.id], { shared: list.shared, tab: st.tabLabels });
+
+            farLabel('OFFICE-PC', 7);
+            list = await exec('api.shipList(0)'); // loading the table reads the folder now
+            st = await exec('api.getState()');
+            const off = st.tabLabels[sRow.id];
+            check('shared labels: a label another computer made is offered to the line with its PO#, and only that line',
+              off && off.station === 'OFFICE-PC' && off.kind === 'label' && off.tracking === '1ZFAR0000000000017' && !st.tabLabels[cRow.id] && !st.tabLabels[qRow.id], st.tabLabels);
+            const farRow = list.labels.find(l => l.remote);
+            check('shared labels: the Labels table lists it with its computer, marked as made elsewhere',
+              farRow && farRow.station === 'OFFICE-PC' && farRow.id === 'OFFICE-PC:7' && farRow.tracking === '1ZFAR0000000000017' && list.labels.filter(l => !l.remote).every(l => l.station === 'E2E-HERE'), farRow);
+
+            let before = shipCount();
+            r = await buyRow(sRow.id);
+            check('shared labels: the Orders line refuses a second label without a deliberate yes, and buys nothing',
+              !r.ok && r.duplicate === true && r.have && r.have.station === 'OFFICE-PC' && /OFFICE-PC/.test(r.error) && shipCount() === before && db.getRow(sRow.id).tracking === '', r);
+            r = await buyTab();
+            check('shared labels: the Ship tab refuses a second label for the PO# the same way',
+              !r.ok && r.duplicate === true && Array.isArray(r.have) && r.have[0].station === 'OFFICE-PC' && shipCount() === before, r);
+            r = await buyTab({ kind: 'return' });
+            check('shared labels: a return label for the PO# is never held back', r.ok && r.label.kind === 'return', r);
+            if (r.ok) await exec(`api.shipVoid(${r.label.id})`);
+
+            await exec(`(async () => { showPage('capture'); setCapHist(false); state = await api.getState(); render(); })()`);
+            await sleep(400);
+            before = shipCount();
+            const sUi = await exec(`(async () => {
+              const tr = document.querySelector('#rowsBody tr[data-id="${sRow.id}"]');
+              const chip = tr && tr.querySelector('.os-made');
+              const out = { chipText: chip ? chip.textContent : '', far: !!(chip && chip.classList.contains('is-far')), plainRow: !document.querySelector('#rowsBody tr[data-id="${qRow.id}"] .os-made') };
+              tr.querySelector('.os-btn').click(); await new Promise(r => setTimeout(r, 900));
+              out.notice = !$('osHave').hidden && /made on OFFICE-PC/.test($('osHave').textContent) && $('osHave').textContent.includes('1ZFAR0000000000017');
+              out.noReprint = !$('osHavePrint') && /Reprint it on OFFICE-PC/.test($('osHave').textContent);
+              out.buy = $('osCreate').textContent;
+              // rates are not needed to prove the confirm: ask the way the button does
+              const asked = osConfirmSecond(os.have, os.po);
+              await new Promise(r => setTimeout(r, 200));
+              out.dlg = $('rcConfirmDlg').open; out.dlgTitle = $('rcConfirmTitle').textContent; out.dlgBody = $('rcConfirmBody').textContent; out.dlgOk = $('rcConfirmOk').textContent;
+              $('rcConfirmCancel').click();
+              out.answer = await asked;
+              osClose();
+              return out; })()`);
+            check('shared labels: the Orders line says which computer made the label, with Use',
+              /OFFICE-PC label/.test(sUi.chipText) && /Use/.test(sUi.chipText) && sUi.far && sUi.plainRow, sUi);
+            check('shared labels: the Ship drawer names the computer, sends Reprint there, and buying becomes "Create a second label"',
+              sUi.notice && sUi.noReprint && sUi.buy === 'Create a second label', sUi);
+            check('shared labels: a second label asks first, naming the label and the computer; Cancel buys nothing',
+              sUi.dlg && sUi.dlgTitle === 'Create a second label?' && /made on OFFICE-PC/.test(sUi.dlgBody) && sUi.dlgBody.includes('1ZFAR0000000000017') && sUi.dlgBody.includes(sPo)
+                && sUi.dlgOk === 'Create a second label' && sUi.answer === false && shipCount() === before, sUi);
+
+            await exec(`document.querySelector('#rowsBody tr[data-id="${sRow.id}"] .os-made button').click()`);
+            await sleep(600);
+            st = await exec('api.getState()');
+            check('shared labels: Use puts the other computer\'s tracking on the order and buys nothing',
+              db.getRow(sRow.id).tracking === '1ZFAR0000000000017' && db.getRow(sRow.id).carrier === 'UPS' && db.getRow(sRow.id).status !== 'synced' && shipCount() === before && !st.tabLabels[sRow.id],
+              { row: db.getRow(sRow.id), tab: st.tabLabels });
+
+            // tracking another computer typed onto the same order counts too
+            fs.appendFileSync(path.join(dir, 'captures-OFFICE-PC.jsonl'), JSON.stringify({
+              op: 'put', id: 31, ts: Date.now(), row: { order_number: cPo, lw_order_id: '', channel: 'temu', items: [], tracking: '1ZFARCAP0000000029', carrier: 'UPS', notes: '', status: 'captured', created_at: new Date().toISOString(), synced_at: '', day: db.localDay() },
+            }) + '\n');
+            await exec('api.shipList(0)');
+            st = await exec('api.getState()');
+            const cOff = st.tabLabels[cRow.id];
+            check('shared labels: tracking another computer put on the order is offered as well',
+              cOff && cOff.station === 'OFFICE-PC' && cOff.kind === 'tracking' && cOff.tracking === '1ZFARCAP0000000029', st.tabLabels);
+            r = await exec(`api.orderShipUseShared(${cRow.id}, 'OFFICE-PC', '1ZNOTTHERE000000001')`);
+            check('shared labels: tracking that is not on the shared record for the PO# is refused', !r.ok && db.getRow(cRow.id).tracking === '', r);
+            r = await exec(`api.orderShipUseShared(${qRow.id}, 'OFFICE-PC', '1ZFARCAP0000000029')`);
+            check('shared labels: another order cannot take it', !r.ok && db.getRow(qRow.id).tracking === '', r);
+
+            // a second live label for the same PO#, from a third computer: a duplicate
+            db.setTracking(sRow.id, '', '');
+            farLabel('STOCK-PC', 3, { tracking: '1ZFAR0000000000025', account_id: 'b', account_name: 'Company Two' });
+            list = await exec('api.shipList(30)');
+            check('shared labels: a PO# with two live labels is counted as a duplicate, across computers', list.dups && list.dups[sPo] === 2 && Object.keys(list.dups).length === 1, list.dups);
+            const lUi = await exec(`(async () => {
+              showPage('ship'); await new Promise(r => setTimeout(r, 500));
+              sp.logDays = 30; sp.logKind = ''; await spLoadLog();
+              const far = [...document.querySelectorAll('#spLogBody tr.is-far')];
+              const mine = [...document.querySelectorAll('#spLogBody tr:not(.is-far)')];
+              const out = { pcTh: !$('spLogPcTh').hidden, far: far.length, farPc: far.map(t => t.querySelector('td.pc').textContent).sort().join('|'),
+                farNoActs: far.every(t => !t.querySelector('[data-sel]') && !t.querySelector('[data-act]') && /on (OFFICE|STOCK)-PC/.test(t.lastElementChild.title)),
+                tableW: Math.round(document.querySelector('.sp-table').getBoundingClientRect().width), cardW: document.querySelector('.sp-table').parentElement.clientWidth, winW: innerWidth,
+                minePc: mine.length > 0 && mine.every(t => t.querySelector('td.pc').textContent === 'E2E-HERE') && mine.some(t => t.querySelector('[data-act="print"]')),
+                badges: [...document.querySelectorAll('#spLogBody .sp-dup')].map(b => b.textContent).join('|'),
+                sum: $('spLogSum').textContent };
+              const chip = $('spLogKind').querySelector('[data-k="dup"]');
+              out.chip = !chip.hidden && chip.textContent;
+              chip.click(); await new Promise(r => setTimeout(r, 300));
+              out.dupRows = [...document.querySelectorAll('#spLogBody tr')].map(t => t.querySelector('td.pc').textContent).join('|');
+              $('spLogKind').querySelector('[data-k=""]').click();
+              // the same rows as they were drawn before the Computer column existed
+              const keep = { shared: sp.shared, dups: sp.dups };
+              sp.shared = false; sp.dups = {}; spRenderLog();
+              out.plainW = Math.round(document.querySelector('.sp-table').getBoundingClientRect().width);
+              sp.shared = keep.shared; sp.dups = keep.dups; spRenderLog();
+              return out; })()`);
+            check('shared labels: the Labels table has a Computer column; another computer\'s label has no Reprint, Void or tick box',
+              lUi.pcTh && lUi.far === 2 && lUi.farPc === 'OFFICE-PC|STOCK-PC' && lUi.farNoActs && lUi.minePc && /every computer/.test(lUi.sum), lUi);
+            check('shared labels: the Computer column and the badges do not make the table wider than it was', lUi.tableW <= Math.max(lUi.cardW, lUi.plainW) + 1, { tableW: lUi.tableW, cardW: lUi.cardW, plainW: lUi.plainW, winW: lUi.winW });
+            check('shared labels: both labels of the PO# wear "2 labels", and Duplicates shows just them',
+              lUi.badges === '2 labels|2 labels' && lUi.chip === 'Duplicates · 1' && lUi.dupRows.split('|').sort().join('|') === 'OFFICE-PC|STOCK-PC', lUi);
+
+            // the Ship tab's own notice
+            const hUi = await exec(`(async () => {
+              spReset();
+              $('spPo').value = ${JSON.stringify(sPo)}; sp.poKey = ${JSON.stringify(sPo)};
+              sp.order = { source: 'TEMU', total: 99, status: 'open', items: [{ sku: 'X133-128GB-GRAY', quantity: 1 }], party: ${JSON.stringify(cust)} };
+              sp.party = { ...sp.order.party };
+              const res = await api.shipList(30);
+              sp.have = { ref: ${JSON.stringify(sPo)}, list: [
+                { station: 'OFFICE-PC', kind: 'label', id: 7, tracking: '1ZFAR0000000000017', service: 'UPS Ground', account: 'Digital World Shop', cost: 9.5, at: new Date().toISOString() },
+                { station: 'STOCK-PC', kind: 'label', id: 3, tracking: '1ZFAR0000000000025', service: 'UPS Ground', account: 'Company Two', cost: 9.5, at: new Date().toISOString() }] };
+              spRenderAll();
+              const out = { shown: !$('spHave').hidden, text: $('spHave').textContent };
+              sp.kind = 'return'; spRenderAll();
+              out.returnHidden = $('spHave').hidden;
+              sp.kind = 'ship'; sp.order.status = 'processed'; sp.order.tracking = '1ZLW00000000000001'; sp.order.processedOn = '2026-11-13'; sp.have = null; spRenderAll();
+              out.lw = !$('spHave').hidden && $('spHave').textContent;
+              spReset();
+              out.cleared = $('spHave').hidden;
+              return out; })()`);
+            check('shared labels: the Ship tab lists every label the PO# has, by computer; a return label shows no notice',
+              hUi.shown && /already has 2 labels/.test(hUi.text) && /OFFICE-PC/.test(hUi.text) && /STOCK-PC/.test(hUi.text) && hUi.text.includes('1ZFAR0000000000025') && hUi.returnHidden && hUi.cleared, hUi);
+            check('shared labels: an order Linnworks already processed is flagged before a label is made',
+              /already shows this order as shipped/.test(hUi.lw || '') && /1ZLW00000000000001/.test(hUi.lw || ''), hUi);
+
+            // voided on the computer that made it: it stops counting everywhere
+            await sleep(5);
+            farLabel('OFFICE-PC', 7, { voided_at: new Date().toISOString() });
+            farLabel('STOCK-PC', 3, { voided_at: new Date().toISOString() });
+            list = await exec('api.shipList(30)');
+            st = await exec('api.getState()');
+            check('shared labels: a label voided on its own computer stops counting', !st.tabLabels[sRow.id] && !list.dups[sPo] && list.labels.filter(l => l.remote && l.voided_at).length === 2, { tab: st.tabLabels, dups: list.dups });
+            r = await exec(`api.orderShipUseShared(${sRow.id}, 'OFFICE-PC', '1ZFAR0000000000017')`);
+            check('shared labels: a voided label cannot be put on an order', !r.ok && db.getRow(sRow.id).tracking === '', r);
+
+            // this computer's own labels and tracking reach the folder
+            before = shipCount();
+            r = await buyRow(sRow.id);
+            const mineFile = path.join(dir, 'shiplabels-E2E-HERE.jsonl');
+            const readMine = () => { try { return fs.readFileSync(mineFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch { return []; } };
+            await sleep(3800);
+            let pubd = readMine().filter(e => e.row && e.row.reference === sPo && e.row.kind === 'ship');
+            const capd = (() => { try { return fs.readFileSync(path.join(dir, 'captures-E2E-HERE.jsonl'), 'utf8'); } catch { return ''; } })();
+            check('shared labels: with nothing live for the PO# the line buys as usual, and the label is published within seconds, without its image',
+              r.ok && shipCount() === before + 1 && pubd.length === 1 && pubd[0].op === 'put' && pubd[0].id === r.label.id && pubd[0].row.tracking === r.label.tracking
+                && pubd[0].row.row_id === sRow.id && pubd[0].row.voided_at === '' && pubd[0].row.label_gif === undefined && !JSON.stringify(pubd[0]).includes('R0lGOD'),
+              { ok: r.ok, pubd });
+            check('shared labels: the tracking on the order is published with the captures at the same time', r.ok && capd.includes(r.label.tracking), capd.slice(-300));
+            // the label made here now holds back a second one made in the Ship tab
+            const again = await buyTab();
+            check('shared labels: a label made on this computer for an order line holds back a Ship-tab label for the same PO#',
+              !again.ok && again.duplicate === true && again.have[0].station === '' && again.have[0].tracking === r.label.tracking && shipCount() === before + 1, again);
+            const forced = await buyTab({ second: true });
+            check('shared labels: a deliberate second label goes through', forced.ok && shipCount() === before + 2, forced);
+            list = await exec('api.shipList(30)');
+            check('shared labels: two labels made here for one PO# count as a duplicate too', list.dups[sPo] === 2, list.dups);
+            if (forced.ok) await exec(`api.shipVoid(${forced.label.id})`);
+            if (r.ok) await exec(`api.shipVoid(${r.label.id})`);
+            await sleep(3800);
+            pubd = readMine().filter(e => e.row && e.row.reference === sPo && e.row.kind === 'ship');
+            const lastOf = (id) => pubd.filter(e => e.id === id).pop();
+            check('shared labels: voiding a label here publishes the void, so it stops counting on the other computers',
+              r.ok && lastOf(r.label.id) && !!lastOf(r.label.id).row.voided_at && forced.ok && !!lastOf(forced.label.id).row.voided_at && db.getRow(sRow.id).tracking === '', pubd.slice(-3));
+
+            // sync off again: only this computer's labels, no Computer column
+            await exec(`api.setConfig({ returnsSync: { folder: '', station: '' } })`);
+            await sleep(300);
+            list = await exec('api.shipList(30)');
+            st = await exec('api.getState()');
+            check('shared labels: with the shared folder off the table is this computer\'s own again',
+              list.shared === false && list.labels.every(l => !l.remote) && !st.tabLabels[cRow.id], { shared: list.shared, far: list.labels.filter(l => l.remote).length });
+            db.deleteRow(sRow.id); db.deleteRow(cRow.id); db.deleteRow(qRow.id);
+            try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* temp */ }
+          }
+
           // Ship tab: a created label finishes the form (owner 2026-11-12)
           {
             const fin = await exec(`(async () => {

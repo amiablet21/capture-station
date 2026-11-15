@@ -499,6 +499,13 @@ function auxEnsure(prefix, events) {
   } catch { return false; }
 }
 
+// whether this station's own file for a prefix is in the folder (a publisher
+// that keeps a "what I already wrote" list starts over when it is not)
+function auxExists(prefix) {
+  if (!enabled()) return false;
+  try { return fs.existsSync(path.join(folder, `${prefix}-${station}.jsonl`)); } catch { return false; }
+}
+
 // Incremental read of the append-only aux files: `state` remembers how far
 // each file was read, so a pass only parses what other stations appended
 // since. A file that shrank (recreated) is read from the top again.
@@ -572,4 +579,4 @@ function readAux(prefix) {
   return out;
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, auxEnsure, readAux, readAuxNew, auxFiles };
+module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, auxEnsure, auxExists, readAux, readAuxNew, auxFiles };

@@ -23,6 +23,7 @@ const walmart = require('./walmart');
 const webserve = require('./webserve');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
+const labelshare = require('./labelshare');
 const recovery = require('./recovery');
 const wfsrecv = require('./wfsrecv');
 const presence = require('./presence');
@@ -167,30 +168,72 @@ function rowLabelsFor(cfg) {
   } catch { return {}; }
 }
 
-// order line -> a live label already made for its PO# in the Ship tab, so
-// the line can take that tracking instead of buying a second label (owner
-// 2026-11-12). Only lines still waiting for tracking; the newest label wins.
-const poKey = (v) => String(v || '').trim().toUpperCase();
+// order line -> the label its PO# already has, so the line can take that
+// tracking instead of buying a second label (owner 2026-11-12). Since
+// 2026-11-14 that is a label made anywhere: here in the Ship tab, here for
+// a line that lost its tracking again, or on another computer (its label,
+// or tracking it put on the same order) through the shared folder. Only
+// lines still waiting for tracking. A Ship-tab label made here is offered
+// first, since the line can take it over whole; otherwise the newest.
+const poKey = labelshare.poKey;
+function haveView(have) {
+  if (!have || !have.length) return null;
+  const l = have.find(h => !h.station && h.kind === 'tab') || have[0];
+  return {
+    id: l.id, tracking: l.tracking, service: l.service, account: l.account, cost: l.cost, at: l.at, weight: l.weight, dims: l.dims,
+    station: l.station || '', kind: l.kind, processed: !!l.processed, more: have.length - 1,
+  };
+}
+const upsTestMode = (cfg) => !!((cfg || config.load()).ups || {}).test;
+// every sign that an order line's PO# already has a label; fresh = read the
+// shared folder now (a purchase), not the copy from the last pass
+function labelsForRow(row, { fresh = false } = {}) {
+  if (fresh) labelshare.refresh(true);
+  return labelshare.finder({ test: upsTestMode() })(row.order_number, { part: row.lw_order_id || '', rowId: row.id });
+}
 function tabLabelsFor(cfg, rows) {
   if (cfg.captureOnly || !(cfg.pages && cfg.pages.ship)) return {};
   try {
     const open = rows.filter(r => !r.tracking && r.status !== 'synced' && poKey(r.order_number));
     if (!open.length) return {};
-    const byPo = new Map();
-    for (const l of db.shipLabelsMadeInTab({ test: !!(cfg.ups || {}).test })) {
-      const k = poKey(l.reference);
-      if (!byPo.has(k)) byPo.set(k, l); // newest first
-    }
+    const find = labelshare.finder({ test: upsTestMode(cfg) });
     const out = {};
     for (const r of open) {
-      const l = byPo.get(poKey(r.order_number));
-      if (l) out[r.id] = { id: l.id, tracking: l.tracking, service: l.service_name, account: l.account_name, cost: l.cost, at: l.created_at, weight: l.weight, dims: l.dims };
+      const v = haveView(find(r.order_number, { part: r.lw_order_id || '', rowId: r.id }));
+      if (v) out[r.id] = v;
     }
     return out;
   } catch { return {}; }
 }
 
+// The shared folder, both ways. Out: this station's labels and captured
+// tracking, a few seconds after anything changes (and every 2 minutes, in
+// case the folder was offline). In: what the other stations wrote, every
+// 30 seconds; the Orders page is redrawn only when a line's "already has a
+// label" notice actually changed.
+let shareTimer = null;
+function shareSoon() {
+  if (shareTimer) return;
+  shareTimer = setTimeout(() => {
+    shareTimer = null;
+    try { publishCaptures(); } catch { /* next pass */ }
+    try { labelshare.publish(); } catch { /* next pass */ }
+  }, 3000);
+}
+let lastHaveSig = '';
+function sharedLabelsTick() {
+  try {
+    if (!labelshare.refresh()) return;
+    const cfg = config.load();
+    const sig = JSON.stringify(tabLabelsFor(cfg, cfg.captureOnly ? db.todayRows() : db.activeRows()));
+    if (sig === lastHaveSig) return;
+    lastHaveSig = sig;
+    pushState();
+  } catch { /* the folder is offline: this computer's own labels still count */ }
+}
+
 function pushState() {
+  shareSoon();
   writeDailyCsv();
   if (win && !win.isDestroyed()) win.webContents.send('state:changed', buildState());
 }
@@ -911,6 +954,8 @@ function startRetSync() {
     changed: (summary) => { if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', summary); },
   });
   retsyncMissed = (res && res.missed) || 0;
+  // the shared label record reads and writes the same folder
+  labelshare.configure({ sync: retsync, database: db, userData: app.getPath('userData') });
   // LAN presence rides the same folder: online avatars, who-is-in-which-row,
   // and edit pings that poke the rescan ahead of the cloud drive. An edit
   // ping carries no data — the peer's file may not have SYNCED yet, so the
@@ -2111,7 +2156,10 @@ function startLowStockWatcher() {
   setTimeout(() => runLowStockCheck(), 15000);
   // the shared capture log rides the same startup: publish soon, then every 2 min
   setTimeout(() => { try { publishCaptures(); } catch { /* next pass */ } }, 20000);
-  setInterval(() => { try { publishCaptures(); } catch { /* next pass */ } }, 2 * 60 * 1000);
+  setInterval(() => { try { publishCaptures(); } catch { /* next pass */ } try { labelshare.publish(); } catch { /* next pass */ } }, 2 * 60 * 1000);
+  // the other stations' labels and tracking (the shared label record)
+  setTimeout(sharedLabelsTick, 4000);
+  setInterval(sharedLabelsTick, 30 * 1000);
   setInterval(() => runLowStockCheck(), 15 * 60 * 1000);
 }
 
@@ -7527,7 +7575,10 @@ exit 1
         return { ok: false, error: `${reference} ships to ${country}; the Ship tab makes US labels only.` };
       }
       order.party.state = ups.stateCode(order.party.state);
-      return { ok: true, order };
+      // a label this PO# already has, on any computer (owner 2026-11-14)
+      labelshare.refresh(true);
+      const have = labelshare.finder({ test: upsTestMode(cfg) })(order.reference || reference);
+      return { ok: true, order, have };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -7581,6 +7632,15 @@ exit 1
     if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
     const reference = String((payload && payload.reference) || '').trim().slice(0, 35);
     const reference2 = String((payload && payload.reference2) || '').trim().slice(0, 35);
+    // a PO# that already has a live ship-to-customer label, here or on
+    // another computer, is not labelled again without a deliberate "second
+    // label" from the person buying (owner 2026-11-14). A reference typed by
+    // hand only counts when it reads as an order number.
+    if (prep.input.kind === 'ship' && reference && !(payload && payload.second === true) && ((payload && payload.fromPo) || matchOrder(reference))) {
+      labelshare.refresh(true);
+      const have = labelshare.finder({ test: !!prep.u.test })(reference);
+      if (have.length) return { ok: false, duplicate: true, have, error: secondLabelError(have) };
+    }
     try {
       const label = await upsBuyLabel(prep, acct, {
         serviceCode, serviceName: payload && payload.serviceName, reference, reference2,
@@ -7588,6 +7648,7 @@ exit 1
       });
       if (payload && payload.saveAddress) { try { db.shipAddrSave(prep.input.other); } catch { /* the label matters more */ } }
       if (payload && payload.addressId) { try { db.shipAddrTouch(payload.addressId); } catch { /* best effort */ } }
+      shareSoon();
       const { label_gif: gif, ...row } = label;
       return { ok: true, label: row, gif, size: ups.gifSize(gif) };
     } catch (e) {
@@ -7598,7 +7659,13 @@ exit 1
   ipcMain.handle('ship:list', (_e, { days } = {}) => {
     const n = Math.max(0, Math.min(3650, Number(days) || 0));
     const since = n ? db.localDay(new Date(Date.now() - n * 86400000)) : db.localDay();
-    return { ok: true, labels: db.shipLabelList({ sinceDay: since }) };
+    // every computer's labels (owner 2026-11-14): this station's own, then
+    // what the others published to the shared folder, newest first
+    labelshare.refresh(true); // opening or reloading the table reads the folder as it is now
+    const me = retsync.stationName() || '';
+    const labels = [...db.shipLabelList({ sinceDay: since }).map(l => ({ ...l, station: me })), ...labelshare.listFar(since)]
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    return { ok: true, labels, shared: retsync.enabled(), station: me, dups: labelshare.duplicates({ test: upsTestMode() }) };
   });
 
   ipcMain.handle('ship:label', (_e, { id } = {}) => {
@@ -7782,6 +7849,7 @@ exit 1
         await new ups.UpsClient(acct, { test: !!l.test }).void(l.shipment_id || l.tracking);
       }
       const { label_gif: _g, ...row } = db.shipLabelVoid(id);
+      shareSoon();
       // the order it filled gets its tracking back off, unless already processed
       const orderRow = l.row_id ? db.getRow(l.row_id) : null;
       if (orderRow && orderRow.tracking === l.tracking && orderRow.status !== 'synced') {
@@ -7804,6 +7872,14 @@ exit 1
     if (!wmOrders.has(po)) wmOrders.set(po, await new walmart.WalmartClient(config.load().walmart).order(po));
     return wmOrders.get(po);
   }
+  // what the buyer is told when the PO# already has a label
+  function secondLabelError(have) {
+    const l = have[0];
+    const where = l.station ? `on ${l.station}` : (l.kind === 'tab' ? 'in the Ship tab' : 'on this computer');
+    const what = l.kind === 'tracking' ? `already has tracking ${l.tracking}, added ${where}` : `already has a label, ${l.tracking}, made ${where}`;
+    return `This order ${what}. Use that one, or confirm a second label.`;
+  }
+
   function orderRowFor(rowId) {
     const row = db.getRow(Number(rowId));
     if (!row) return { error: 'That order is no longer on the list.' };
@@ -7840,6 +7916,8 @@ exit 1
         walmart: row.channel === 'walmart' && wmReady(),
         key, saved: key ? shipPkgState()[key] || null : null,
         orderedOn: order.orderedOn || '', deliverBy: order.deliverBy || '', shipBy: order.shipBy || '',
+        // read from the shared folder now, not from the last pass
+        have: haveView(labelsForRow(row, { fresh: true })),
       };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -7876,6 +7954,12 @@ exit 1
     if (error) return { ok: false, error };
     const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
     if (prep.error) return { ok: false, error: prep.error };
+    // the order already has a label, here or on another computer: buying
+    // another takes a deliberate "second label" (owner 2026-11-14)
+    if (payload.second !== true) {
+      const have = labelsForRow(row, { fresh: true });
+      if (have.length) return { ok: false, duplicate: true, have: haveView(have), error: secondLabelError(have) };
+    }
     try {
       let label;
       if (payload.via === 'wm') {
@@ -7929,13 +8013,32 @@ exit 1
     const l = db.shipLabelGet(labelId);
     if (!l || l.voided_at) return { ok: false, error: 'That label is gone or was voided.' };
     if (l.kind !== 'ship' || !l.tracking) return { ok: false, error: 'That is not a ship-to-customer label.' };
-    if (l.row_id) return { ok: false, error: 'That label already belongs to another order line.' };
+    // a label bought for this very line (its tracking was taken off again) or
+    // for a line that is gone can be taken; another live line's label cannot
+    if (l.row_id && l.row_id !== row.id && db.getRow(l.row_id)) return { ok: false, error: 'That label already belongs to another order line.' };
     if (poKey(l.reference) !== poKey(row.order_number)) return { ok: false, error: 'That label was made for a different PO#.' };
     db.shipLabelSetRow(l.id, row.id);
     db.setTracking(row.id, l.tracking, classifyTracking(l.tracking) || l.carrier || '');
     if (currentRowId === row.id) currentRowId = null;
     pushState();
     return { ok: true, tracking: l.tracking, labelId: l.id };
+  });
+
+  // Use the label another computer made for this PO# (owner 2026-11-14):
+  // nothing is bought; its tracking lands on the order like a scan. The
+  // label itself stays with the computer that made it (Reprint / Void there).
+  ipcMain.handle('orderShip:useShared', (_e, { rowId, station, tracking } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const { row, error } = orderRowFor(rowId);
+    if (error) return { ok: false, error };
+    const t = String(tracking || '').trim().toUpperCase();
+    const st = String(station || '').trim();
+    const hit = st && t ? labelsForRow(row, { fresh: true }).find(h => h.station === st && String(h.tracking).trim().toUpperCase() === t) : null;
+    if (!hit) return { ok: false, error: 'That label is no longer on the shared record: it was voided, or it is for another order.' };
+    db.setTracking(row.id, hit.tracking, classifyTracking(hit.tracking) || hit.carrier || '');
+    if (currentRowId === row.id) currentRowId = null;
+    pushState();
+    return { ok: true, tracking: hit.tracking, station: hit.station };
   });
 
   // Settings › General › Browser: the link (with its key), whether it runs,
