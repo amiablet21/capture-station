@@ -8,7 +8,9 @@
     "start": "electron .",
     "dist": "electron-builder --win nsis",
     "dist:mac": "electron-builder --mac",
-    "lw": "node tools/linnworks/lw.js"
+    "lw": "node tools/linnworks/lw.js",
+    "server": "node server/dws-server.js",
+    "server:test": "node server/test-server.js"
   },
   "keywords": [],
   "author": "Digital World Shop",

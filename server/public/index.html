@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DWS Server</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1f2933; --muted: #6b7785; --line: #e1e5ea; --accent: #1f3a5f;
+    --accent-ink: #ffffff; --soft: #eef2f7; --good: #1f7a4d; --warn: #9a5b00; --warn-bg: #fff6e0; --bad: #a02222; --bad-bg: #fdecec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --panel: #1a2029; --ink: #e6eaf0; --muted: #96a2b2; --line: #2b3441; --accent: #7fa8dd;
+      --accent-ink: #0d1117; --soft: #222a35; --good: #6fcf97; --warn: #f2c26b; --warn-bg: #3a2f14; --bad: #f08a8a; --bad-bg: #3a1c1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 12px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select, textarea { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 8px; width: 100%; }
+  input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 3px; }
+  .hide { display: none !important; }
+
+  .gate { max-width: 380px; margin: 9vh auto; padding: 0 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+  .gate h1 { font-size: 20px; margin: 0 0 4px; }
+  .gate p { color: var(--muted); margin: 0 0 8px; }
+  .msg { margin-top: 12px; padding: 8px 10px; border-radius: 6px; background: var(--bad-bg); color: var(--bad); }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header .brand { font-weight: 600; font-size: 16px; color: var(--accent); }
+  header .who { margin-left: auto; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.on { background: var(--good); }
+  nav { display: flex; gap: 2px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
+  nav button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 10px 12px; white-space: nowrap; color: var(--muted); }
+  nav button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  main { padding: 14px 16px 40px; max-width: 1500px; margin: 0 auto; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { border-radius: 999px; padding: 4px 12px; background: var(--panel); }
+  .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .chip small { opacity: .75; margin-left: 4px; }
+  .bar input[type=search] { max-width: 300px; margin-left: auto; }
+  .note { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
+
+  .tablewrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--panel); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; max-width: 340px; overflow-wrap: break-word; }
+  td.nw { white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover { background: var(--soft); }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+  .more { margin: 10px auto 0; display: block; }
+  .pill { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; background: var(--soft); white-space: nowrap; }
+  .pill.create { color: var(--good); } .pill.delete { color: var(--bad); } .pill.edit { color: var(--warn); }
+
+  .drawer { position: fixed; inset: 0 0 0 auto; width: min(560px, 100%); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0,0,0,.14); padding: 16px 18px 28px; overflow-y: auto; z-index: 5; }
+  .drawer h2 { font-size: 17px; margin: 0 28px 2px 0; }
+  .drawer .x { position: absolute; top: 12px; right: 12px; border: 0; font-size: 20px; line-height: 1; padding: 4px 8px; }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; margin: 12px 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  h3 { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 20px 0 6px; }
+  .hist { border-top: 1px solid var(--line); padding: 7px 0; }
+  .hist small { color: var(--muted); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .items { display: grid; grid-template-columns: 1fr 64px 110px 30px; gap: 6px; margin-bottom: 6px; }
+  .items button { padding: 4px 0; }
+  .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .conflict { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
+  .conflict .actions { margin-top: 8px; }
+  .diff { font-size: 12.5px; background: var(--soft); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 10px; }
+  @media (max-width: 640px) {
+    /* on a phone each row becomes a card: label on the left, value on the right */
+    .tablewrap { background: none; border: 0; overflow: visible; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    thead { display: none; }
+    tbody tr { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; padding: 6px 0; }
+    td, td.nw { border: 0; padding: 3px 12px; max-width: none; white-space: normal; display: grid; grid-template-columns: 104px 1fr; gap: 10px; }
+    td::before { content: attr(data-label); color: var(--muted); font-size: 12px; padding-top: 1px; }
+    td:empty, td.blank { display: none; }
+    main { padding: 10px 10px 40px; }
+    .bar input[type=search] { max-width: none; margin-left: 0; }
+    .kv { grid-template-columns: 105px 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate hide">
+  <div class="card">
+    <h1 id="gateTitle">DWS Server</h1>
+    <p id="gateSub"></p>
+    <form id="gateForm" autocomplete="on">
+      <div id="nameRow" class="hide"><label for="gName">Your name</label><input id="gName" autocomplete="name"></div>
+      <label for="gUser">Username</label><input id="gUser" autocomplete="username" autocapitalize="none" required>
+      <label for="gPass">Password</label><input id="gPass" type="password" autocomplete="current-password" required>
+      <div class="actions"><button class="primary" id="gateGo" type="submit">Sign in</button></div>
+      <div id="gateMsg" class="msg hide"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="hide">
+  <header>
+    <span class="brand">DWS Server</span>
+    <span class="who"><span class="dot" id="live" title="Live updates"></span><span id="whoName"></span><button id="signOut">Sign out</button></span>
+  </header>
+  <nav id="tabs"></nav>
+  <main>
+    <div class="bar">
+      <div class="chips" id="chips"></div>
+      <input type="search" id="q" placeholder="Search" aria-label="Search">
+    </div>
+    <p class="note" id="note"></p>
+    <div id="view"></div>
+  </main>
+</div>
+
+<aside class="drawer hide" id="drawer" aria-label="Details"></aside>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, kids = []) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== undefined && v !== null && v !== false) n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of [].concat(kids)) if (kid !== null && kid !== undefined && kid !== false) n.append(kid);
+    return n;
+  };
+  const api = async (method, url, body) => {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'X-DWS': '1' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    let json = {};
+    try { json = await res.json(); } catch { /* empty answer */ }
+    return { status: res.status, ok: res.ok, ...json };
+  };
+
+  // times are shown in US Eastern, the business's clock
+  const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+  const fmtDate = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const when = (v) => { if (!v) return ''; const d = new Date(v); return Number.isNaN(d.getTime()) ? String(v) : fmtDate.format(d); };
+  const cell = (v) => (ISO.test(v) ? when(v) : v);
+  // short values (dates, order numbers, tracking) stay on one line; long text wraps
+  const td = (text, label, kids) => el('td', { class: `${String(text || '').length <= 26 ? 'nw' : ''}${text || kids ? '' : ' blank'}`, 'data-label': label, text: kids ? undefined : text }, kids || []);
+
+  let me = null;          // { user, areas, roles, perms, backup }
+  let tab = '';           // an area id, 'history' or 'logins'
+  let kind = '';
+  let rows = []; let total = 0;
+  let setupMode = false;
+
+  /* ---------- sign in / first run ---------- */
+  async function boot() {
+    const st = await api('GET', '/api/state');
+    setupMode = !!st.needsSetup;
+    const m = setupMode ? null : await api('GET', '/api/me');
+    if (m && m.ok) return enter(m);
+    $('app').classList.add('hide'); $('gate').classList.remove('hide');
+    $('gateTitle').textContent = setupMode ? 'Create the owner login' : 'DWS Server';
+    $('gateSub').textContent = setupMode ? 'This server has no logins yet. The first one is the owner, who can add everyone else.' : 'Sign in with your own username and password.';
+    $('nameRow').classList.toggle('hide', !setupMode);
+    $('gateGo').textContent = setupMode ? 'Create owner login' : 'Sign in';
+    $('gPass').autocomplete = setupMode ? 'new-password' : 'current-password';
+    $('gUser').focus();
+  }
+  $('gateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('gateMsg'); msg.classList.add('hide');
+    const username = $('gUser').value; const password = $('gPass').value;
+    if (setupMode) {
+      const r = await api('POST', '/api/setup', { username, password, name: $('gName').value });
+      if (!r.ok) { msg.textContent = r.error || 'That did not work.'; msg.classList.remove('hide'); return; }
+    }
+    const r = await api('POST', '/api/login', { username, password, station: 'BROWSER' });
+    if (!r.ok) { msg.textContent = r.error || 'That did not work.'; msg.classList.remove('hide'); return; }
+    $('gPass').value = '';
+    boot();
+  });
+  $('signOut').addEventListener('click', async () => { await api('POST', '/api/logout'); if (stream) stream.close(); location.reload(); });
+
+  /* ---------- the app ---------- */
+  let stream = null;
+  function enter(m) {
+    me = m;
+    $('gate').classList.add('hide'); $('app').classList.remove('hide');
+    $('whoName').textContent = `${me.user.name} · ${me.user.roleLabel}`;
+    if (!tab) tab = me.areas.length ? me.areas[0].area : 'history';
+    drawTabs(); openTab(tab);
+    if (!stream) {
+      stream = new EventSource('/api/events');
+      stream.onopen = () => $('live').classList.add('on');
+      stream.onerror = () => $('live').classList.remove('on');
+      let timer = null;
+      stream.onmessage = () => { clearTimeout(timer); timer = setTimeout(refresh, 400); };
+    }
+  }
+  async function refresh() {
+    const m = await api('GET', '/api/me');
+    if (!m.ok) return boot();
+    me = m; drawTabs(); drawChips();
+    if (!$('drawer').classList.contains('hide') && $('drawer').dataset.busy === '1') return; // someone is typing in a form
+    load(true);
+  }
+  function drawTabs() {
+    const tabs = [...me.areas.map((a) => [a.area, a.label]), ['history', 'History']];
+    if (me.user.perms.includes('admin')) tabs.push(['logins', 'Logins']);
+    $('tabs').replaceChildren(...tabs.map(([id, label]) => el('button', { class: id === tab ? 'on' : '', text: label, onclick: () => openTab(id) })));
+  }
+  function openTab(id) {
+    tab = id; closeDrawer(); $('q').value = '';
+    const area = me.areas.find((a) => a.area === id);
+    kind = area ? area.kinds[0].kind : '';
+    drawTabs(); drawChips(); load();
+  }
+  const areaNow = () => me.areas.find((a) => a.area === tab);
+  const kindNow = () => { const a = areaNow(); return a && a.kinds.find((k) => k.kind === kind); };
+  function drawChips() {
+    const a = areaNow();
+    $('chips').replaceChildren(...(a ? a.kinds.map((k) => el('button', { class: `chip${k.kind === kind ? ' on' : ''}`, onclick: () => { kind = k.kind; closeDrawer(); drawChips(); load(); } },
+      [k.label, el('small', { text: String(k.count) })])) : []));
+    $('q').classList.toggle('hide', tab === 'logins');
+    const k = kindNow();
+    $('note').textContent = tab === 'history' ? 'Every change made on this server, newest first. Click a line to see the record before and after.'
+      : tab === 'logins' ? 'Each person signs in with their own login. A role decides what they can change.'
+      : !k ? '' : k.fixed ? 'This is a log. Lines are added by the app and never changed.' : k.canWrite ? '' : 'You can look at these but not change them.';
+  }
+  let qTimer = null;
+  $('q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(() => load(), 250); });
+
+  async function load(keep) {
+    if (tab === 'logins') return drawLogins();
+    if (tab === 'history') {
+      const r = await api('GET', `/api/history?limit=200&q=${encodeURIComponent($('q').value)}`);
+      return drawHistory(r.rows || []);
+    }
+    const want = keep ? Math.max(100, rows.length) : 100;
+    const r = await api('GET', `/api/records/${kind}?limit=${want}&q=${encodeURIComponent($('q').value)}`);
+    rows = r.rows || []; total = r.total || 0;
+    drawTable();
+  }
+  async function loadMore() {
+    const r = await api('GET', `/api/records/${kind}?limit=100&offset=${rows.length}&q=${encodeURIComponent($('q').value)}`);
+    rows = rows.concat(r.rows || []); total = r.total || total;
+    drawTable();
+  }
+  function drawTable() {
+    const k = kindNow();
+    const head = el('tr', {}, k.cols.map((c) => el('th', { text: c })));
+    const body = rows.map((r) => el('tr', { class: 'click', onclick: () => openRecord(r.id) }, r.cells.map((c, i) => td(cell(c), k.cols[i]))));
+    const top = [];
+    if (k.kind === 'return' && k.canWrite) top.push(el('div', { class: 'bar' }, el('button', { class: 'primary', text: 'Add a return', onclick: () => editReturn(null) })));
+    $('view').replaceChildren(...top,
+      el('div', { class: 'tablewrap' }, rows.length ? el('table', {}, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: $('q').value ? 'Nothing matches that search.' : `No ${k.label.toLowerCase()} yet.` })),
+      rows.length < total ? el('button', { class: 'more', text: `Show more (${rows.length} of ${total})`, onclick: loadMore }) : (rows.length ? el('p', { class: 'note', text: `${total} in all` }) : null));
+  }
+
+  /* ---------- history ---------- */
+  const ACTION = { create: 'added', edit: 'edited', delete: 'deleted', import: 'imported', user: 'login' };
+  function drawHistory(list) {
+    const head = el('tr', {}, ['When', 'Who', 'Computer', 'What', 'Changed'].map((c) => el('th', { text: c })));
+    const body = list.map((h) => el('tr', { class: 'click', onclick: () => openHistory(h.seq) }, [
+      td(when(h.ts), 'When'), td(h.user || '—', 'Who'), td(h.station || '—', 'Computer'),
+      td('', 'What', [el('span', {}, [el('span', { class: `pill ${h.action}`, text: ACTION[h.action] || h.action }), ' ', h.summary])]),
+      td(h.changed, 'Changed'),
+    ]));
+    $('view').replaceChildren(el('div', { class: 'tablewrap' }, list.length ? el('table', {}, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: 'No changes recorded yet.' })));
+  }
+  const pretty = (o) => (o === null || o === undefined ? '(nothing)' : Object.entries(o).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n'));
+  async function openHistory(seq) {
+    const h = await api('GET', `/api/history/${seq}`);
+    if (!h.ok) return;
+    showDrawer([
+      el('h2', { text: h.summary }),
+      el('div', { class: 'note', text: `${when(h.ts)} · ${h.user || 'no login (from the shared folder)'}${h.station ? ` · ${h.station}` : ''}` }),
+      h.changed ? el('p', {}, ['Changed: ', el('b', { text: h.changed })]) : null,
+      h.before ? el('h3', { text: 'Before' }) : null, h.before ? el('div', { class: 'diff', text: pretty(h.before) }) : null,
+      h.after ? el('h3', { text: 'After' }) : null, h.after ? el('div', { class: 'diff', text: pretty(h.after) }) : null,
+    ]);
+  }
+
+  /* ---------- one record ---------- */
+  function showDrawer(kids) {
+    const d = $('drawer'); d.dataset.busy = '0';
+    d.replaceChildren(el('button', { class: 'x', 'aria-label': 'Close', text: '×', onclick: closeDrawer }), ...kids.filter(Boolean));
+    d.classList.remove('hide'); d.scrollTop = 0;
+  }
+  function closeDrawer() { $('drawer').classList.add('hide'); $('drawer').dataset.busy = '0'; }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+  async function openRecord(id) {
+    const k = kindNow();
+    const r = await api('GET', `/api/records/${k.kind}/${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const h = await api('GET', `/api/history?kind=${k.kind}&id=${encodeURIComponent(id)}&limit=50`);
+    const editable = k.kind === 'return' && k.canWrite;
+    showDrawer([
+      el('h2', { text: k.one }),
+      el('div', { class: 'note', text: `Last changed ${when(r.updated_at)} by ${r.updated_by || '—'}` }),
+      el('dl', { class: 'kv' }, k.cols.flatMap((c, i) => [el('dt', { text: c }), el('dd', { text: cell(r.cells[i]) || '—' })])),
+      editable ? el('div', { class: 'actions' }, [
+        el('button', { class: 'primary', text: 'Edit', onclick: () => editReturn(r) }),
+        el('button', { class: 'danger', text: 'Delete', onclick: () => deleteRecord(k, r) }),
+      ]) : (k.fixed ? null : el('p', { class: 'note', text: k.canWrite ? 'Changes to this are made in DWS Stock.' : '' })),
+      el('h3', { text: 'History of this record' }),
+      ...((h.rows || []).length ? h.rows.map((x) => el('div', { class: 'hist' }, [
+        el('span', { class: `pill ${x.action}`, text: ACTION[x.action] || x.action }), ` ${x.changed || ''} `,
+        el('small', { text: `${when(x.ts)} · ${x.user || x.station || '—'}${x.user && x.station ? ` · ${x.station}` : ''}` }),
+      ])) : [el('p', { class: 'note', text: 'No changes recorded since it was brought in.' })]),
+    ]);
+  }
+  async function deleteRecord(k, r) {
+    if (!confirm(`Delete this ${k.one.toLowerCase()}? It stays in the history.`)) return;
+    const out = await api('DELETE', `/api/records/${k.kind}/${encodeURIComponent(r.id)}?version=${r.version}`);
+    if (out.status === 409) { alert('Someone changed this while you were looking at it. Open it again to see the latest.'); }
+    closeDrawer(); refresh();
+  }
+
+  /* ---------- add / edit a return ---------- */
+  const CONDS = [['new', 'New'], ['openbox', 'Open box'], ['used', 'Used'], ['scrap', 'Scrap']];
+  const SOURCES = { WALMART: 'Walmart', EBAY: 'eBay', TEMU: 'Temu', 'TEMU US': 'Temu', '': 'Other' };
+  // `base` is the return as it was when this person opened it: after a
+  // clash, only the fields they changed since then go on top of the other
+  // person's version, so both people's changes are kept
+  function editReturn(rec, theirs, base) {
+    base = base || (rec ? rec.data : null);
+    const d = rec ? rec.data : { order_number: '', source: 'WALMART', customer: '', tracking: '', received_by: '', note: '', items: [{ sku: '', qty: 1, condition: 'new' }] };
+    const f = {
+      order: el('input', { value: d.order_number || '' }), source: el('select', {}, [...new Set(['WALMART', 'EBAY', 'TEMU', '', d.source || ''])].map((s) => el('option', { value: s, text: SOURCES[s] || s, selected: (d.source || '') === s }))),
+      customer: el('input', { value: d.customer || '' }), tracking: el('input', { value: d.tracking || '' }),
+      by: el('input', { value: d.received_by || '', maxlength: 12 }), note: el('textarea', { rows: 2 }),
+    };
+    f.note.value = d.note || '';
+    const itemsBox = el('div');
+    const addItem = (it = { sku: '', qty: 1, condition: 'new' }) => {
+      const row = el('div', { class: 'items' }, [
+        el('input', { placeholder: 'SKU', value: it.sku || '', 'aria-label': 'SKU' }),
+        el('input', { type: 'number', min: 1, value: it.qty ?? 1, 'aria-label': 'Quantity' }),
+        el('select', { 'aria-label': 'Condition' }, CONDS.map(([v, t]) => el('option', { value: v, text: t, selected: it.condition === v }))),
+        el('button', { type: 'button', text: '×', 'aria-label': 'Remove line', onclick: () => row.remove() }),
+      ]);
+      row._orig = it;
+      itemsBox.append(row);
+    };
+    (d.items && d.items.length ? d.items : [{ sku: '', qty: 1, condition: 'new' }]).forEach(addItem);
+    const read = () => ({
+      ...d, order_number: f.order.value.trim(), source: f.source.value, customer: f.customer.value.trim(), tracking: f.tracking.value.trim(),
+      received_by: f.by.value.trim(), note: f.note.value.trim(), created_at: d.created_at || new Date().toISOString(), unmatched: !!d.unmatched,
+      items: [...itemsBox.children].map((row) => { const [sku, qty, cond] = row.querySelectorAll('input, select'); return { ...row._orig, sku: sku.value.trim(), qty: Number(qty.value) || 1, condition: cond.value, targetSku: row._orig.targetSku || sku.value.trim() }; }).filter((it) => it.sku),
+    });
+    const msg = el('div', { class: 'msg hide' });
+    const mineOnTop = () => {
+      const typed = read(); const merged = { ...theirs.data };
+      for (const key of Object.keys(typed)) if (JSON.stringify(typed[key]) !== JSON.stringify((base || {})[key])) merged[key] = typed[key];
+      return merged;
+    };
+    const save = async (version, onTop) => {
+      const data = onTop ? mineOnTop() : read();
+      if (!data.order_number && !data.items.length) { msg.textContent = 'Type an order number or at least one SKU.'; msg.classList.remove('hide'); return; }
+      const out = rec ? await api('PUT', `/api/records/return/${encodeURIComponent(rec.id)}`, { data, version }) : await api('POST', '/api/records/return', { data });
+      if (out.ok) { closeDrawer(); return refresh(); }
+      if (out.status === 409 && out.current) return editReturn({ ...rec, data: read() }, out.current, base); // keep what was typed, show theirs
+      msg.textContent = out.error || 'That could not be saved.'; msg.classList.remove('hide');
+    };
+    const k = me.areas.flatMap((a) => a.kinds).find((x) => x.kind === 'return');
+    showDrawer([
+      el('h2', { text: rec ? 'Edit return' : 'Add a return' }),
+      theirs ? el('div', { class: 'conflict' }, [
+        el('b', { text: theirs.deleted ? `${theirs.updated_by || 'Someone'} deleted this return while you were editing.` : `${theirs.updated_by || 'Someone'} changed this return at ${when(theirs.updated_at)}, after you opened it.` }),
+        theirs.deleted ? null : el('div', {}, 'Nothing was overwritten. What you typed is still in the form below. Their version:'),
+        theirs.deleted ? null : el('dl', { class: 'kv' }, k.cols.flatMap((c, i) => [el('dt', { text: c }), el('dd', { text: cell(theirs.cells[i]) || '—' })])),
+        el('div', { class: 'actions' }, [
+          theirs.deleted ? null : el('button', { text: 'Use their version', onclick: () => editReturn(theirs) }),
+          theirs.deleted ? null : el('button', { class: 'primary', text: 'Keep both: add my changes to theirs', onclick: () => save(theirs.version, true) }),
+        ]),
+      ]) : null,
+      el('div', { class: 'row2' }, [el('div', {}, [el('label', { text: 'Order #' }), f.order]), el('div', {}, [el('label', { text: 'Channel' }), f.source])]),
+      el('div', { class: 'row2' }, [el('div', {}, [el('label', { text: 'Customer' }), f.customer]), el('div', {}, [el('label', { text: 'Return tracking' }), f.tracking])]),
+      el('label', { text: 'Items returned (SKU, quantity, condition)' }), itemsBox,
+      el('button', { type: 'button', text: 'Add a line', onclick: () => addItem() }),
+      el('div', { class: 'row2' }, [el('div', {}, [el('label', { text: 'Received by (initials)' }), f.by]), el('div', {}, [el('label', { text: 'Note' }), f.note])]),
+      el('div', { class: 'actions' }, [el('button', { class: 'primary', text: 'Save', onclick: () => save(rec ? rec.version : undefined) }), el('button', { text: 'Cancel', onclick: closeDrawer })]),
+      msg,
+    ]);
+    $('drawer').dataset.busy = '1';
+  }
+
+  /* ---------- logins (owner) ---------- */
+  const PERM_LABEL = { returns: 'Returns', stock: 'Stock', costs: 'Costs', orders: 'Orders', pricing: 'Pricing', recovery: 'Recovery', admin: 'Logins' };
+  async function drawLogins() {
+    const r = await api('GET', '/api/users');
+    const head = el('tr', {}, ['Username', 'Name', 'Role', 'Can change', 'State'].map((c) => el('th', { text: c })));
+    const body = (r.users || []).map((u) => el('tr', { class: 'click', onclick: () => editLogin(u) }, [
+      td(u.username, 'Username'), td(u.name, 'Name'), td(u.roleLabel, 'Role'),
+      td(u.perms.length ? u.perms.map((p) => PERM_LABEL[p]).join(', ') : 'Nothing (view only)', 'Can change'), td(u.active ? 'On' : 'Switched off', 'State'),
+    ]));
+    const b = me.backup || {};
+    $('view').replaceChildren(
+      el('div', { class: 'bar' }, [el('button', { class: 'primary', text: 'Add a login', onclick: () => editLogin(null) })]),
+      el('div', { class: 'tablewrap' }, el('table', {}, [el('thead', {}, head), el('tbody', {}, body)])),
+      el('h3', { text: 'Backup' }),
+      el('p', { class: 'note', text: `${b.last ? `Last backup: ${when(b.last)}.` : 'No backup has run yet.'} ${b.second ? 'A second copy goes to the backup folder you set.' : 'There is no second copy outside this computer yet.'}${b.error ? ` Last problem: ${b.error}` : ''}` }),
+      el('button', { text: 'Back up now', onclick: async () => { await api('POST', '/api/backup'); refresh(); } }));
+  }
+  function editLogin(u) {
+    const f = {
+      username: el('input', { value: u ? u.username : '', disabled: !!u, autocapitalize: 'none' }), name: el('input', { value: u ? u.name : '' }),
+      role: el('select', {}, me.roles.map((r) => el('option', { value: r.id, text: r.label, selected: u ? u.role === r.id : r.id === 'viewer' }))),
+      password: el('input', { type: 'password', autocomplete: 'new-password', placeholder: u ? 'Leave empty to keep the current one' : 'At least 8 characters' }),
+      active: el('input', { type: 'checkbox', checked: !u || u.active, style: 'width:auto' }),
+    };
+    const extras = me.perms.filter((p) => p !== 'admin').map((p) => { const c = el('input', { type: 'checkbox', value: p, checked: !!(u && u.extra.includes(p)), style: 'width:auto' }); return [c, el('label', { style: 'display:inline;margin:0 12px 0 4px' }, [PERM_LABEL[p]])]; });
+    const msg = el('div', { class: 'msg hide' });
+    const save = async () => {
+      const body = { name: f.name.value, role: f.role.value, extra: extras.map(([c]) => c).filter((c) => c.checked).map((c) => c.value), active: f.active.checked };
+      if (f.password.value) body.password = f.password.value;
+      const out = u ? await api('PUT', `/api/users/${u.id}`, body) : await api('POST', '/api/users', { ...body, username: f.username.value, password: f.password.value });
+      if (out.ok) { closeDrawer(); return drawLogins(); }
+      msg.textContent = out.error || 'That could not be saved.'; msg.classList.remove('hide');
+    };
+    showDrawer([
+      el('h2', { text: u ? `Login: ${u.username}` : 'Add a login' }),
+      el('label', { text: 'Username' }), f.username, el('label', { text: 'Name' }), f.name,
+      el('label', { text: 'Role' }), f.role,
+      el('label', { text: 'Also allowed to change (on top of the role)' }), el('div', {}, extras.flat()),
+      el('label', { text: u ? 'New password' : 'Password' }), f.password,
+      u ? el('div', { style: 'margin-top:12px' }, [f.active, el('label', { style: 'display:inline;margin-left:6px' }, ['This login can sign in'])]) : null,
+      el('div', { class: 'actions' }, [el('button', { class: 'primary', text: 'Save', onclick: save }), el('button', { text: 'Cancel', onclick: closeDrawer })]),
+      msg,
+    ]);
+    $('drawer').dataset.busy = '1';
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
