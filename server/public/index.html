@@ -260,9 +260,12 @@
     const body = rows.map((r) => el('tr', { class: 'click', onclick: () => openRecord(r.id) }, r.cells.map((c, i) => td(cell(c), k.cols[i]))));
     const top = [];
     if (k.kind === 'return' && k.canWrite) top.push(el('div', { class: 'bar' }, el('button', { class: 'primary', text: 'Add a return', onclick: () => editReturn(null) })));
-    $('view').replaceChildren(...top,
+    // replaceChildren would print a missing piece as the word "null": leave it out
+    const foot = rows.length < total ? el('button', { class: 'more', text: `Show more (${rows.length} of ${total})`, onclick: loadMore })
+      : rows.length ? el('p', { class: 'note', text: `${total} in all` }) : null;
+    $('view').replaceChildren(...[...top,
       el('div', { class: 'tablewrap' }, rows.length ? el('table', {}, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: $('q').value ? 'Nothing matches that search.' : `No ${k.label.toLowerCase()} yet.` })),
-      rows.length < total ? el('button', { class: 'more', text: `Show more (${rows.length} of ${total})`, onclick: loadMore }) : (rows.length ? el('p', { class: 'note', text: `${total} in all` }) : null));
+      foot].filter(Boolean));
   }
 
   /* ---------- history ---------- */
