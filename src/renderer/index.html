@@ -1206,6 +1206,23 @@
         <button id="setSrvImport" class="btn btn-ghost" type="button" hidden>Bring it in</button>
       </div>
       <pre class="srv-report mono" id="setSrvReport" hidden></pre>
+      <div id="setSrvMore" hidden>
+        <h3 class="dlg-section">Server backup</h3>
+        <div class="settings-row">
+          <span id="setSrvBackupDir" class="test-result mono"></span>
+          <button id="setSrvBackupChoose" class="btn btn-ghost" type="button">Choose folder</button>
+          <button id="setSrvBackupClear" class="btn btn-ghost" type="button">Stop</button>
+          <button id="setSrvBackupNow" class="btn btn-ghost" type="button">Back up now</button>
+        </div>
+        <p class="dlg-note" id="setSrvBackupNote"></p>
+        <h3 class="dlg-section">Reset a server password</h3>
+        <div class="settings-row">
+          <select id="setSrvResetUser" class="input" aria-label="Login"></select>
+          <input id="setSrvResetPass" type="password" class="input" autocomplete="new-password" placeholder="New password, 8 or more characters" aria-label="New password" />
+          <button id="setSrvResetBtn" class="btn btn-ghost" type="button">Set password</button>
+        </div>
+        <p class="dlg-note" id="setSrvResetNote"></p>
+      </div>
       </section>
       <section class="set-sec" data-p="linnworks" hidden>
         <div class="set-h">Linnworks</div>

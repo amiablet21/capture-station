@@ -135,6 +135,11 @@ if (!window.api) {
     serverCheck: async () => ({ ok: false, error: 'Preview mode' }),
     serverImport: async () => ({ ok: false, error: 'Preview mode' }),
     serverOpen: async () => ({ ok: false, error: 'Preview mode' }),
+    serverChooseBackup: async () => ({ ok: false, error: 'Preview mode' }),
+    serverClearBackup: async () => ({ ok: false, error: 'Preview mode' }),
+    serverBackupNow: async () => ({ ok: false, error: 'Preview mode' }),
+    serverLogins: async () => ({ ok: true, logins: [] }),
+    serverResetPassword: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipPrep: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipSavePkg: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipRates: async () => ({ ok: false, error: 'Preview mode' }),
@@ -16744,7 +16749,44 @@ async function fillServerSettings() {
     : v.enabled ? 'Starting…'
     : 'Tick this on one always-on computer in the office, then Save. The other computers keep working as they do now.';
   $('setSrvNote').classList.toggle('is-fail', !!v.error);
+  // backup and passwords only mean something while the server runs here
+  $('setSrvMore').hidden = !v.running;
+  if (!v.running) return;
+  $('setSrvBackupDir').textContent = v.backupDir || 'This computer only';
+  $('setSrvBackupClear').hidden = !v.backupDir;
+  const when = v.lastBackup ? new Date(v.lastBackup).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  $('setSrvBackupNote').textContent = v.backupError ? `The last backup had a problem: ${v.backupError.replace(/^\S+ /, '')}`
+    : `A full copy is made once a day and the newest 14 are kept. ${when ? `Last one: ${when}.` : 'None has run yet.'} ${v.backupDir
+      ? 'A second copy goes to the folder above.' : 'Choose a folder Google Drive syncs to keep a second copy outside this computer. Use one only you can open: the copy holds everything.'}`;
+  $('setSrvBackupNote').classList.toggle('is-fail', !!v.backupError);
+  const l = await api.serverLogins();
+  const sel = $('setSrvResetUser');
+  const keep = sel.value;
+  sel.replaceChildren(...(l.logins || []).map(u => { const o = document.createElement('option'); o.value = u.id; o.textContent = `${u.username} · ${u.role}`; return o; }));
+  if (keep) sel.value = keep;
+  const none = !(l.logins || []).length;
+  for (const id of ['setSrvResetUser', 'setSrvResetPass', 'setSrvResetBtn']) $(id).disabled = none;
+  if (none) $('setSrvResetNote').textContent = 'No logins yet. Press Open and create the owner login first.';
+  else if (!$('setSrvResetNote').dataset.said) $('setSrvResetNote').textContent = 'For a forgotten password. It only works here, on the server computer, and signs that login out everywhere.';
 }
+$('setSrvBackupChoose').addEventListener('click', async () => { const r = await api.serverChooseBackup(); if (r.ok) fillServerSettings(); else if (!r.canceled) toast(r.error, 4000); });
+$('setSrvBackupClear').addEventListener('click', async () => { await api.serverClearBackup(); fillServerSettings(); });
+$('setSrvBackupNow').addEventListener('click', async () => {
+  const b = $('setSrvBackupNow');
+  b.disabled = true;
+  const r = await api.serverBackupNow().catch(err => ({ ok: false, error: err.message }));
+  b.disabled = false;
+  toast(r.ok ? 'Backup made' : r.error, r.ok ? 2500 : 5000);
+  fillServerSettings();
+});
+$('setSrvResetBtn').addEventListener('click', async () => {
+  const note = $('setSrvResetNote');
+  const r = await api.serverResetPassword($('setSrvResetUser').value, $('setSrvResetPass').value);
+  note.dataset.said = '1';
+  note.textContent = r.ok ? `Password set for ${r.username}. They sign in with the new one.` : r.error;
+  note.classList.toggle('is-fail', !r.ok);
+  if (r.ok) $('setSrvResetPass').value = '';
+});
 $('setSrvCopy').addEventListener('click', async () => { await api.copyText($('setSrvUrl').dataset.url); toast('Address copied'); });
 $('setSrvOpen').addEventListener('click', async () => { const r = await api.serverOpen(); if (!r.ok) toast(r.error, 4000); });
 async function serverFolderJob(btn, busyText, run) {

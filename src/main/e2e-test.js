@@ -2961,6 +2961,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const after = await exec('api.serverInfo()');
       check('server: Bring it in fills the server; a second time adds nothing',
         inn.ok && v.records > 100 && again.ok && after.records === v.records, { inn, records: v.records, after: after.records });
+      // a second backup folder, and a password reset from the server computer
+      const bdir = path.join(app.getPath('temp'), `dws-e2e-backup-${Date.now()}`);
+      await exec(`api.setConfig(${JSON.stringify({ server: { backupDir: bdir } })})`);
+      await sleep(600);
+      const bk = await exec('api.serverBackupNow()');
+      const copies = fs.existsSync(bdir) ? fs.readdirSync(bdir) : [];
+      check('server: Back up now puts a second copy in the chosen folder',
+        bk.ok && bk.running && !!bk.lastBackup && bk.backupDir === bdir && copies.length === 1 && /^dws-server-.*\.sqlite$/.test(copies[0]) && bk.records === after.records, { bk, copies });
+      const post = async (p, body) => { const r = await fetch(`http://127.0.0.1:${port}${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.status; };
+      await post('/api/setup', { username: 'owner', name: 'Owner', password: 'first-pass-123' });
+      const who = await exec('api.serverLogins()');
+      const short = await exec(`api.serverResetPassword(${who.logins[0].id}, 'short')`);
+      const reset = await exec(`api.serverResetPassword(${who.logins[0].id}, 'second-pass-456')`);
+      check('server: a forgotten password is reset from Settings; the old one stops working',
+        who.ok && who.logins.length === 1 && !short.ok && reset.ok && reset.username === 'owner'
+          && (await post('/api/login', { username: 'owner', password: 'first-pass-123' })) === 401
+          && (await post('/api/login', { username: 'owner', password: 'second-pass-456' })) === 200, { who, short, reset });
+      fs.rmSync(bdir, { recursive: true, force: true });
       await exec(`api.setConfig({ server: { enabled: false } })`);
       await sleep(500);
       v = await exec('api.serverInfo()');

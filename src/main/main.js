@@ -3788,11 +3788,13 @@ exit 1
       delete patch.linnworks.hasApplicationSecret; delete patch.linnworks.hasToken;
     }
     const wasWebOn = !!(config.load().web || {}).enabled; // load() is the live object save() changes
-    const wasServerOn = !!(config.load().server || {}).enabled;
+    const serverKey = (v) => [!!(v || {}).enabled, Number((v || {}).port) || 0, String((v || {}).backupDir || '')];
+    const wasServer = JSON.stringify(serverKey(config.load().server));
     const cfg = config.save(patch);
     if (patch && patch.returnsSync) startRetSync(); // folder/station changed
     if (patch.web && patch.web.enabled !== undefined && !!patch.web.enabled !== wasWebOn) startWeb();
-    if (patch.server && patch.server.enabled !== undefined && !!patch.server.enabled !== wasServerOn) startOfficeServer();
+    const nowServer = JSON.stringify(serverKey(config.load().server));
+    if (patch.server && nowServer !== wasServer) startOfficeServer(); // on/off, port or backup folder changed
     pushState();
     return publicConfig(cfg);
   });
@@ -8075,7 +8077,29 @@ exit 1
     const res = await dialog.showOpenDialog(win, { title: 'Choose the shared returns-sync folder', properties: ['openDirectory'] });
     return res.canceled || !res.filePaths[0] ? '' : res.filePaths[0];
   };
-  ipcMain.handle('server:info', () => officeserver.info((config.load().server || {}).enabled));
+  const serverInfo = () => { const c = config.load().server || {}; return officeserver.info(c.enabled, c.backupDir); };
+  ipcMain.handle('server:info', () => serverInfo());
+  // the second backup folder: a place outside this computer (a Drive
+  // folder) that gets a copy of every daily backup
+  ipcMain.handle('server:chooseBackup', async (e) => {
+    if (e && e.web) return { ok: false, error: 'Choose the folder from the desktop app.' };
+    const cur = String((config.load().server || {}).backupDir || '');
+    const res = await dialog.showOpenDialog(win, { title: 'Choose a folder for the server\'s second backup', defaultPath: cur || undefined, properties: ['openDirectory', 'createDirectory'] });
+    if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+    config.save({ server: { backupDir: res.filePaths[0] } });
+    await startOfficeServer();
+    return serverInfo();
+  });
+  ipcMain.handle('server:clearBackup', async () => {
+    config.save({ server: { backupDir: '' } });
+    await startOfficeServer();
+    return serverInfo();
+  });
+  ipcMain.handle('server:backupNow', () => { const r = officeserver.backupNow(); return r.ok ? serverInfo() : r; });
+  ipcMain.handle('server:logins', (e) => (e && e.web ? { ok: false, error: 'Passwords are reset from the desktop app on the server computer.', logins: [] } : officeserver.logins()));
+  ipcMain.handle('server:resetPassword', (e, { id, password } = {}) => (e && e.web
+    ? { ok: false, error: 'Passwords are reset from the desktop app on the server computer.' }
+    : officeserver.resetPassword(id, password)));
   ipcMain.handle('server:check', async (e) => {
     const folder = await serverFolder(e);
     if (!folder) return { ok: false, error: 'No folder chosen.' };
@@ -8088,7 +8112,7 @@ exit 1
   });
   ipcMain.handle('server:open', async () => {
     if (!officeserver.running()) return { ok: false, error: 'The server is off.' };
-    await shell.openExternal(officeserver.info(true).local);
+    await shell.openExternal(serverInfo().local);
     return { ok: true };
   });
 

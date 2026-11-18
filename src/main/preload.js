@@ -190,6 +190,11 @@ contextBridge.exposeInMainWorld('api', {
   serverCheck: () => ipcRenderer.invoke('server:check'),
   serverImport: () => ipcRenderer.invoke('server:import'),
   serverOpen: () => ipcRenderer.invoke('server:open'),
+  serverChooseBackup: () => ipcRenderer.invoke('server:chooseBackup'),
+  serverClearBackup: () => ipcRenderer.invoke('server:clearBackup'),
+  serverBackupNow: () => ipcRenderer.invoke('server:backupNow'),
+  serverLogins: () => ipcRenderer.invoke('server:logins'),
+  serverResetPassword: (id, password) => ipcRenderer.invoke('server:resetPassword', { id, password }),
   // Ship from the Orders line (owner 2026-10-20): UPS + Ship with Walmart
   orderShipPrep: (rowId) => ipcRenderer.invoke('orderShip:prep', { rowId }),
   orderShipSavePkg: (key, pkg) => ipcRenderer.invoke('orderShip:savePkg', { key, pkg }),

@@ -49,17 +49,18 @@ function addresses() {
   return [...new Set(out)];
 }
 
-function info(enabled) {
-  let records = 0; let logins = 0; let lastBackup = '';
+function info(enabled, backupDir) {
+  let records = 0; let logins = 0; let lastBackup = ''; let backupError = '';
   if (live) {
     try {
       records = live.db.counts().reduce((n, t) => n + t.count, 0);
       logins = live.db.userCount();
       lastBackup = live.db.meta.get('lastBackup') || '';
+      backupError = live.db.meta.get('lastBackupError') || '';
     } catch { /* closing */ }
   }
   return { ok: true, enabled: !!enabled, running: !!live, error, port: lastPort, local: `http://localhost:${lastPort}`,
-    addresses: live ? addresses() : [], records, logins, lastBackup };
+    addresses: live ? addresses() : [], records, logins, lastBackup, backupError, backupDir: String(backupDir || '') };
 }
 
 // a dry run of bringing the shared folder in: a report, nothing changed
@@ -82,4 +83,29 @@ function bringIn(folder, compare) {
   }
 }
 
-module.exports = { configure, stop, info, check, bringIn, running: () => !!live };
+// a full copy of the database now: into this computer's own backups and,
+// when a second folder is set, into that folder too
+function backupNow() {
+  if (!live) return { ok: false, error: 'Turn the server on first.' };
+  live.runBackup();
+  const err = live.db.meta.get('lastBackupError') || '';
+  return err ? { ok: false, error: `The backup did not finish: ${err.replace(/^\S+ /, '')}` } : { ok: true };
+}
+
+// Forgotten passwords (owner 2026-11-18). Anyone's password can be set from
+// the Logins tab by an owner; this is for when the owner's own is lost. It
+// only works from DWS Stock on the server computer itself, never from a
+// browser, and signs that login out everywhere.
+function logins() {
+  if (!live) return { ok: false, error: 'Turn the server on first.', logins: [] };
+  return { ok: true, logins: live.db.listUsers().map((u) => ({ id: u.id, username: u.username, name: u.name, role: u.roleLabel, active: u.active })) };
+}
+function resetPassword(id, password) {
+  if (!live) return { ok: false, error: 'Turn the server on first.' };
+  try {
+    const u = live.db.updateUser(Number(id), { password: String(password || '') }, { user: 'server computer', station: os.hostname().toUpperCase() });
+    return { ok: true, username: u.username };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+module.exports = { configure, stop, info, check, bringIn, backupNow, logins, resetPassword, running: () => !!live };

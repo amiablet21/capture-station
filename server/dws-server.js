@@ -61,6 +61,7 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
       const dest = db.backup(path.join(data, 'backups'));
       if (backupDir) { fs.mkdirSync(backupDir, { recursive: true }); fs.copyFileSync(dest, path.join(backupDir, path.basename(dest))); }
       db.meta.set('lastBackup', new Date().toISOString());
+      db.meta.set('lastBackupError', '');
       log('backup written', dest, backupDir ? `and copied to ${backupDir}` : '');
     } catch (e) { db.meta.set('lastBackupError', `${new Date().toISOString()} ${e.message}`); log('backup FAILED', e.message); }
   }

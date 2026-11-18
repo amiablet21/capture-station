@@ -62,6 +62,8 @@ set DWS_BACKUP_DIR=G:\My Drive\DWS Server backups
 
 The Logins tab shows when the last backup ran and has a **Back up now** button.
 
+Inside DWS Stock there is no variable to set: Settings › General › Office server › **Server backup** › *Choose folder* does the same, and **Reset a server password** on that screen sets a new password for any login when one is forgotten (from the server computer only).
+
 ## Settings
 
 All optional, as environment variables: `DWS_DATA` (folder for the database, default `./dws-data`), `DWS_PORT` (default 8790), `DWS_HOST` (default every computer on the network; `127.0.0.1` for this computer only), `DWS_BACKUP_DIR`.

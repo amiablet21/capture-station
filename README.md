@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.145 highlights
+
+- **The server keeps a second backup outside its computer** (owner: "I want all of these"). Settings › General › Office server › **Server backup** › *Choose folder* names a second place for the server's daily copy, such as a folder Google Drive syncs, so one copy leaves the building. *Back up now* makes a copy on the spot, and the line under it says when the last one ran or what went wrong. Pick a folder only the owner can open: the copy holds every record and login.
+- **A forgotten server password can be reset** from Settings › General › Office server › **Reset a server password**: pick the login, type a new password, *Set password*. It works only in DWS Stock on the server computer itself, never from a browser, signs that login out everywhere, and is written to the History. An owner can still set anyone else's password on the server page's Logins tab.
+- Fixed: an empty list on the server's page showed the word "null" under it.
+
 ## v1.32.144 highlights
 
 - **One computer in the office can be the server** (owner: "a local server on a separate computer in the office ... they all basically have their own logins", built into DWS Stock). Settings › General › **Office server** › *This computer is the server* runs one shared database inside DWS Stock on that computer: a login for each person with a role (Owner, Returns room, Stock room, View only), every record in five sections (Returns, Stock, Orders, Pricing, Recovery), and a history of every change with who made it and on which computer. It is off by default, and no computer uses it yet: every desktop still shares through the Drive folder exactly as before. Connecting the pages to it comes next, starting with Returns.
