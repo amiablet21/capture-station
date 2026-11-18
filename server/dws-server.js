@@ -59,7 +59,14 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
   function runBackup() {
     try {
       const dest = db.backup(path.join(data, 'backups'));
-      if (backupDir) { fs.mkdirSync(backupDir, { recursive: true }); fs.copyFileSync(dest, path.join(backupDir, path.basename(dest))); }
+      if (backupDir) {
+        fs.mkdirSync(backupDir, { recursive: true });
+        fs.copyFileSync(dest, path.join(backupDir, path.basename(dest)));
+        // the second folder keeps the newest 14 too, or a Drive folder would
+        // grow by a full copy every day forever
+        const old = fs.readdirSync(backupDir).filter((n) => /^dws-server-\d{4}-\d{2}-\d{2}\.sqlite$/.test(n)).sort().reverse().slice(14);
+        for (const n of old) fs.rmSync(path.join(backupDir, n), { force: true });
+      }
       db.meta.set('lastBackup', new Date().toISOString());
       db.meta.set('lastBackupError', '');
       log('backup written', dest, backupDir ? `and copied to ${backupDir}` : '');

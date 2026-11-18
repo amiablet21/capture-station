@@ -188,6 +188,25 @@ const ok = (name) => { passed++; console.log(`  ok  ${name}`); };
   assert.equal(backups.length, 1);
   assert.ok(fs.statSync(path.join(tmp, 'data', 'backups', backups[0])).size > 50000);
   ok('a backup writes a full copy of the database');
+  // a second folder (a Drive folder in real use) gets the copy too and is
+  // kept to the newest 14; other files in it are left alone
+  await srv.close();
+  const secondDir = path.join(tmp, 'second-backups');
+  fs.mkdirSync(secondDir);
+  for (let d = 1; d <= 20; d++) fs.writeFileSync(path.join(secondDir, `dws-server-2026-01-${String(d).padStart(2, '0')}.sqlite`), 'old');
+  fs.writeFileSync(path.join(secondDir, 'my-notes.txt'), 'not a backup');
+  const srv2 = await start({ data: path.join(tmp, 'data'), port: 0, host: '127.0.0.1', quiet: true, backupDir: secondDir });
+  srv2.runBackup();
+  const kept = fs.readdirSync(secondDir).filter((x) => x.endsWith('.sqlite')).sort();
+  assert.equal(kept.length, 14);
+  assert.equal(kept[0], 'dws-server-2026-01-08.sqlite');
+  assert.ok(fs.statSync(path.join(secondDir, kept[13])).size > 50000);
+  assert.ok(fs.existsSync(path.join(secondDir, 'my-notes.txt')));
+  ok('a second backup folder gets the copy and keeps only the newest 14');
+  await srv2.close();
+  fs.rmSync(tmp, { recursive: true, force: true });
+  console.log(`\n${passed} checks passed.`);
+  return;
 
   await srv.close();
   fs.rmSync(tmp, { recursive: true, force: true });
