@@ -131,6 +131,10 @@ const DEFAULTS = {
   // Browser access (owner 2026-10-20): the whole app at http://localhost:<port>
   // on this computer only, opened with a private key (the link in Settings)
   web: { enabled: false, port: 47391, key: '' },
+  // Office server (owner 2026-11-18): this computer holds the one shared
+  // database every DWS Stock computer will use (src/main/officeserver.js).
+  // backupDir: a second place for its daily backup, e.g. a Drive folder.
+  server: { enabled: false, port: 8790, backupDir: '' },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },

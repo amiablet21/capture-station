@@ -1,6 +1,6 @@
 {
   "name": "capture-station",
-  "version": "1.32.143",
+  "version": "1.32.144",
   "description": "Packing station capture app - orders, tracking, serials -> Linnworks",
   "main": "src/main/main.js",
   "scripts": {
@@ -26,6 +26,9 @@
     "productName": "DWS Stock",
     "files": [
       "src/**/*",
+      "server/**/*",
+      "!server/test-server.js",
+      "!server/demo-folder.js",
       "package.json"
     ],
     "win": {

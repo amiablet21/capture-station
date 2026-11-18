@@ -1190,6 +1190,22 @@
         <button id="setWebNew" class="btn btn-ghost" type="button">New link</button>
       </div>
       <p class="dlg-note" id="setWebNote"></p>
+
+      <h3 class="dlg-section">Office server</h3>
+      <div class="settings-row">
+        <label class="check"><input id="setSrvOn" type="checkbox" /> This computer is the server</label>
+      </div>
+      <p class="dlg-note" id="setSrvNote"></p>
+      <div class="settings-row web-row" id="setSrvRow" hidden>
+        <span id="setSrvUrl" class="web-url mono"></span>
+        <button id="setSrvCopy" class="btn btn-ghost" type="button">Copy address</button>
+        <button id="setSrvOpen" class="btn btn-ghost" type="button">Open</button>
+      </div>
+      <div class="settings-row" id="setSrvTools">
+        <button id="setSrvCheck" class="btn btn-ghost" type="button">Check my Drive folder</button>
+        <button id="setSrvImport" class="btn btn-ghost" type="button" hidden>Bring it in</button>
+      </div>
+      <pre class="srv-report mono" id="setSrvReport" hidden></pre>
       </section>
       <section class="set-sec" data-p="linnworks" hidden>
         <div class="set-h">Linnworks</div>

@@ -2,6 +2,15 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.144 highlights
+
+- **One computer in the office can be the server** (owner: "a local server on a separate computer in the office ... they all basically have their own logins", built into DWS Stock). Settings › General › **Office server** › *This computer is the server* runs one shared database inside DWS Stock on that computer: a login for each person with a role (Owner, Returns room, Stock room, View only), every record in five sections (Returns, Stock, Orders, Pricing, Recovery), and a history of every change with who made it and on which computer. It is off by default, and no computer uses it yet: every desktop still shares through the Drive folder exactly as before. Connecting the pages to it comes next, starting with Returns.
+- **Check my Drive folder** reads the shared returns-sync folder and changes nothing. It reports what the folder holds by the app's own rules (newest change per record, a sale logged on several computers counted once, deletes kept), names any file it has no table for, and puts the count of returns beside what this computer shows today.
+- **Bring it in** copies the folder's records into the server. The folder is only read, and pressing it again adds only what is new.
+- **The server's own page.** With the server on, Settings shows the address for the other computers (`http://<this computer>:8790`). Opened in any browser on the office network it lists every section with search, one record's own history, and logins and backups for the owner; on a phone the rows become cards. Returns can be added and edited there, and a save made from an out-of-date copy is stopped and shown the other person's change instead of overwriting it.
+- **A server computer stays up.** It opens DWS Stock when Windows starts, and closing the window asks first: *Keep running* only minimizes it. A full copy of the database is written once a day (the newest 14 are kept).
+- Not covered yet: the server answers on the office network only (plain HTTP, never forward a router port to it), and wholesale records, the returns spreadsheet and the saved Walmart report files are not in it.
+
 ## v1.32.143 highlights
 
 - **Every computer now knows about every label** (owner: twelve Temu orders went out twice because an order labelled on one computer still looked unshipped on the next). Each computer writes the labels it makes to the shared sync folder (`shiplabels-<COMPUTER>.jsonl`, records only, no label images) and reads the others', together with the tracking the other computers already publish with their captures. Needs Sync on (Settings › Sync) on every computer that makes labels; labels reach the others within seconds plus however long the cloud drive takes.

@@ -193,12 +193,50 @@ function importFolder(db, folder) {
   return { counts, notImported, skipped, torn };
 }
 
-module.exports = { importFolder, readFolder };
+// A dry run: the same import, into a database that only exists in memory
+// and is thrown away. Nothing on disk changes, in the folder or anywhere
+// else. Returns what a real import of this folder would hold.
+function checkFolder(folder) {
+  const db = store.open(':memory:');
+  try {
+    const res = importFolder(db, folder);
+    const files = fs.readdirSync(folder).filter((n) => FILE_RE.test(n));
+    return { ...res, totals: db.counts(), files: files.length, folder };
+  } finally { db.close(); }
+}
+
+const AREA_NAMES = Object.fromEntries(store.AREAS);
+const num = (n) => Number(n).toLocaleString('en-US');
+
+// the report as plain lines, for a screen or a terminal
+function reportText(rep, { changed = false, compare = {} } = {}) {
+  const out = [];
+  out.push(`${changed ? 'Brought in' : 'Checked'} ${num(rep.files)} record files in ${rep.folder}`);
+  out.push(changed ? 'The folder itself was not changed.' : 'Nothing was changed, in the folder or in the server.');
+  let area = '';
+  for (const t of rep.totals) {
+    if (!t.count && !t.deleted) continue;
+    if (t.area !== area) { area = t.area; out.push('', AREA_NAMES[area] || area); }
+    const extra = [];
+    if (t.deleted) extra.push(`${num(t.deleted)} deleted`);
+    if (compare[t.kind] !== undefined) extra.push(`DWS Stock shows ${num(compare[t.kind])} on this computer`);
+    out.push(`  ${t.label.padEnd(24)}${num(t.count).padStart(8)}${extra.length ? `   (${extra.join('; ')})` : ''}`);
+  }
+  const read = rep.counts['sale lines read (before removing repeats)'];
+  if (read) out.push('', `Sales: ${num(read)} lines across the computers' files are ${num((rep.totals.find((t) => t.kind === 'sale') || {}).count || 0)} orders, each counted once.`);
+  if (rep.notImported.length) out.push('', 'No table for these yet (not brought in):', ...rep.notImported.map((n) => `  ${n}`));
+  if (rep.torn.length) out.push('', 'Half-written lines skipped:', ...rep.torn.map((n) => `  ${n}`));
+  if (rep.skipped.length) out.push('', 'Left alone (not record files):', `  ${rep.skipped.join(', ')}`);
+  return out.join('\n');
+}
+
+module.exports = { importFolder, checkFolder, reportText, readFolder };
 
 if (require.main === module) {
   const folder = process.argv[2];
   if (!folder || !fs.existsSync(folder)) { console.error('Usage: node server/import-folder.js <returns-sync folder> [database file]'); process.exit(1); }
   const file = process.argv[3] || path.join(process.env.DWS_DATA || path.join(process.cwd(), 'dws-data'), 'dws-server.sqlite');
+  if (process.argv.includes('--check')) { console.log(reportText(checkFolder(folder))); process.exit(0); }
   const db = store.open(file);
   const res = importFolder(db, folder);
   db.close();

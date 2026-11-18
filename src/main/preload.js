@@ -185,6 +185,11 @@ contextBridge.exposeInMainWorld('api', {
   webInfo: () => ipcRenderer.invoke('web:info'),
   webNewKey: () => ipcRenderer.invoke('web:newKey'),
   webOpen: () => ipcRenderer.invoke('web:open'),
+  // Office server (owner 2026-11-18)
+  serverInfo: () => ipcRenderer.invoke('server:info'),
+  serverCheck: () => ipcRenderer.invoke('server:check'),
+  serverImport: () => ipcRenderer.invoke('server:import'),
+  serverOpen: () => ipcRenderer.invoke('server:open'),
   // Ship from the Orders line (owner 2026-10-20): UPS + Ship with Walmart
   orderShipPrep: (rowId) => ipcRenderer.invoke('orderShip:prep', { rowId }),
   orderShipSavePkg: (key, pkg) => ipcRenderer.invoke('orderShip:savePkg', { key, pkg }),

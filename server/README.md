@@ -11,13 +11,25 @@ One program on one always-on office computer. Every DWS Stock computer shares it
 
 ## Where this stands
 
-Built and tested: the server, the logins, the history, the page, and the importer that reads the existing Drive folder.
+Built and tested: the server, the logins, the history, the page, the importer that reads the existing Drive folder, and running all of it inside DWS Stock.
 
-Not built yet: **DWS Stock itself does not talk to this server.** The desktops still share through Google Drive. Until that is done the server shows a copy of the Drive folder as of the last import.
+Not built yet: **the pages of DWS Stock do not talk to this server.** The desktops still share through Google Drive. Until that is done the server shows a copy of the Drive folder as of the last time it was brought in.
 
-Not tried yet: running on Windows, and importing the real folder. Both have only been run on a test machine with a made-up folder (`node server/demo-folder.js`).
+Not tried yet: running on Windows, and reading the real folder. Both have only been run on a test machine with a made-up folder (`node server/demo-folder.js`).
 
-## Run it on the office computer
+## Run it inside DWS Stock (the usual way)
+
+1. On the office computer that stays on, open DWS Stock › Settings › General › **Office server**.
+2. Tick **This computer is the server** and Save. Settings now shows the address for the other computers.
+3. Press **Check my Drive folder** for a report of what the shared folder holds. Nothing is changed.
+4. Press **Bring it in** to copy the folder's records into the server. The folder is only read.
+5. Press **Open**. The first visit creates the owner login; add everyone else on the Logins tab.
+
+The database is kept in that computer's DWS Stock data folder (`dws-server/`), not in the Drive folder. DWS Stock has to stay open there: it starts with Windows, and closing the window offers to keep it running.
+
+## Run it on its own
+
+The same server also runs without DWS Stock, on any computer with Node.js.
 
 1. Install **Node.js 22 or newer** (the LTS installer from nodejs.org).
 2. Copy this `server` folder onto the computer, for example to `C:\DWS-Server`.
@@ -38,7 +50,7 @@ From any other computer or phone on the office network, open `http://<office-com
 node import-folder.js "G:\My Drive\returns-sync"
 ```
 
-It only reads the folder. Nothing in it is changed, moved or deleted. It combines every computer's files by the rules DWS Stock uses (newest change wins, an order logged by several computers counts once, a deleted record stays deleted), prints how many records of each kind came in, and names any file it has no table for. Running it again only adds what is new.
+Add `--check` for a dry run that only prints the report. It only reads the folder. Nothing in it is changed, moved or deleted. It combines every computer's files by the rules DWS Stock uses (newest change wins, an order logged by several computers counts once, a deleted record stays deleted), prints how many records of each kind came in, and names any file it has no table for. Running it again only adds what is new.
 
 ## Backups
 

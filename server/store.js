@@ -454,6 +454,16 @@ function api(db, file) {
     return true;
   }
 
+  // how many live records of each kind, in section order (no login needed:
+  // this is for the server's own computer, never sent to a browser as is)
+  function counts() {
+    const got = {};
+    for (const r of db.prepare('SELECT kind, COUNT(*) AS n FROM records WHERE deleted = 0 GROUP BY kind').all()) got[r.kind] = r.n;
+    const gone = {};
+    for (const r of db.prepare('SELECT kind, COUNT(*) AS n FROM records WHERE deleted = 1 GROUP BY kind').all()) gone[r.kind] = r.n;
+    return Object.entries(KINDS).map(([kind, K]) => ({ kind, area: K.area, label: K.label, count: got[kind] || 0, deleted: gone[kind] || 0 }));
+  }
+
   function overview(user) {
     const counts = {};
     for (const r of db.prepare('SELECT kind, COUNT(*) AS n, MAX(happened_at) AS last FROM records WHERE deleted = 0 GROUP BY kind').all()) counts[r.kind] = r;
@@ -518,7 +528,7 @@ function api(db, file) {
     file, tx, close: () => db.close(), onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     userCount, listUsers, createUser, updateUser, publicUser, login, session, logout,
     logHistory, history, historyEntry,
-    get, list, create, update, remove, importPut, overview,
+    get, list, create, update, remove, importPut, overview, counts,
     claimOrder, releaseOrder, backup, meta,
   };
 }

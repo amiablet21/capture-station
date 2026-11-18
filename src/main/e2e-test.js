@@ -2925,6 +2925,50 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('web: switched off, nothing is listening', r.status === 0, r);
     }
 
+    // Office server (owner 2026-11-18): off by default; ticking it runs the
+    // shared database inside this app; a check of a folder changes nothing;
+    // bringing the folder in fills the server, and only once
+    {
+      const officeserver = require('./officeserver');
+      const { makeDemoFolder } = require('../../server/demo-folder');
+      const port = 18790 + Math.floor(Math.random() * 500);
+      const get = async (p) => {
+        try { const r = await fetch(`http://127.0.0.1:${port}${p}`); return { status: r.status, text: await r.text() }; }
+        catch (e) { return { status: 0, text: String(e.message) }; }
+      };
+      let v = await exec('api.serverInfo()');
+      check('server: off by default, nothing running', !!v && v.ok && !v.enabled && !v.running, v);
+      check('server: Settings carries the Office server controls',
+        await exec(`!!document.getElementById('setSrvOn') && !!document.getElementById('setSrvCheck') && document.getElementById('setSrvRow').hidden`));
+      await exec(`api.setConfig(${JSON.stringify({ server: { enabled: true, port } })})`);
+      await sleep(600);
+      v = await exec('api.serverInfo()');
+      check('server: ticked, it runs and names an address for the other computers',
+        v.running && !v.error && v.addresses.length > 0 && v.addresses[0].endsWith(`:${port}`), v);
+      const page = await get('/');
+      const state = await get('/api/state');
+      check('server: its page and its sign-in answer on that port',
+        page.status === 200 && page.text.includes('DWS Server') && state.status === 200 && JSON.parse(state.text).needsSetup === true, { page: page.status, state });
+      const demo = makeDemoFolder(path.join(app.getPath('temp'), `dws-e2e-folder-${Date.now()}`));
+      const before = fs.readdirSync(demo).length;
+      const chk = officeserver.check(demo, { return: 14 });
+      v = await exec('api.serverInfo()');
+      check('server: Check reads a folder and changes nothing',
+        chk.ok && /Returns\s+14/.test(chk.text) && chk.text.includes('Nothing was changed') && v.records === 0 && fs.readdirSync(demo).length === before, { chk, records: v.records });
+      const inn = officeserver.bringIn(demo, {});
+      v = await exec('api.serverInfo()');
+      const again = officeserver.bringIn(demo, {});
+      const after = await exec('api.serverInfo()');
+      check('server: Bring it in fills the server; a second time adds nothing',
+        inn.ok && v.records > 100 && again.ok && after.records === v.records, { inn, records: v.records, after: after.records });
+      await exec(`api.setConfig({ server: { enabled: false } })`);
+      await sleep(500);
+      v = await exec('api.serverInfo()');
+      const gone = await get('/api/state');
+      check('server: unticked, it stops and the port closes', !v.running && gone.status === 0, { v, gone });
+      fs.rmSync(demo, { recursive: true, force: true });
+    }
+
     // returns.csv carries every return (it stopped at the newest 1000,
     // so the oldest fell off once a station passed 1000 — owner 2026-10-22).
     // Last in the suite: the extra returns would skew the log checks above.

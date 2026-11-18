@@ -21,6 +21,7 @@ const { wfsByItem, applyWfs } = require('./wfscount');
 const ups = require('./ups');
 const walmart = require('./walmart');
 const webserve = require('./webserve');
+const officeserver = require('./officeserver');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const labelshare = require('./labelshare');
@@ -3787,9 +3788,11 @@ exit 1
       delete patch.linnworks.hasApplicationSecret; delete patch.linnworks.hasToken;
     }
     const wasWebOn = !!(config.load().web || {}).enabled; // load() is the live object save() changes
+    const wasServerOn = !!(config.load().server || {}).enabled;
     const cfg = config.save(patch);
     if (patch && patch.returnsSync) startRetSync(); // folder/station changed
     if (patch.web && patch.web.enabled !== undefined && !!patch.web.enabled !== wasWebOn) startWeb();
+    if (patch.server && patch.server.enabled !== undefined && !!patch.server.enabled !== wasServerOn) startOfficeServer();
     pushState();
     return publicConfig(cfg);
   });
@@ -8059,6 +8062,36 @@ exit 1
     return { ok: true };
   });
 
+  // Settings › General › Office server (owner 2026-11-18): whether this
+  // computer is the server, its address for the other computers, a dry-run
+  // check of the shared folder, and bringing that folder in
+  const serverCompare = () => {
+    try { return { return: retsync.enabled() ? retsync.list().length : db.listReturns(100000).length }; } catch { return {}; }
+  };
+  const serverFolder = async (e) => {
+    const set = String(((config.load().returnsSync || {}).folder) || '').trim();
+    if (set && fs.existsSync(set)) return set;
+    if (e && e.web) return '';
+    const res = await dialog.showOpenDialog(win, { title: 'Choose the shared returns-sync folder', properties: ['openDirectory'] });
+    return res.canceled || !res.filePaths[0] ? '' : res.filePaths[0];
+  };
+  ipcMain.handle('server:info', () => officeserver.info((config.load().server || {}).enabled));
+  ipcMain.handle('server:check', async (e) => {
+    const folder = await serverFolder(e);
+    if (!folder) return { ok: false, error: 'No folder chosen.' };
+    return officeserver.check(folder, serverCompare());
+  });
+  ipcMain.handle('server:import', async (e) => {
+    const folder = await serverFolder(e);
+    if (!folder) return { ok: false, error: 'No folder chosen.' };
+    return officeserver.bringIn(folder, serverCompare());
+  });
+  ipcMain.handle('server:open', async () => {
+    if (!officeserver.running()) return { ok: false, error: 'The server is off.' };
+    await shell.openExternal(officeserver.info(true).local);
+    return { ok: true };
+  });
+
   ipcMain.handle('walmart:test', async (_e, creds = {}) => {
     try {
       const saved = config.load().walmart || {};
@@ -9069,6 +9102,17 @@ async function stopWeb() {
   if (s) await s.close();
 }
 
+// Office server: boot and every change of its setting. A server computer
+// also opens DWS Stock when Windows starts, since the other computers
+// depend on it being up.
+async function startOfficeServer() {
+  const cfg = config.load().server || {};
+  await officeserver.configure({ enabled: !!cfg.enabled, port: cfg.port, backupDir: cfg.backupDir, userData: app.getPath('userData') });
+  if (app.isPackaged && !IS_TEST_RUN) {
+    try { app.setLoginItemSettings({ openAtLogin: !!cfg.enabled }); } catch { /* not supported here */ }
+  }
+}
+
 /* ---------- window & menu ---------- */
 
 function createWindow() {
@@ -9092,7 +9136,17 @@ function createWindow() {
     },
   });
   if (winState && winState.maximized) win.maximize();
-  win.on('close', () => {
+  win.on('close', (e) => {
+    // this computer is the server: closing the window would cut every other
+    // computer off, so the window steps aside instead unless Quit was meant
+    if (officeserver.running() && !quitting && !IS_TEST_RUN) {
+      const pick = dialog.showMessageBoxSync(win, {
+        type: 'question', buttons: ['Keep running', 'Quit DWS Stock'], defaultId: 0, cancelId: 0,
+        message: 'This computer is the server',
+        detail: 'Other computers share their work through DWS Stock on this computer. Keep it running and this window is only minimized. Quit, and sharing stops until DWS Stock is opened here again.',
+      });
+      if (pick === 0) { e.preventDefault(); win.minimize(); return; }
+    }
     try {
       const b = win.getNormalBounds();
       fs.writeFileSync(winStatePath, JSON.stringify({ width: b.width, height: b.height, maximized: win.isMaximized() }));
@@ -9399,6 +9453,7 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow();
   startWeb();
+  startOfficeServer();
   startRetSync();
   startRecovery();
   syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
@@ -9711,10 +9766,15 @@ function registerRecoveryIpc() {
 }
 
 app.on('window-all-closed', () => app.quit());
+// Quit from the menu, an update installing, the system shutting down: the
+// server window's "keep running?" question is only for the X button
+let quitting = false;
+app.on('before-quit', () => { quitting = true; });
 
 app.on('will-quit', () => {
   if (clipboardTimer) clearInterval(clipboardTimer);
   // marketplace logins: force the cookie store to disk before exit
   if (paneView) session.fromPartition(PANE_PARTITION).cookies.flushStore().catch(() => { /* best effort */ });
   try { db.backup(); } catch { /* best effort on exit */ }
+  officeserver.stop();
 });

@@ -131,6 +131,10 @@ if (!window.api) {
     webInfo: async () => ({ ok: true, enabled: false, running: false, error: '', url: '' }),
     webNewKey: async () => ({ ok: false, error: 'Preview mode' }),
     webOpen: async () => ({ ok: false, error: 'Preview mode' }),
+    serverInfo: async () => ({ ok: true, enabled: false, running: false, error: '', port: 8790, local: '', addresses: [], records: 0, logins: 0, lastBackup: '' }),
+    serverCheck: async () => ({ ok: false, error: 'Preview mode' }),
+    serverImport: async () => ({ ok: false, error: 'Preview mode' }),
+    serverOpen: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipPrep: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipSavePkg: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipRates: async () => ({ ok: false, error: 'Preview mode' }),
@@ -1352,6 +1356,7 @@ async function openSettings(group) {
   $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
   fillWebSettings();
+  fillServerSettings();
   setSecretField('setWmId', (cfg.walmart || {}).hasClientId);
   setSecretField('setWmSecret', (cfg.walmart || {}).hasClientSecret);
   $('setWmRes').textContent = ''; $('setWmRes').className = 'test-result';
@@ -1515,6 +1520,7 @@ $('settingsSave').addEventListener('click', async () => {
     ups: readUpsSettings(),
     walmart: { clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() },
     web: { enabled: $('setWebOn').checked },
+    server: { enabled: $('setSrvOn').checked },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
@@ -16718,6 +16724,43 @@ $('setWebNew').addEventListener('click', async () => {
   if (!r.ok) { toast(r.error, 4000); return; }
   fillWebSettings();
   toast('New link made');
+});
+
+/* Settings › Office server (owner 2026-11-18): one computer holds the shared
+   database. The tick takes effect on Save; Check reads the shared folder
+   and changes nothing; Bring it in copies the folder's records into the
+   server (the folder is only read). */
+async function fillServerSettings() {
+  const v = await api.serverInfo();
+  $('setSrvOn').checked = !!v.enabled;
+  $('setSrvRow').hidden = !v.running;
+  const addr = (v.addresses || [])[0] || '';
+  $('setSrvUrl').textContent = addr;
+  $('setSrvUrl').dataset.url = addr;
+  $('setSrvUrl').title = (v.addresses || []).join('   ');
+  $('setSrvImport').hidden = !v.running;
+  $('setSrvNote').textContent = v.error ? v.error
+    : v.running ? `Running. ${v.records.toLocaleString()} records, ${v.logins} login${v.logins === 1 ? '' : 's'}. Other computers in the office use the address below. Keep DWS Stock open on this computer.`
+    : v.enabled ? 'Starting…'
+    : 'Tick this on one always-on computer in the office, then Save. The other computers keep working as they do now.';
+  $('setSrvNote').classList.toggle('is-fail', !!v.error);
+}
+$('setSrvCopy').addEventListener('click', async () => { await api.copyText($('setSrvUrl').dataset.url); toast('Address copied'); });
+$('setSrvOpen').addEventListener('click', async () => { const r = await api.serverOpen(); if (!r.ok) toast(r.error, 4000); });
+async function serverFolderJob(btn, busyText, run) {
+  const out = $('setSrvReport');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = busyText;
+  out.hidden = false; out.textContent = 'Reading the folder…';
+  const r = await run().catch(err => ({ ok: false, error: err.message }));
+  btn.disabled = false; btn.textContent = label;
+  out.textContent = r.ok ? r.text : r.error;
+  if (r.ok) fillServerSettings();
+}
+$('setSrvCheck').addEventListener('click', () => serverFolderJob($('setSrvCheck'), 'Checking…', () => api.serverCheck()));
+$('setSrvImport').addEventListener('click', () => {
+  if (!confirm('Bring the shared folder\'s records into the server? The folder itself is only read, and pressing this again later only adds what is new.')) return;
+  serverFolderJob($('setSrvImport'), 'Bringing it in…', () => api.serverImport());
 });
 
 $('setWmTest').addEventListener('click', async () => {
