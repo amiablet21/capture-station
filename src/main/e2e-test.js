@@ -2979,6 +2979,42 @@ module.exports = async function run({ app, win, db, clipboard }) {
           && (await post('/api/login', { username: 'owner', password: 'first-pass-123' })) === 401
           && (await post('/api/login', { username: 'owner', password: 'second-pass-456' })) === 200, { who, short, reset });
       fs.rmSync(bdir, { recursive: true, force: true });
+
+      // Shared server: this computer signs in to the server with a person's
+      // own login; the token stays out of the window and out of config.json
+      let lk = await exec('api.linkStatus(true)');
+      check('link: not signed in to a server by default', lk.ok && !lk.signedIn && !lk.online && !lk.url, lk);
+      const bad = await exec(`api.linkSignIn(${JSON.stringify({ url: `127.0.0.1:${port}`, username: 'owner', password: 'not-the-password' })})`);
+      check('link: a wrong password is refused with the server\'s own words', !bad.ok && /Wrong username or password/.test(bad.error), bad);
+      lk = await exec(`api.linkSignIn(${JSON.stringify({ url: `127.0.0.1:${port}/`, username: 'Owner', password: 'second-pass-456' })})`);
+      check('link: the address and a login sign this computer in, with its role',
+        lk.ok && lk.signedIn && lk.online && lk.url === `http://127.0.0.1:${port}` && lk.username === 'owner' && lk.role === 'Owner' && lk.perms.includes('returns'), lk);
+      const seen = await exec('api.getConfig()');
+      const onDisk = fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8');
+      const tok = require('./config').load().serverLink.token;
+      // encrypted at rest wherever the OS offers a key (Windows DPAPI, the
+      // Mac keychain), like the Linnworks keys; a bare test box has none
+      const canEncrypt = require('electron').safeStorage.isEncryptionAvailable();
+      check('link: the sign-in token is kept, never shown to the window, and encrypted on disk where the OS can',
+        tok.length === 64 && seen.serverLink.token === '' && seen.serverLink.url === lk.url && (canEncrypt ? !onDisk.includes(tok) && onDisk.includes('serverLinkEnc') : true),
+        { shown: seen.serverLink, len: tok.length, canEncrypt });
+      await exec(`api.setConfig({ serverLink: { url: 'http://evil.example', token: 'x' } })`);
+      check('link: a settings save cannot change where this computer signs in', require('./config').load().serverLink.url === lk.url && require('./config').load().serverLink.token === tok);
+      const sessionsBefore = (await exec('api.serverLogins()')).logins.length;
+      await exec(`api.serverResetPassword(${who.logins[0].id}, 'third-pass-789')`);
+      lk = await exec('api.linkStatus(true)');
+      check('link: a password reset on the server signs this computer out and says so', !lk.signedIn && !lk.online && /signed out by the server/.test(lk.error) && sessionsBefore === 1, lk);
+      lk = await exec(`api.linkSignIn(${JSON.stringify({ url: `127.0.0.1:${port}`, username: 'owner', password: 'third-pass-789' })})`);
+      const out = await exec('api.linkSignOut()');
+      check('link: Sign out forgets the token and keeps the address for next time', lk.ok && out.ok && !out.signedIn && out.url === lk.url && require('./config').load().serverLink.token === '', out);
+      lk = await exec(`api.linkSignIn(${JSON.stringify({ url: `127.0.0.1:${port}`, username: 'owner', password: 'third-pass-789' })})`);
+      await exec(`api.setConfig({ server: { enabled: false } })`);
+      await sleep(500);
+      lk = await exec('api.linkStatus(true)');
+      check('link: with the server off, the computer stays signed in and says there is no answer', lk.signedIn && !lk.online && /No answer from/.test(lk.error), lk);
+      await exec('api.linkSignOut()');
+      await exec(`api.setConfig({ server: { enabled: true } })`);
+      await sleep(600);
       await exec(`api.setConfig({ server: { enabled: false } })`);
       await sleep(500);
       v = await exec('api.serverInfo()');

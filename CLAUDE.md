@@ -50,5 +50,5 @@ Other files there: `stockimports-<STATION>.jsonl` (the app's bulk-import history
 
 - `src/main`: Electron main process (Linnworks client, SQLite db, shared-folder sync in `retsync.js`).
 - `src/renderer`: the UI.
-- `server`: DWS Server, one shared database on an office computer with a login per person and a history of every change (`server/README.md`). It runs inside DWS Stock on the computer where Settings › General › Office server is ticked (`src/main/officeserver.js`). The desktops do not use it yet; they still share through the Drive folder. `npm run server:test` runs its checks.
+- `server`: DWS Server, one shared database on an office computer with a login per person and a history of every change (`server/README.md`). It runs inside DWS Stock on the computer where Settings › General › Office server is ticked (`src/main/officeserver.js`). Each desktop signs in to it under Settings › General › Shared server (`src/main/serverlink.js`), but no page reads or writes through it yet; they still share through the Drive folder. `npm run server:test` runs its checks.
 - Releases build from `.github/workflows`, and the README's highlights list each release.

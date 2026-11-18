@@ -1191,6 +1191,27 @@
       </div>
       <p class="dlg-note" id="setWebNote"></p>
 
+      <h3 class="dlg-section">Shared server</h3>
+      <div id="setLinkIn" hidden>
+        <div class="settings-row">
+          <span id="setLinkWho" class="test-result mono"></span>
+          <button id="setLinkTest" class="btn btn-ghost" type="button">Test</button>
+          <button id="setLinkOut" class="btn btn-ghost" type="button">Sign out</button>
+        </div>
+      </div>
+      <div id="setLinkForm">
+        <div class="settings-row">
+          <input id="setLinkUrl" type="text" class="input mono" autocomplete="off" spellcheck="false" placeholder="Server address, e.g. OFFICE-PC:8790" aria-label="Server address" />
+          <button id="setLinkHere" class="btn btn-ghost" type="button" hidden>This computer</button>
+        </div>
+        <div class="settings-row">
+          <input id="setLinkUser" type="text" class="input" autocomplete="off" spellcheck="false" placeholder="Username" aria-label="Username" />
+          <input id="setLinkPass" type="password" class="input" autocomplete="off" placeholder="Password" aria-label="Password" />
+          <button id="setLinkGo" class="btn btn-ghost" type="button">Sign in</button>
+        </div>
+      </div>
+      <p class="dlg-note" id="setLinkNote"></p>
+
       <h3 class="dlg-section">Office server</h3>
       <div class="settings-row">
         <label class="check"><input id="setSrvOn" type="checkbox" /> This computer is the server</label>

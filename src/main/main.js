@@ -22,6 +22,7 @@ const ups = require('./ups');
 const walmart = require('./walmart');
 const webserve = require('./webserve');
 const officeserver = require('./officeserver');
+const serverlink = require('./serverlink');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const labelshare = require('./labelshare');
@@ -3762,6 +3763,7 @@ exit 1
     const w = out.walmart || (out.walmart = {});
     w.hasClientId = !!w.clientId; w.hasClientSecret = !!w.clientSecret;
     w.clientId = ''; w.clientSecret = '';
+    if (out.serverLink) out.serverLink.token = ''; // the sign-in token never reaches the window
     return out;
   }
   ipcMain.handle('config:get', () => publicConfig(config.load()));
@@ -3783,6 +3785,7 @@ exit 1
       for (const f of ['clientId', 'clientSecret']) if (!patch.walmart[f]) delete patch.walmart[f];
       delete patch.walmart.hasClientId; delete patch.walmart.hasClientSecret;
     }
+    delete patch.serverLink; // set only by signing in (link:signIn), never by a settings save
     if (patch.linnworks) {
       for (const f of ['applicationSecret', 'token']) if (!patch.linnworks[f]) delete patch.linnworks[f];
       delete patch.linnworks.hasApplicationSecret; delete patch.linnworks.hasToken;
@@ -8077,6 +8080,12 @@ exit 1
     const res = await dialog.showOpenDialog(win, { title: 'Choose the shared returns-sync folder', properties: ['openDirectory'] });
     return res.canceled || !res.filePaths[0] ? '' : res.filePaths[0];
   };
+  // Settings › General › Shared server: this computer's sign-in to the
+  // office server. The password goes straight to the server and is not kept.
+  ipcMain.handle('link:status', async (_e, { refresh } = {}) => (refresh ? serverlink.refresh() : serverlink.status()));
+  ipcMain.handle('link:signIn', (e, creds) => (e && e.web ? { ok: false, error: 'Sign this computer in from the desktop app.' } : serverlink.signIn(creds)));
+  ipcMain.handle('link:signOut', (e) => (e && e.web ? { ok: false, error: 'Sign this computer out from the desktop app.' } : serverlink.signOut()));
+
   const serverInfo = () => { const c = config.load().server || {}; return officeserver.info(c.enabled, c.backupDir); };
   ipcMain.handle('server:info', () => serverInfo());
   // the second backup folder: a place outside this computer (a Drive
@@ -9477,7 +9486,12 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow();
   startWeb();
-  startOfficeServer();
+  // this computer's own server first, so signing in to "this computer" works at boot
+  startOfficeServer().then(() => serverlink.start({
+    config: { get: () => config.load().serverLink || {}, set: (patch) => { config.save({ serverLink: patch }); } },
+    station: () => stockLogComputer(),
+    changed: (st) => { if (win && !win.isDestroyed()) win.webContents.send('link:changed', st); },
+  }));
   startRetSync();
   startRecovery();
   syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
@@ -9800,5 +9814,6 @@ app.on('will-quit', () => {
   // marketplace logins: force the cookie store to disk before exit
   if (paneView) session.fromPartition(PANE_PARTITION).cookies.flushStore().catch(() => { /* best effort */ });
   try { db.backup(); } catch { /* best effort on exit */ }
+  serverlink.stop();
   officeserver.stop();
 });

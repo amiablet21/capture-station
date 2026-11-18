@@ -2,6 +2,13 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.146 highlights
+
+- **Each computer signs in to the office server** (owner: "how can I set up the other computers?"). Settings › General › **Shared server** takes the address shown on the server computer (`OFFICE-PC:8790`) and a person's own username and password, then shows who is signed in, their role, and whether the server answers. *Test* checks it on the spot; *Sign out* forgets the sign-in and keeps the address. On the server computer itself, *This computer* fills the address in.
+- **The password is typed once and not kept.** The server hands back a sign-in token, stored encrypted on that computer like the Linnworks keys and never shown to the window. Switching a login off or resetting its password on the server signs that computer out, and Settings says so.
+- **Nothing else changes yet.** Signed in or not, every page still shares through the Drive folder. This is the connection the pages will use, one page at a time, starting with Returns; for now it is the way to check that every computer in the office can reach the server.
+- The server's second backup folder now keeps the newest 14 copies, like the folder on the computer (it kept every day's copy).
+
 ## v1.32.145 highlights
 
 - **The server keeps a second backup outside its computer** (owner: "I want all of these"). Settings › General › Office server › **Server backup** › *Choose folder* names a second place for the server's daily copy, such as a folder Google Drive syncs, so one copy leaves the building. *Back up now* makes a copy on the spot, and the line under it says when the last one ran or what went wrong. Pick a folder only the owner can open: the copy holds every record and login.

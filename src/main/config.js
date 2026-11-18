@@ -32,6 +32,16 @@ function encryptUps(ups) {
   }
 }
 
+// the office-server sign-in token (serverLinkEnc)
+function encryptLink(l) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    return safeStorage.encryptString(JSON.stringify({ token: (l && l.token) || '' })).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
 // the Walmart key pair too (walmartEnc)
 function encryptWalmart(w) {
   try {
@@ -135,6 +145,10 @@ const DEFAULTS = {
   // database every DWS Stock computer will use (src/main/officeserver.js).
   // backupDir: a second place for its daily backup, e.g. a Drive folder.
   server: { enabled: false, port: 8790, backupDir: '' },
+  // This computer's sign-in to the office server (src/main/serverlink.js):
+  // the server's address, who signed in, and the token it gave (kept
+  // encrypted like the other credentials, serverLinkEnc). No password.
+  serverLink: { url: '', username: '', token: '' },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
@@ -271,6 +285,12 @@ function load() {
     }
     delete stored.upsEnc;
   }
+  if (stored.serverLinkEnc) {
+    let l = null;
+    try { l = JSON.parse(safeStorage.decryptString(Buffer.from(stored.serverLinkEnc, 'base64'))); } catch { /* other machine */ }
+    if (l) stored.serverLink = { ...(stored.serverLink || {}), ...l };
+    delete stored.serverLinkEnc;
+  }
   if (stored.walmartEnc) {
     let w = null;
     try { w = JSON.parse(safeStorage.decryptString(Buffer.from(stored.walmartEnc, 'base64'))); } catch { /* other machine */ }
@@ -349,6 +369,11 @@ function save(patch) {
   if (wEnc) {
     persisted.walmartEnc = wEnc;
     persisted.walmart = { ...(persisted.walmart || {}), clientId: '', clientSecret: '' };
+  }
+  const lEnc = encryptLink(cfg.serverLink);
+  if (lEnc) {
+    persisted.serverLinkEnc = lEnc;
+    persisted.serverLink = { ...(persisted.serverLink || {}), token: '' };
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');

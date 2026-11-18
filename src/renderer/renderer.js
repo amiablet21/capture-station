@@ -135,6 +135,9 @@ if (!window.api) {
     serverCheck: async () => ({ ok: false, error: 'Preview mode' }),
     serverImport: async () => ({ ok: false, error: 'Preview mode' }),
     serverOpen: async () => ({ ok: false, error: 'Preview mode' }),
+    linkStatus: async () => ({ ok: true, url: '', username: '', signedIn: false, online: false, error: '', name: '', role: '', perms: [] }),
+    linkSignIn: async () => ({ ok: false, error: 'Preview mode' }),
+    linkSignOut: async () => ({ ok: false, error: 'Preview mode' }),
     serverChooseBackup: async () => ({ ok: false, error: 'Preview mode' }),
     serverClearBackup: async () => ({ ok: false, error: 'Preview mode' }),
     serverBackupNow: async () => ({ ok: false, error: 'Preview mode' }),
@@ -1361,6 +1364,7 @@ async function openSettings(group) {
   $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
   fillWebSettings();
+  fillLinkSettings();
   fillServerSettings();
   setSecretField('setWmId', (cfg.walmart || {}).hasClientId);
   setSecretField('setWmSecret', (cfg.walmart || {}).hasClientSecret);
@@ -16729,6 +16733,47 @@ $('setWebNew').addEventListener('click', async () => {
   if (!r.ok) { toast(r.error, 4000); return; }
   fillWebSettings();
   toast('New link made');
+});
+
+/* Settings › Shared server (owner 2026-11-18: "how can I set up the other
+   computers?"): this computer's sign-in to the office server. The address
+   and a person's own login, typed once; the password is not kept. Pages
+   still share through the Drive folder until each one is connected. */
+function drawLink(v) {
+  const inn = !!v.signedIn;
+  $('setLinkIn').hidden = !inn;
+  $('setLinkForm').hidden = inn;
+  if (inn) $('setLinkWho').textContent = `${v.name || v.username}${v.role ? ` · ${v.role}` : ''} · ${v.url.replace(/^https?:\/\//, '')}`;
+  else if (v.url && !$('setLinkUrl').value) { $('setLinkUrl').value = v.url.replace(/^https?:\/\//, ''); $('setLinkUser').value = v.username || ''; }
+  $('setLinkNote').textContent = v.error ? v.error
+    : inn ? (v.online ? 'Connected. Pages still share through the Drive folder until each one is switched to the server.' : 'Signed in. Checking the server…')
+    : 'Type the address shown on the server computer (Settings › General › Office server) and your own login.';
+  $('setLinkNote').classList.toggle('is-fail', !!v.error);
+}
+async function fillLinkSettings() {
+  drawLink(await api.linkStatus(true));
+  const s = await api.serverInfo();
+  $('setLinkHere').hidden = !s.running;
+  $('setLinkHere').dataset.url = s.running ? s.local : '';
+}
+if (api.on) api.on('link:changed', (v) => { if ($('settingsDialog').open) drawLink(v); });
+$('setLinkHere').addEventListener('click', () => { $('setLinkUrl').value = $('setLinkHere').dataset.url.replace(/^https?:\/\//, ''); $('setLinkUser').focus(); });
+async function linkSignIn() {
+  const b = $('setLinkGo');
+  b.disabled = true; b.textContent = 'Signing in…';
+  const r = await api.linkSignIn({ url: $('setLinkUrl').value, username: $('setLinkUser').value, password: $('setLinkPass').value }).catch(err => ({ ok: false, error: err.message }));
+  b.disabled = false; b.textContent = 'Sign in';
+  if (r.ok) { $('setLinkPass').value = ''; drawLink(r); return; }
+  $('setLinkNote').textContent = r.error;
+  $('setLinkNote').classList.add('is-fail');
+}
+$('setLinkGo').addEventListener('click', linkSignIn);
+$('setLinkPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); linkSignIn(); } });
+$('setLinkOut').addEventListener('click', async () => { drawLink(await api.linkSignOut()); });
+$('setLinkTest').addEventListener('click', async () => {
+  const v = await api.linkStatus(true);
+  drawLink(v);
+  toast(v.online ? 'Connected to the server' : (v.error || 'No answer from the server'), v.online ? 2500 : 5000);
 });
 
 /* Settings › Office server (owner 2026-11-18): one computer holds the shared

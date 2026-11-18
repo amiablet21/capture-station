@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 const EVENTS = [
+  'link:changed',
   'state:changed',
   'order:detected',
   'order:duplicate',
@@ -190,6 +191,9 @@ contextBridge.exposeInMainWorld('api', {
   serverCheck: () => ipcRenderer.invoke('server:check'),
   serverImport: () => ipcRenderer.invoke('server:import'),
   serverOpen: () => ipcRenderer.invoke('server:open'),
+  linkStatus: (refresh) => ipcRenderer.invoke('link:status', { refresh: !!refresh }),
+  linkSignIn: (creds) => ipcRenderer.invoke('link:signIn', creds),
+  linkSignOut: () => ipcRenderer.invoke('link:signOut'),
   serverChooseBackup: () => ipcRenderer.invoke('server:chooseBackup'),
   serverClearBackup: () => ipcRenderer.invoke('server:clearBackup'),
   serverBackupNow: () => ipcRenderer.invoke('server:backupNow'),
