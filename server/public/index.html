@@ -51,21 +51,29 @@
   .gate p { color: var(--muted); margin: 0 0 4px; font-size: 12.5px; }
   .msg { margin-top: 12px; padding: 7px 10px; border-radius: var(--r-ctl); background: var(--neg-bg); color: var(--neg-text); font-size: 12.5px; }
 
-  /* top bar: the icon left, the tab switcher exactly centred, the person right */
-  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px 12px; }
-  .brand { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; letter-spacing: -0.02em; min-width: 0; }
+  /* The frame the owner kept from the first build (2026-11-20: "I like this
+     structure"): the name left and the person right on one strip, the
+     sections as a row of underlined tabs beneath it. */
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent); white-space: nowrap; }
   .brand-mark { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(30, 58, 102, .12); box-shadow: 0 1px 2px rgba(47, 52, 55, .08); display: block; }
-  .topbar-right { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; min-width: 0; }
   .who { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); display: inline-block; flex: 0 0 auto; }
   .dot.on { background: var(--pos-text); }
-  .tabs, .seg { display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; max-width: 100%; overflow-x: auto; }
-  .tabs button, .seg button { font-size: 12.5px; font-weight: 500; color: var(--muted); background: none; border: none; border-radius: 8px; padding: 5px 14px; }
-  .tabs button:hover, .seg button:hover { color: var(--text); background: none; }
-  .tabs button.on, .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+  .tabs { display: flex; gap: 2px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tabs button { font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 10px 8px; }
+  .tabs button:hover { color: var(--text); background: none; }
+  .tabs button:active { transform: none; }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  /* a section's lists: the app's own switcher */
+  .seg { display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; max-width: 100%; overflow-x: auto; }
+  .seg button { font-size: 12.5px; font-weight: 500; color: var(--muted); background: none; border: none; border-radius: 8px; padding: 5px 14px; }
+  .seg button:hover { color: var(--text); background: none; }
+  .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
   .seg button small { font-family: var(--mono); font-size: 11px; font-weight: 400; color: var(--faint); margin-left: 5px; }
 
-  main { padding: 4px 24px 40px; }
+  main { padding: 14px 24px 40px; }
   .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; min-height: 34px; }
   .sec-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   .bar .grow { flex: 1; }
@@ -114,9 +122,9 @@
   .checks label { display: inline; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 400; color: var(--text); margin: 0 12px 0 4px; }
 
   @media (max-width: 720px) {
-    .topbar { flex-wrap: wrap; padding: 12px 12px 8px; }
-    .tabs { order: 3; flex: 1 1 100%; }
-    main { padding: 4px 12px 40px; }
+    .topbar { padding: 10px 12px; }
+    .tabs { padding: 0 6px; }
+    main { padding: 12px 12px 40px; }
     .bar input[type=search] { width: 100%; }
     /* on a phone each row becomes a card: label on the left, value on the right */
     .tablewrap { background: none; border: 0; overflow: visible; }
@@ -149,13 +157,13 @@
 
 <div id="app" class="hide">
   <header class="topbar">
-    <div class="brand"><img class="brand-mark" src="/assets/icon.png" alt="DWS Stock" width="30" height="30"><span>Server</span></div>
-    <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+    <span class="brand">DWS Server</span>
     <div class="topbar-right">
       <span class="who"><span class="dot" id="live" title="Live updates"></span><span id="whoName"></span></span>
       <button id="signOut">Sign out</button>
     </div>
   </header>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
   <main>
     <div class="bar">
       <span class="sec-label" id="secLabel"></span>
