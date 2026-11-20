@@ -33,6 +33,11 @@ const HOST = process.env.DWS_HOST || '0.0.0.0';
 const BACKUP_DIR = process.env.DWS_BACKUP_DIR || '';
 const PAGE = path.join(__dirname, 'public', 'index.html');
 const COOKIE = 'dws_sid';
+const ASSETS = {
+  'Geist-Variable.woff2': ['fonts/Geist-Variable.woff2', 'font/woff2'],
+  'GeistMono-Variable.woff2': ['fonts/GeistMono-Variable.woff2', 'font/woff2'],
+  'icon.png': ['phone-icon.png', 'image/png'],
+};
 const MAX_BODY = 2 * 1024 * 1024;
 
 function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, quiet = false } = {}) {
@@ -112,6 +117,17 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
           'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'" });
         return res.end(fs.readFileSync(PAGE));
       } catch { return send(res, 500, 'The page file is missing.'); }
+    }
+    // the page wears DWS Stock's own face: its two fonts and its icon,
+    // read from the app this server is packed with. On its own (no app
+    // beside it) these are missing and the page falls back to system fonts.
+    if (req.method === 'GET' && seg[0] === 'assets' && ASSETS[seg[1]]) {
+      try {
+        const [file, type] = ASSETS[seg[1]];
+        const data = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', file));
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
+        return res.end(data);
+      } catch { return send(res, 404, { error: 'Not found.' }); }
     }
     if (seg[0] !== 'api') return send(res, 404, { error: 'Not found.' });
 
