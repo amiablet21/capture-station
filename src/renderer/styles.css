@@ -5944,6 +5944,9 @@ tr.os-open > td { background: var(--accent-soft); }
 .os-dlg .sp-label { margin: 0 auto; }
 
 /* Settings › Browser */
+.srv-summary { margin: 8px 0 0; padding: 10px 12px; font-size: 13px; line-height: 1.55; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); }
+.srv-summary p { margin: 0; }
+.srv-summary p.is-fail { color: var(--neg-text); font-weight: 500; }
 .srv-report { margin: 8px 0 0; padding: 10px 12px; max-height: 320px; overflow: auto; font-size: 12px; line-height: 1.5; white-space: pre; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); }
 .web-row .web-url { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 6px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #setWebNote.is-fail { color: var(--neg-text); }

@@ -16834,15 +16834,27 @@ $('setSrvResetBtn').addEventListener('click', async () => {
 });
 $('setSrvCopy').addEventListener('click', async () => { await api.copyText($('setSrvUrl').dataset.url); toast('Address copied'); });
 $('setSrvOpen').addEventListener('click', async () => { const r = await api.serverOpen(); if (!r.ok) toast(r.error, 4000); });
+// a few plain lines first; the full list by kind waits behind Show details
+function showServerDetails(open) {
+  $('setSrvReport').hidden = !open;
+  $('setSrvDetails').textContent = open ? 'Hide details' : 'Show details';
+  $('setSrvDetails').setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+$('setSrvDetails').addEventListener('click', () => showServerDetails($('setSrvReport').hidden));
 async function serverFolderJob(btn, busyText, run) {
-  const out = $('setSrvReport');
+  const sum = $('setSrvSummary');
+  const para = (text, bad) => { const p = document.createElement('p'); p.textContent = text; if (bad) p.className = 'is-fail'; return p; };
   const label = btn.textContent;
   btn.disabled = true; btn.textContent = busyText;
-  out.hidden = false; out.textContent = 'Reading the folder…';
+  sum.hidden = false; sum.replaceChildren(para('Reading the folder…'));
+  $('setSrvDetailsRow').hidden = true; showServerDetails(false);
   const r = await run().catch(err => ({ ok: false, error: err.message }));
   btn.disabled = false; btn.textContent = label;
-  out.textContent = r.ok ? r.text : r.error;
-  if (r.ok) fillServerSettings();
+  if (!r.ok) { sum.replaceChildren(para(r.error, true)); return; }
+  sum.replaceChildren(...r.summary.lines.map(t => para(t)), ...r.summary.issues.map(t => para(t, true)));
+  $('setSrvReport').textContent = r.text;
+  $('setSrvDetailsRow').hidden = false;
+  fillServerSettings();
 }
 $('setSrvCheck').addEventListener('click', () => serverFolderJob($('setSrvCheck'), 'Checking…', () => api.serverCheck()));
 $('setSrvImport').addEventListener('click', () => {

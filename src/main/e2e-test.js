@@ -2955,6 +2955,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
       v = await exec('api.serverInfo()');
       check('server: Check reads a folder and changes nothing',
         chk.ok && /Returns\s+14/.test(chk.text) && chk.text.includes('Nothing was changed') && v.records === 0 && fs.readdirSync(demo).length === before, { chk, records: v.records });
+      check('server: the short summary says what was read, that returns match, and flags only what needs a look',
+        chk.summary.lines.length === 3 && /^Read \d+ files/.test(chk.summary.lines[0]) && /^106 records: Returns 14 · Stock 19 · Orders 26 · Pricing 42 · Recovery 5$/.test(chk.summary.lines[1])
+          && chk.summary.lines[2] === 'Returns match DWS Stock on this computer (14).' && chk.summary.issues.length === 1 && /line still being written/.test(chk.summary.issues[0])
+          && officeserver.check(demo, { return: 9 }).summary.issues.some(t => /Returns differ: 14 here, 9 in DWS Stock/.test(t))
+          && /Left over from a removed feature/.test(chk.text), chk.summary);
       const inn = officeserver.bringIn(demo, {});
       v = await exec('api.serverInfo()');
       const again = officeserver.bringIn(demo, {});

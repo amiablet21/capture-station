@@ -12,7 +12,7 @@
 const os = require('node:os');
 const path = require('node:path');
 const { start } = require('../../server/dws-server');
-const { importFolder, checkFolder, reportText } = require('../../server/import-folder');
+const { importFolder, checkFolder, reportText, summarize } = require('../../server/import-folder');
 
 let live = null;   // { port, db, runBackup, close } while the server runs
 let error = '';
@@ -65,7 +65,7 @@ function info(enabled, backupDir) {
 
 // a dry run of bringing the shared folder in: a report, nothing changed
 function check(folder, compare) {
-  try { return { ok: true, text: reportText(checkFolder(folder), { compare }) }; }
+  try { const rep = checkFolder(folder); return { ok: true, summary: summarize(rep, { compare }), text: reportText(rep, { compare }) }; }
   catch (e) { return { ok: false, error: `That folder could not be read: ${e.message}` }; }
 }
 
@@ -77,7 +77,7 @@ function bringIn(folder, compare) {
     const res = importFolder(live.db, folder);
     const rep = { ...res, totals: live.db.counts(), files: 0, folder };
     try { rep.files = require('node:fs').readdirSync(folder).filter((n) => /\.jsonl$/.test(n)).length; } catch { /* count only */ }
-    return { ok: true, text: reportText(rep, { changed: true, compare }) };
+    return { ok: true, summary: summarize(rep, { changed: true, compare }), text: reportText(rep, { changed: true, compare }) };
   } catch (e) {
     return { ok: false, error: `That folder could not be brought in: ${e.message}` };
   }

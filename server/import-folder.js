@@ -208,6 +208,34 @@ function checkFolder(folder) {
 const AREA_NAMES = Object.fromEntries(store.AREAS);
 const num = (n) => Number(n).toLocaleString('en-US');
 
+// files the app itself no longer reads: the warehouse-rooms feature was
+// reverted on 2026-09-22 and its file stayed behind in the folder
+const LEFTOVER = /^rooms-/;
+const splitUnplaced = (names) => ({ leftover: (names || []).filter((n) => LEFTOVER.test(n)), unplaced: (names || []).filter((n) => !LEFTOVER.test(n)) });
+
+// The short version for the Settings screen (owner 2026-11-20: "is there a
+// way to simplify this"): what was read, the total by section, whether the
+// returns agree with this computer, and only the things that need a look.
+function summarize(rep, { changed = false, compare = {} } = {}) {
+  const areas = store.AREAS.map(([area, label]) => ({ label, count: rep.totals.filter((t) => t.area === area).reduce((n, t) => n + t.count, 0) })).filter((a) => a.count);
+  const total = areas.reduce((n, a) => n + a.count, 0);
+  const server = (rep.totals.find((t) => t.kind === 'return') || {}).count || 0;
+  const lines = [
+    `${changed ? 'Brought in' : 'Read'} ${num(rep.files)} files from your Drive folder. ${changed ? 'The folder itself was not changed.' : 'Nothing was changed.'}`,
+    `${num(total)} records: ${areas.map((a) => `${a.label} ${num(a.count)}`).join(' · ')}`,
+  ];
+  const issues = [];
+  if (compare.return !== undefined) {
+    if (compare.return === server) lines.push(`Returns match DWS Stock on this computer (${num(server)}).`);
+    else issues.push(`Returns differ: ${num(server)} here, ${num(compare.return)} in DWS Stock on this computer.`);
+  }
+  const { unplaced } = splitUnplaced(rep.notImported);
+  if (unplaced.length) issues.push(`${num(unplaced.length)} file${unplaced.length === 1 ? ' was' : 's were'} not brought in: ${unplaced.join(', ')}`);
+  if (rep.torn.length) issues.push(`${num(rep.torn.length)} file${rep.torn.length === 1 ? ' has' : 's have'} a line still being written. It is picked up next time.`);
+  if (!issues.length) lines.push('Everything was read.');
+  return { lines, issues, ok: !issues.length };
+}
+
 // the report as plain lines, for a screen or a terminal
 function reportText(rep, { changed = false, compare = {} } = {}) {
   const out = [];
@@ -224,13 +252,15 @@ function reportText(rep, { changed = false, compare = {} } = {}) {
   }
   const read = rep.counts['sale lines read (before removing repeats)'];
   if (read) out.push('', `Sales: ${num(read)} lines across the computers' files are ${num((rep.totals.find((t) => t.kind === 'sale') || {}).count || 0)} orders, each counted once.`);
-  if (rep.notImported.length) out.push('', 'No table for these yet (not brought in):', ...rep.notImported.map((n) => `  ${n}`));
+  const { leftover, unplaced } = splitUnplaced(rep.notImported);
+  if (unplaced.length) out.push('', 'No table for these yet (not brought in):', ...unplaced.map((n) => `  ${n}`));
+  if (leftover.length) out.push('', 'Left over from a removed feature (ignored):', ...leftover.map((n) => `  ${n}`));
   if (rep.torn.length) out.push('', 'Half-written lines skipped:', ...rep.torn.map((n) => `  ${n}`));
   if (rep.skipped.length) out.push('', 'Left alone (not record files):', `  ${rep.skipped.join(', ')}`);
   return out.join('\n');
 }
 
-module.exports = { importFolder, checkFolder, reportText, readFolder };
+module.exports = { importFolder, checkFolder, reportText, summarize, readFolder };
 
 if (require.main === module) {
   const folder = process.argv[2];
