@@ -41,13 +41,12 @@ const ASSETS = {
 const MAX_BODY = 2 * 1024 * 1024;
 
 // `app`: when the server runs inside DWS Stock, a function that asks the
-// app itself for what its own Stock, Pricing and Recovery pages show
+// app itself for what its own Stock and Recovery pages show
 // (name -> a promise of that page's data). The server's page then draws
 // the same figures the app does. Without it (run on its own with
 // `npm run server`) those screens are left out and the lists remain.
 const APP_FEEDS = {
   stock: { ttl: 60000, can: () => true },
-  pricing: { ttl: 120000, can: () => true },
   recovery: { ttl: 30000, can: (user) => store.canRead(user, 'wm_run') },
 };
 
@@ -71,15 +70,6 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
       return { ok: true, at: new Date().toISOString(), locationName: out.locationName || 'warehouse', wfsName: wfs ? wfs.locationName : '', costs,
         items: (out.items || []).map((it) => ({ sku: it.sku, title: it.title || '', barcode: it.barcode || '', image: it.image || '', composite: !!it.isComposite,
           ...(costs ? { cost: Number(it.cost) || 0 } : {}), home: lvl(it, out.locationId), wfs: wfs ? lvl(it, wfs.locationId) : null })) };
-    }
-    if (name === 'pricing') {
-      const line = (l) => ({ csku: l.csku, price: l.price, lwPrice: l.lwPrice, fromSales: !!l.fromSales, approx: !!l.approx, wfs: !!l.wfs, got: l.got || null,
-        move: l.ph && l.ph.last && l.ph.since ? { from: l.ph.last.from, to: l.ph.last.to, ts: l.ph.last.ts, mode: l.ph.last.mode, units: l.ph.since.units } : null });
-      const prod = (p) => ({ sku: p.sku, stock: p.stock, image: p.image || '', avgBy: p.avgBy || null,
-        channels: Object.fromEntries(Object.entries(p.channels || {}).map(([k, list]) => [k, (list || []).map(line)])),
-        variations: (p.variations || []).map(prod) });
-      return { ok: true, at: new Date().toISOString(), channels: (out.channels || []).map((c) => ({ key: c.key, source: c.source, fluctuates: !!c.fluctuates })),
-        products: (out.products || []).map(prod), stale: !!out.stale };
     }
     if (name === 'recovery') {
       return { ok: true, at: new Date().toISOString(), runs: out.runs || [], items: out.items || [], logRows: out.logRows || 0 };

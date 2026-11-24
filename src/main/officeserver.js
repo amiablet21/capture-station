@@ -33,8 +33,8 @@ async function stop() {
 // the server runs it tops itself up from that folder every two minutes
 // (only reading it), so what the computers save through Drive shows on the
 // server without anyone pressing Bring in.
-// `app`: asks DWS Stock itself for what its Stock, Pricing and Recovery
-// pages show, so the server's page can draw the same thing (read only).
+// `app`: asks DWS Stock itself for what its Stock and Recovery pages
+// show, so the server's page can draw the same thing (read only).
 async function configure({ enabled, port, backupDir, userData, folder, app }) {
   await stop();
   lastPort = Number(port) || 8790;

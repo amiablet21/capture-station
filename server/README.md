@@ -60,7 +60,7 @@ Recovery › Payment reports lists each Walmart payment period with what was pay
 
 ## The app's own pages
 
-When the server runs inside DWS Stock, its page shows Stock, Pricing and Recovery as the app does. `GET /api/app/stock`, `/api/app/pricing` and `/api/app/recovery` ask the app for what its own pages show and pass on only what the page draws. Costs need the costs permission and Recovery needs Recovery. Run on its own (`npm run server`) there is no app to ask, so those screens are left out and the record lists remain.
+When the server runs inside DWS Stock, its page shows Stock and Recovery as the app does. `GET /api/app/stock` and `/api/app/recovery` ask the app for what its own pages show and pass on only what the page draws. Costs need the costs permission and Recovery needs Recovery. Run on its own (`npm run server`) there is no app to ask, so those screens are left out and the record lists remain.
 
 ## Backups
 

@@ -2991,22 +2991,22 @@ module.exports = async function run({ app, win, db, clipboard }) {
           && (await post('/api/login', { username: 'owner', password: 'second-pass-456' })) === 200, { who, short, reset });
       fs.rmSync(bdir, { recursive: true, force: true });
 
-      // the server page's Stock, Pricing and Recovery screens ask this app
+      // the server page's Stock and Recovery screens ask this app
       // for what its own pages show
       const appTok = await fetch(`http://127.0.0.1:${port}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'owner', password: 'second-pass-456' }) }).then(r => r.json()).then(j => j.token);
       const asApp = async (p2) => fetch(`http://127.0.0.1:${port}${p2}`, { headers: { Authorization: `Bearer ${appTok}` } }).then(async r => ({ status: r.status, json: await r.json().catch(() => ({})) }));
       const meApp = await asApp('/api/me');
       const feedRec = await asApp('/api/app/recovery');
-      // (stock and prices would call Linnworks, which a test run has no
-      // account for; their shaping is checked in server/test-server.js.
+      // (stock would call Linnworks, which a test run has no account for;
+      // its shaping is checked in server/test-server.js.
       // Recovery's own self-test above leaves its store on a throwaway
       // database it has closed, so in this run the app's answer is that
       // sentence, passed on as an answer rather than a crash.)
-      check('server: its page can ask this app for its own stock, prices and Recovery',
-        JSON.stringify(meApp.json.app) === '["stock","pricing","recovery"]'
+      check('server: its page can ask this app for its own stock and Recovery',
+        JSON.stringify(meApp.json.app) === '["stock","recovery"]'
           && feedRec.status === 200 && !('settings' in feedRec.json)
           && (feedRec.json.ok === true ? Array.isArray(feedRec.json.runs) && Array.isArray(feedRec.json.items) : /database is not open/.test(feedRec.json.error || ''))
-          && (await asApp('/api/app/settings')).status === 404,
+          && (await asApp('/api/app/settings')).status === 404 && (await asApp('/api/app/pricing')).status === 404,
         { app: meApp.json.app, rec: { status: feedRec.status, ok: feedRec.json.ok, error: feedRec.json.error } });
 
       // Shared server: this computer signs in to the server with a person's

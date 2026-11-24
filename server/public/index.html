@@ -230,30 +230,6 @@
   .feed-note { color: var(--faint); font-size: 11.5px; margin: 8px 2px 0; }
   .feed-off { background: var(--warn-bg); color: var(--warn-text); border-radius: var(--r-card); padding: 10px 12px; font-size: 12.5px; }
 
-  /* Pricing: a product per row, a column per marketplace */
-  .pr-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow-x: auto; }
-  .pr-grid { display: grid; min-width: min-content; }
-  .pr-hc { background: var(--surface-2); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--faint); padding: 8px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); position: sticky; top: 0; }
-  .pr-cell { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); min-width: 0; font-size: 12.5px; }
-  .pr-num { font-family: var(--mono); font-size: 11px; color: var(--faint); background: var(--surface-2); text-align: center; }
-  .pr-prod { display: flex; gap: 10px; align-items: flex-start; }
-  .pr-prod img, .pr-prod .noimg { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; flex: 0 0 auto; background: var(--surface-2); border: 1px solid var(--border-soft); }
-  .pr-psku { font-family: var(--mono); font-weight: 600; font-size: 12.5px; display: block; overflow-wrap: anywhere; }
-  .pr-pstock { color: var(--muted); font-size: 11.5px; display: block; }
-  .pr-vartog { margin-top: 4px; padding: 1px 8px; font-size: 11px; border-radius: 999px; }
-  .pr-vrow .pr-cell { background: var(--surface-2); }
-  .pr-entry { padding: 2px 0 7px; }
-  .pr-entry + .pr-entry { border-top: 1px dashed var(--border); padding-top: 7px; }
-  .pr-line { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
-  .pr-csku { font-family: var(--mono); font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
-  .pr-price { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
-  .pr-got { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
-  .pr-got b.hot { color: var(--pos-text); }
-  .pr-move { color: var(--muted); font-size: 11px; }
-  .pr-up { color: var(--pos-text); } .pr-dn { color: var(--neg-text); }
-  .pr-none, .pr-dim { color: var(--faint); font-size: 11.5px; }
-  .pr-avg { color: var(--muted); font-size: 11px; border-top: 1px solid var(--border-soft); padding-top: 5px; margin-top: 2px; }
-
   /* Recovery: the app's Import and Reconcile tables */
   .retlog .sub2 { display: block; font-size: 11px; color: var(--faint); font-family: var(--font); }
   .retlog td .muted { color: var(--muted); }
@@ -288,7 +264,6 @@
     .dd-menu { position: fixed; left: 12px; right: 12px; top: auto; }
     .retlog tr.dayrow td { display: block; }
     .retlog tr.dayrow td::before { content: none; }
-    .pr-wrap { overflow-x: auto; }
     table.retlog td, table.retlog td.mono { height: auto; }
     .retlog td.num, .retlog th.num { text-align: left; }
     table.stock tbody tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); padding: 8px 4px; }
@@ -458,7 +433,7 @@
     const live = (name, id, label) => ((me.app || []).includes(name) ? [{ kind: id, label, live: true }] : []);
     push('orders', 'Orders', ord.filter((k) => k.kind === 'packed_order'));
     push('stock', 'Stock', [...live('stock', 'app:stock', 'Stock'), ...((by.stock && by.stock.kinds) || [])]);
-    push('pricing', 'Pricing', [...live('pricing', 'app:pricing', 'Prices'), ...((by.pricing && by.pricing.kinds) || [])]);
+    // no Pricing tab (owner 2026-11-24: the app's Pricing page is not used); its records stay in the database
     push('returns', 'Returns', by.returns && by.returns.kinds);
     push('recovery', 'Recovery', [...(by.recovery ? [...live('recovery', 'app:periods', 'Periods'), ...live('recovery', 'app:reconcile', 'Reconcile')] : []), ...((by.recovery && by.recovery.kinds) || [])]);
     push('ship', 'Ship', ord.filter((k) => k.kind !== 'packed_order'));
@@ -480,7 +455,7 @@
     const k = kindNow();
     const mine = viewNow();
     $('q').placeholder = ({ stockhistory: 'Search SKU or PO#', returns: 'Search PO, SKU, model, customer, condition…', labels: 'Search reference or tracking',
-      orders: 'Search order #, SKU or tracking', stock: 'Search SKU, title or barcode', pricing: 'Search SKU…', periods: 'Search', reconcile: 'Search PO, item or reason' })[mine] || 'Search';
+      orders: 'Search order #, SKU or tracking', stock: 'Search SKU, title or barcode', periods: 'Search', reconcile: 'Search PO, item or reason' })[mine] || 'Search';
     $('note').textContent = mine === 'stockhistory' ? '' : tab === 'history' ? 'Every change made on this server itself, newest first. Click a line to see the record before and after.'
       : tab === 'logins' ? 'Each person signs in with their own login. A role decides what they can change.'
       : mine ? '' : !k ? '' : k.fixed ? 'This is a log. Lines are added by the app and never changed.' : k.canWrite ? '' : 'You can look at these but not change them.';
@@ -491,14 +466,14 @@
   $('q').addEventListener('input', () => {
     clearTimeout(qTimer);
     const mine = viewNow();
-    const redraw = { stockhistory: drawShList, returns: drawReturns, labels: drawLabels, orders: drawOrders, stock: drawStock, pricing: drawPricing, periods: drawPeriods, reconcile: drawReconcile }[mine];
+    const redraw = { stockhistory: drawShList, returns: drawReturns, labels: drawLabels, orders: drawOrders, stock: drawStock, periods: drawPeriods, reconcile: drawReconcile }[mine];
     qTimer = setTimeout(() => (redraw ? redraw() : load()), mine ? 120 : 250);
   });
 
   // which of the app's own screens the current tab shows, if any
   let histMode = 'stock';
   const viewNow = () => (tab === 'history' ? (histMode === 'stock' ? 'stockhistory' : '')
-    : ({ return: 'returns', label: 'labels', packed_order: 'orders', 'app:stock': 'stock', 'app:pricing': 'pricing', 'app:periods': 'periods', 'app:reconcile': 'reconcile' })[kind] || '');
+    : ({ return: 'returns', label: 'labels', packed_order: 'orders', 'app:stock': 'stock', 'app:periods': 'periods', 'app:reconcile': 'reconcile' })[kind] || '');
 
   async function load(keep) {
     if (tab === 'logins') return drawLogins();
@@ -508,7 +483,6 @@
     if (mine === 'labels') return loadLabels(keep);
     if (mine === 'orders') return loadOrders(keep);
     if (mine === 'stock') return loadStock(keep);
-    if (mine === 'pricing') return loadPricing(keep);
     if (mine === 'periods' || mine === 'reconcile') return loadRecovery(keep);
     if (tab === 'history') {
       const r = await api('GET', `/api/history?limit=200&q=${encodeURIComponent($('q').value)}`);
@@ -934,62 +908,6 @@
       el('p', { class: 'feed-note', text: `${asOf(d.at)} Counts are changed in DWS Stock.` })].filter(Boolean));
   }
 
-  /* ---------- Pricing: the app's grid, a product per row and a column per marketplace ---------- */
-  const pg = { data: null, open: new Set(), shown: 150 };
-  const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
-  const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
-  const md = (iso) => (iso ? `${+String(iso).slice(5, 7)}/${+String(iso).slice(8, 10)}` : '');
-  async function loadPricing(keep) {
-    if (!keep) { loading(); pg.shown = 150; }
-    const r = await feed('pricing');
-    if (viewNow() !== 'pricing') return;
-    if (!r.ok) { $('barTools').replaceChildren(); return feedOff('The price grid', r.error); }
-    pg.data = r;
-    drawPricing();
-  }
-  function prCells(p) {
-    const cols = pg.data.channels;
-    const maxU = Math.max(0, ...cols.flatMap((c) => (p.channels[c.key] || []).map((x) => (x.got ? x.got.units : 0))));
-    return cols.map((c) => {
-      const lines = p.channels[c.key] || [];
-      const inner = lines.map((l) => {
-        const g = l.got;
-        const sold = g ? `<b class="${g.units === maxU && maxU > 0 ? 'hot' : ''}">${esc(g.units)} sold</b> · last ${prMoney(g.last)} ${md(g.lastOn)}${g.units > 1 && Math.abs(g.avg - g.last) >= 0.01 ? ` · avg ${prMoney(g.avg)}` : ''}`
-          : '<span class="pr-dim">no sales in 30 days</span>';
-        const mv = l.move ? `<div class="pr-move">${l.move.to - l.move.from < 0 ? '<span class="pr-dn">▼</span>' : '<span class="pr-up">▲</span>'} ${prMoney(Math.abs(l.move.to - l.move.from))} on ${md(l.move.ts)} · <b>${esc(l.move.units)}</b> sold since</div>` : '';
-        const tip = c.fluctuates ? (l.fromSales ? `The repricer owns this price. This is what the listing last sold at, before tax. Linnworks has ${prMoney(l.lwPrice)} on file.` : 'The repricer owns this price. No sale in 60 days, so this is the Linnworks figure.') : `The price on ${c.source}`;
-        return `<div class="pr-entry"><div class="pr-line"><span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span><span class="pr-price" title="${esc(tip)}">${prMoney(l.price)}</span></div><div class="pr-got">${sold}</div>${mv}</div>`;
-      }).join('');
-      const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
-      return `<div class="pr-cell">${lines.length ? inner : '<span class="pr-none">not listed</span>'}${avg ? `<div class="pr-avg">30-day avg <b>${prMoney(avg.avg)}</b> · ${esc(avg.units)} sold</div>` : ''}</div>`;
-    }).join('');
-  }
-  function drawPricing() {
-    const d = pg.data; if (!d) return;
-    $('barTools').replaceChildren();
-    $('secLabel').textContent = 'Pricing';
-    const q = $('q').value.trim().toLowerCase();
-    const one = (p) => !q || String(p.sku).toLowerCase().includes(q) || d.channels.some((c) => (p.channels[c.key] || []).some((l) => String(l.csku).toLowerCase().includes(q)));
-    const match = (p) => one(p) || (p.variations || []).some(one);
-    const list = d.products.filter(match);
-    if (!list.length) return $('view').replaceChildren(el('div', { class: 'tablewrap' }, el('div', { class: 'empty', text: q ? 'No SKUs match.' : 'No linked listings yet.' })));
-    const cols = `44px minmax(230px, 1fr) repeat(${d.channels.length}, minmax(240px, 1.15fr))`;
-    const prod = (p, num, isVar) => `<div class="pr-cell pr-num">${isVar ? '└' : num}</div><div class="pr-cell pr-prod">${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
-        <div><span class="pr-psku">${esc(p.sku)}</span><span class="pr-pstock">${esc(p.stock)} in stock</span>${!isVar && (p.variations || []).length
-    ? `<button type="button" class="pr-vartog" data-vt="${esc(p.sku)}">${pg.open.has(p.sku) || (q && !one(p)) ? '▾' : '▸'} ${p.variations.length} variation${p.variations.length === 1 ? '' : 's'} · ${p.variations.reduce((a, v) => a + (Number(v.stock) || 0), 0)} units</button>` : ''}</div></div>${prCells(p)}`;
-    const grid = el('div', { class: 'pr-grid' });
-    grid.style.gridTemplateColumns = cols;
-    grid.innerHTML = `<div class="pr-hc">#</div><div class="pr-hc">PRODUCT</div>${d.channels.map((c, i) => `<div class="pr-hc" style="color:${PR_COLORS[i % PR_COLORS.length]}">${esc(String(c.source).toUpperCase())}</div>`).join('')}`
-      + list.slice(0, pg.shown).map((p, i) => {
-        const open = (p.variations || []).length && (pg.open.has(p.sku) || (q && !one(p)));
-        return `<div class="pr-row" style="display:contents">${prod(p, i + 1, false)}</div>${open ? p.variations.map((v) => `<div class="pr-vrow" style="display:contents">${prod(v, 0, true)}</div>`).join('') : ''}`;
-      }).join('');
-    grid.addEventListener('click', (ev) => { const b = ev.target.closest('[data-vt]'); if (!b) return; if (pg.open.has(b.dataset.vt)) pg.open.delete(b.dataset.vt); else pg.open.add(b.dataset.vt); drawPricing(); });
-    $('view').replaceChildren(...[el('div', { class: 'pr-wrap' }, grid),
-      list.length > pg.shown ? el('button', { class: 'more', text: `Show more (${pg.shown} of ${list.length})`, onclick: () => { pg.shown += 200; drawPricing(); } }) : null,
-      el('p', { class: 'feed-note', text: `${asOf(d.at)} Prices are changed in DWS Stock.${d.stale ? ' These are the last figures it saved; fresh ones are being read.' : ''}` })].filter(Boolean));
-  }
-
   /* ---------- Recovery: the app's Imported periods and Reconcile ---------- */
   const rc = { data: null, bucket: 'notReceived', sort: null };
   const RC_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1274,7 +1192,7 @@
       password: el('input', { type: 'password', autocomplete: 'new-password', placeholder: u ? 'Leave empty to keep the current one' : 'At least 8 characters' }),
       active: el('input', { type: 'checkbox', checked: !u || u.active, style: 'width:auto' }),
     };
-    const extras = me.perms.filter((p) => p !== 'admin').map((p) => { const c = el('input', { type: 'checkbox', value: p, checked: !!(u && u.extra.includes(p)), style: 'width:auto' }); return [c, el('label', {}, [PERM_LABEL[p]])]; });
+    const extras = me.perms.filter((p) => p !== 'admin' && p !== 'pricing').map((p) => { const c = el('input', { type: 'checkbox', value: p, checked: !!(u && u.extra.includes(p)), style: 'width:auto' }); return [c, el('label', {}, [PERM_LABEL[p]])]; });
     const msg = el('div', { class: 'msg hide' });
     const save = async () => {
       const body = { name: f.name.value, role: f.role.value, extra: extras.map(([c]) => c).filter((c) => c.checked).map((c) => c.value), active: f.active.checked };
