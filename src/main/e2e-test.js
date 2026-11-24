@@ -2206,6 +2206,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
             out.x.offPick = os.pick;
             $('osProt').click(); await new Promise(r => setTimeout(r, 200));
             out.x.prot = { ground: row('wm:UPS_GROUND'), fedex: row('wm:FEDEX_2_DAY'), ups: row('b:03') };
+            document.querySelector('#osRates .sp-rate[data-k="wm:UPS_GROUND"]').click();
+            out.x.sumGround = $('osdSum').textContent;
             document.querySelector('#osRates .sp-rate[data-k="wm:FEDEX_2_DAY"]').click();
             out.x.sum = $('osdSum').textContent;
             osShowExtras({ signature: 0 }, { signature: { ok: true, price: 4.94 }, protection: { ok: false, price: null, covers: 0 } });
@@ -2225,9 +2227,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
           check('extras: Signature adds Walmart\'s price to each service, a UPS account prices it in, and a service without it cannot be picked',
             x.sig && x.sig.ground.pr === '$14.30' && /Signature \$5\.90/.test(x.sig.ground.eta) && /is-off/.test(x.sig.early.cls) && /No signature on this service/.test(x.sig.early.eta)
               && /Signature included/.test(x.sig.ups.eta) && x.sig.order[x.sig.order.length - 1] === 'wm:UPS_NEXT_DAY_AIR_EARLY' && x.offPick !== 'wm:UPS_NEXT_DAY_AIR_EARLY', x.sig);
-          check('extras: Walmart protection shows its quote where Walmart gives one, says so where it does not, and leaves UPS accounts alone',
-            x.prot && /Protection \$2\.90, covers \$189\.99/.test(x.prot.fedex.eta) && x.prot.fedex.pr === '$19.64' && /Walmart prices it on the label/.test(x.prot.ground.eta) && x.prot.ground.pr === '$14.30'
-              && !/Protection/.test(x.prot.ups.eta) && /\$19\.64/.test(x.sum), { prot: x.prot, sum: x.sum });
+          check('extras: Walmart protection shows its quote where Walmart gives one; with no quote the row stays clean and the summary says "+ protection"',
+            x.prot && /Protection \$2\.90, covers \$189\.99/.test(x.prot.fedex.eta) && x.prot.fedex.pr === '$19.64' && !/Protection/.test(x.prot.ground.eta) && x.prot.ground.pr === '$14.30'
+              && /\$14\.30 \+ protection/.test(x.sumGround) && !/Protection/.test(x.prot.ups.eta) && /\$19\.64$/.test(x.sum), { prot: x.prot, sum: x.sum, sumGround: x.sumGround });
           check('extras: the label popup says what the label carries, in red when Walmart left one off',
             /Signature required · \$4\.94/.test(x.popup) && /did not add the protection/.test(x.popup) && x.popupBad && x.popupNone === true, x);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',

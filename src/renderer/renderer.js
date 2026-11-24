@@ -17249,13 +17249,16 @@ function osDaysOut(n) {
 // The ticked extras on one rate (owner 2026-11-24): what it costs with them,
 // what to say under it, and whether it can carry them at all. A UPS account
 // prices the signature into its rate; Walmart lists it beside the rate, per
-// service, and sets the protection's price itself (it may quote none).
+// service, and sets the protection's price itself. When it quotes none the
+// rows stay as they are (owner 2026-11-24: no extra line on every row) and
+// the summary beside Create label says "+ protection" for the picked rate.
 function osExtras(r) {
   const sig = $('osSig').checked;
   const prot = $('osProt').checked && !$('osProtWrap').hidden;
   let total = r.price;
   const notes = [];
   let off = '';
+  let unpriced = false; // protection asked for, and Walmart gave no price to add
   if (r.via === 'wm') {
     if (sig) {
       if (r.signature === null || r.signature === undefined) off = 'No signature on this service';
@@ -17263,10 +17266,10 @@ function osExtras(r) {
     }
     if (prot) {
       if (r.protection) { total += r.protection.price; notes.push(`Protection ${spMoney(r.protection.price)}${r.protection.covers ? `, covers ${spMoney(r.protection.covers)}` : ''}`); }
-      else notes.push('Protection: Walmart prices it on the label');
+      else unpriced = true;
     }
   } else if (sig && os.ratesSig) notes.push('Signature included');
-  return { total: Math.round(total * 100) / 100, notes, off };
+  return { total: Math.round(total * 100) / 100, notes, off, unpriced };
 }
 
 // every rate from every source, tagged with where it comes from, cheapest
@@ -17323,7 +17326,7 @@ function osRenderRates() {
   const sel = can.find(r => r.key === os.pick);
   btn.disabled = !sel || os.creating;
   btn.textContent = os.creating ? 'Creating label…' : buyText;
-  $('osdSum').innerHTML = sel ? `<b>${esc(sel.name)}</b> · ${esc(sel.viaName)}<span class="mono">${spMoney(sel.total)}</span>` : '';
+  $('osdSum').innerHTML = sel ? `<b>${esc(sel.name)}</b> · ${esc(sel.viaName)}<span class="mono">${spMoney(sel.total)}${sel.unpriced ? ' + protection' : ''}</span>` : '';
 }
 
 async function osCreate() {
