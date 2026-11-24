@@ -136,6 +136,34 @@ const ok = (name) => { passed++; console.log(`  ok  ${name}`); };
   }
   ok('periods already on the server get their totals without being brought in again');
 
+  /* ---- the screens copied from DWS Stock ---- */
+  const asOf = Date.UTC(2026, 10, 16);
+  const sh = srv.db.stockHistory({ days: 30, now: asOf }).rows;
+  const fix = sh.find((e) => e.gid === 'IMRAN-WORK-PC:demo-2');
+  const fixed = sh.find((e) => e.gid === 'IMRAN-WORK-PC:demo-1');
+  assert.deepEqual([fix.reason, fix.target.gid, fix.dataObj.toQty], ['edit-qty', 'IMRAN-WORK-PC:demo-1', 58], 'a correction points back at its line');
+  assert.deepEqual([fixed.eff.qty, fixed.eff.corrected, fixed.marks.map((m) => m.kind).join()], [58, true, 'edit'], 'the corrected line says what it stands at now');
+  assert.equal(sh.filter((e) => e.reason === 'sale').length, 40, 'one SOLD line per sale line');
+  assert.equal(sh.filter((e) => e.reason === 'return').length, 8);
+  assert.ok(sh.every((e, i) => i === 0 || sh[i - 1].created_at >= e.created_at), 'newest first');
+  assert.equal(srv.db.stockHistory({ days: 0, now: asOf }).rows.length, 0, 'today means today');
+  assert.equal(srv.db.stockHistory({ days: 30, now: asOf, sales: false }).rows.length, 13);
+  {
+    const d2 = store.open(path.join(tmp, 'costs.sqlite'));
+    d2.importPut('stock_change', 'A:1', { gid: 'A:1', created_at: new Date(asOf).toISOString(), sku: 'X210-64GB-GRAY', delta: 0, reason: 'cost', data: JSON.stringify({ from: 100, to: 120 }) });
+    assert.equal(d2.stockHistory({ days: 7, now: asOf }).rows.length, 0, 'cost lines hold dollar figures');
+    assert.equal(d2.stockHistory({ days: 7, now: asOf, costs: true }).rows[0].dataObj.to, 120);
+    d2.close();
+  }
+  assert.equal((await call('GET', '/api/stockhistory?days=30', { token: nick })).status, 200);
+  assert.equal((await call('GET', '/api/stockhistory?days=30')).status, 401);
+  ok('Stock history reads as it does in DWS Stock: sold, returned, corrections pointing at their lines');
+  const fullRet = (await call('GET', '/api/records/return?full=1&limit=5000', { token: nick })).json;
+  assert.equal(fullRet.rows[0].data.items[0].condition, 'new');
+  assert.equal((await call('GET', '/api/records/return', { token: nick })).json.rows[0].data, undefined);
+  assert.equal((await call('GET', '/api/records/label?full=1', { token: nick })).json.rows.find((r) => r.data.voided_at).data.reference, 'PO-211-90004111');
+  ok('the Returns log and the Labels table get each record whole; the plain lists stay light');
+
   /* ---- two people on one return ---- */
   const a = (await call('GET', `/api/records/return/${encodeURIComponent(rid)}`, { token: rma })).json;
   const b = (await call('GET', `/api/records/return/${encodeURIComponent(rid)}`, { token: owner })).json;

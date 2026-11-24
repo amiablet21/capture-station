@@ -186,12 +186,18 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
         return undefined;
       }
 
+      // Stock history, as DWS Stock's own window shows it. Cost lines need
+      // the costs permission, like the cost list itself.
+      if (seg[1] === 'stockhistory' && req.method === 'GET') {
+        return send(res, 200, db.stockHistory({ days: url.searchParams.get('days'), sales: store.canRead(user, 'sale'), costs: store.canRead(user, 'cost') }));
+      }
+
       if (seg[1] === 'records' && seg[2]) {
         const kind = seg[2];
         if (!store.KINDS[kind]) return send(res, 404, { error: 'No such table.' });
         if (!store.canRead(user, kind)) return send(res, 403, { error: 'Your login cannot see this.' });
         const id = seg[3];
-        if (req.method === 'GET' && !id) return send(res, 200, db.list(kind, { q: url.searchParams.get('q') || '', limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset') }));
+        if (req.method === 'GET' && !id) return send(res, 200, db.list(kind, { q: url.searchParams.get('q') || '', limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset'), full: url.searchParams.get('full') === '1' }));
         // a payment period opened up: its statement, worked out from the stored lines
         if (req.method === 'GET' && kind === 'wm_run' && seg[4] === 'statement') { const st = db.runStatement(id); return st ? send(res, 200, st) : send(res, 404, { error: 'Not found.' }); }
         if (req.method === 'GET') { const r = db.get(kind, id); return r && !r.deleted ? send(res, 200, r) : send(res, 404, { error: 'Not found.' }); }

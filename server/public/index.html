@@ -17,6 +17,7 @@
     --text: #2F3437; --muted: #787774; --faint: #A5A29C;
     --accent: #1E3A66; --accent-hover: #152B4E; --accent-soft: #E4EAF4;
     --pos-bg: #EDF3EC; --pos-text: #346538; --neg-bg: #FDEBEC; --neg-text: #9F2F2D; --warn-bg: #FBF3DB; --warn-text: #956400;
+    --blue-bg: #E1F3FE; --blue-text: #1F6C9F; --purple-bg: #F1E9F8; --purple-text: #6A2E9E;
     --r-card: 8px; --r-ctl: 6px; --r-modal: 12px;
     --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
     --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
@@ -131,6 +132,85 @@
   .diff { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 10px; }
   .checks label { display: inline; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 400; color: var(--text); margin: 0 12px 0 4px; }
 
+
+  /* ---- screens drawn the way DWS Stock draws them ---- */
+  #barTools { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .bar select { width: auto; padding: 5px 8px; font-size: 12.5px; }
+  .dd { position: relative; }
+  .dd-btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 5px 12px 5px 14px; font-size: 12.5px; }
+  .dd-btn.on { border-color: var(--accent); color: var(--accent); }
+  .dd-btn .caret { color: var(--faint); font-size: 10px; }
+  .dd-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 6; min-width: 236px; max-height: 60vh; overflow-y: auto; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 28px rgba(47, 52, 55, 0.12); padding: 4px; }
+  .dd-menu label { display: flex; align-items: center; gap: 10px; margin: 0; padding: 7px 10px; border-radius: 6px; font-size: 13px; font-weight: 400;
+    text-transform: none; letter-spacing: 0; color: var(--text); cursor: pointer; white-space: nowrap; }
+  .dd-menu label:hover { background: var(--surface-2); }
+  .dd-menu input { width: auto; margin: 0; }
+  .dd-menu .n { margin-left: auto; padding-left: 16px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .sh-dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; background: var(--muted); }
+
+  /* Stock history: one pill row per change */
+  .sh-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  .sh-line { display: flex; align-items: center; gap: 14px; padding: 9px 14px; line-height: 1.4; font-size: 13px; min-width: 0; border-bottom: 1px solid var(--border-soft); }
+  .sh-line:last-child { border-bottom: 0; }
+  .sh-line.is-linked { background: var(--surface-2); }
+  .sh-line.is-flash { animation: shFlash 1.2s var(--ease); }
+  @keyframes shFlash { 0% { background: var(--warn-bg); } 100% { background: transparent; } }
+  .sh-act { width: 92px; flex: 0 0 auto; display: inline-flex; justify-content: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; border: none; padding: 3px 0; border-radius: 999px; }
+  .sh-act:hover { filter: brightness(0.96); }
+  .act-sold, .act-removed { color: var(--neg-text); background: var(--neg-bg); }
+  .act-returned { color: var(--pos-text); background: var(--pos-bg); }
+  .act-added, .act-mapped { color: var(--blue-text); background: var(--blue-bg); }
+  .act-shipped, .act-unmapped { color: var(--purple-text); background: var(--purple-bg); }
+  .act-set, .act-edited, .act-cost { color: var(--warn-text); background: var(--warn-bg); }
+  .act-wholesale { color: #0F6E6E; background: #DFF3F2; }
+  .act-deleted { color: var(--muted); background: var(--surface-2); text-decoration: line-through; text-decoration-color: var(--faint); }
+  .sh-dot.act-sold, .sh-dot.act-removed { background: var(--neg-text); } .sh-dot.act-returned { background: var(--pos-text); }
+  .sh-dot.act-added, .sh-dot.act-mapped { background: var(--blue-text); } .sh-dot.act-shipped, .sh-dot.act-unmapped { background: var(--purple-text); }
+  .sh-dot.act-set, .sh-dot.act-edited, .sh-dot.act-cost { background: var(--warn-text); } .sh-dot.act-wholesale { background: #0F6E6E; } .sh-dot.act-deleted { background: var(--muted); }
+  .sh-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sh-text .mono { font-family: var(--mono); }
+  .sh-sku { cursor: pointer; font-size: 12.5px; font-weight: 600; }
+  .sh-sku:hover { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 3px; }
+  .sh-arrow { color: var(--faint); margin: 0 2px; }
+  .sh-dim { color: var(--muted); font-size: 11.5px; }
+  .sh-line.is-deleted .sh-text > :not(.sh-mark) { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
+  .sh-mark { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 4px; border: none; }
+  .sh-mark.is-fix { background: var(--warn-bg); color: var(--warn-text); } .sh-mark.is-rev { background: var(--surface-2); color: var(--muted); }
+  .sh-goto { font-size: 11.5px; color: var(--muted); background: none; border: none; padding: 0; margin-left: 6px; }
+  .sh-goto:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; background: none; }
+  .sh-when { flex: 0 0 auto; width: 138px; text-align: right; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .sh-pc { flex: 0 0 auto; width: 170px; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+  .sh-pc svg { width: 14px; height: 14px; color: var(--faint); flex: 0 0 auto; }
+  .sh-pc.is-ext { color: var(--muted); }
+  .sh-ini { font-weight: 500; color: var(--muted); letter-spacing: 0; }
+
+  /* the Returns log: the app's own sheet, one row per returned line */
+  table.retlog td { height: 38px; }
+  .retlog td.num, .retlog th.num { text-align: right; }
+  .retlog .missing { color: var(--faint); font-family: var(--font); }
+  .retlog .target { font-family: var(--mono); font-size: 10.5px; color: var(--muted); line-height: 1.3; }
+  .retlog .gutter.unmatched { background: var(--neg-bg); color: var(--neg-text); font-weight: 600; }
+  .cond { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+  .cond i { width: 7px; height: 7px; border-radius: 999px; background: currentColor; display: inline-block; }
+  .cond.is-new { color: var(--pos-text); } .cond.is-openbox { color: var(--blue-text); } .cond.is-used { color: var(--warn-text); }
+  .cond.is-scrap { color: var(--neg-text); } .cond.is-different { color: var(--muted); }
+  .retlog .by-sub { display: block; font: 500 10px var(--mono); color: var(--faint); line-height: 1.2; }
+
+  /* the Labels table from the Ship page */
+  .lab-sum { border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); padding: 5px 12px; font-size: 12px; color: var(--muted); }
+  .labels small { color: var(--faint); font-family: var(--font); margin-left: 6px; }
+  .sp-k { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+  .sp-k.ship { background: var(--blue-bg); color: var(--blue-text); } .sp-k.return { background: var(--warn-bg); color: var(--warn-text); }
+  .sp-k.void { background: var(--surface-2); color: var(--faint); border: 1px solid var(--border); }
+  .sp-mk { font-family: var(--font); font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-left: 8px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .sp-mk.walmart { background: var(--blue-bg); color: var(--blue-text); border-color: transparent; }
+  .sp-mk.ebay { background: var(--pos-bg); color: var(--pos-text); border-color: transparent; }
+  .sp-mk.temu { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
+  .sp-dup { font-family: var(--font); font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 8px; background: var(--neg-bg); color: var(--neg-text); }
+  .labels tr.is-void td:not(.kind) { color: var(--faint); text-decoration: line-through; }
+  .seg button.dupchip { color: var(--neg-text); }
+
   @media (max-width: 720px) {
     .topbar { padding: 10px 12px; }
     .tabs { padding: 0 6px; }
@@ -144,6 +224,11 @@
     td, td.mono { border: 0; height: auto; padding: 3px 12px; max-width: none; white-space: normal; overflow: visible; display: grid; grid-template-columns: 104px 1fr; gap: 10px; overflow-wrap: anywhere; }
     td::before { content: attr(data-label); color: var(--muted); font-family: var(--font); font-size: 11.5px; padding-top: 1px; }
     td.gutter, td.blank { display: none; }
+    .sh-line { flex-wrap: wrap; gap: 6px 10px; padding: 10px 12px; }
+    .sh-text { flex: 1 1 60%; white-space: normal; }
+    .sh-when, .sh-pc { width: auto; flex: 1 1 40%; }
+    .sh-when { text-align: left; }
+    .dd-menu { position: fixed; left: 12px; right: 12px; top: auto; }
     tbody tr:last-child td { border-bottom: 0; }
     .kv { grid-template-columns: 105px 1fr; }
   }
@@ -263,7 +348,7 @@
     me = m;
     $('gate').classList.add('hide'); $('app').classList.remove('hide');
     $('whoName').textContent = `${me.user.name} · ${me.user.roleLabel}`;
-    if (!tab) tab = me.areas.length ? me.areas[0].area : 'history';
+    if (!tab) tab = sections().length ? sections()[0].area : 'history';
     drawTabs(); openTab(tab);
     if (!stream) {
       stream = new EventSource('/api/events');
@@ -281,36 +366,70 @@
     load(true);
   }
   function drawTabs() {
-    const tabs = [...me.areas.map((a) => [a.area, a.label]), ['history', 'History']];
+    const tabs = [...sections().map((a) => [a.area, a.label]), ['history', 'History']];
     if (me.user.perms.includes('admin')) tabs.push(['logins', 'Logins']);
     $('tabs').replaceChildren(...tabs.map(([id, label]) => el('button', { class: id === tab ? 'on' : '', text: label, onclick: () => openTab(id) })));
   }
   function openTab(id) {
     tab = id; closeDrawer(); $('q').value = '';
-    const area = me.areas.find((a) => a.area === id);
+    const area = sections().find((a) => a.area === id);
     kind = area ? area.kinds[0].kind : '';
     drawTabs(); drawChips(); load();
   }
-  const areaNow = () => me.areas.find((a) => a.area === tab);
+  // The tabs in DWS Stock's own order and under its own names. Labels and
+  // box sizes sit under Ship, as they do in the app.
+  function sections() {
+    const by = Object.fromEntries(me.areas.map((a) => [a.area, a]));
+    const out = [];
+    const push = (area, label, kinds) => { if (kinds && kinds.length) out.push({ area, label, kinds }); };
+    const ord = by.orders ? by.orders.kinds : [];
+    push('orders', 'Orders', ord.filter((k) => k.kind === 'packed_order'));
+    push('stock', 'Stock', by.stock && by.stock.kinds);
+    push('pricing', 'Pricing', by.pricing && by.pricing.kinds);
+    push('returns', 'Returns', by.returns && by.returns.kinds);
+    push('recovery', 'Recovery', by.recovery && by.recovery.kinds);
+    push('ship', 'Ship', ord.filter((k) => k.kind !== 'packed_order'));
+    return out;
+  }
+  const areaNow = () => sections().find((a) => a.area === tab);
   const kindNow = () => { const a = areaNow(); return a && a.kinds.find((k) => k.kind === kind); };
   function drawChips() {
     const a = areaNow();
-    $('chips').replaceChildren(...(a ? a.kinds.map((k) => el('button', { class: `chip${k.kind === kind ? ' on' : ''}`, onclick: () => { kind = k.kind; closeDrawer(); drawChips(); load(); } },
-      [k.label, el('small', { text: String(k.count) })])) : []));
+    const histChips = [['stock', 'Stock history'], ['server', 'Changes on this server']];
+    $('chips').replaceChildren(...(tab === 'history'
+      ? histChips.map(([id, label]) => el('button', { class: `chip${histMode === id ? ' on' : ''}`, text: label, onclick: () => { histMode = id; $('q').value = ''; closeDrawer(); drawChips(); load(); } }))
+      : a ? a.kinds.map((k) => el('button', { class: `chip${k.kind === kind ? ' on' : ''}`, onclick: () => { kind = k.kind; $('q').value = ''; closeDrawer(); drawChips(); load(); } },
+        [k.label, el('small', { text: String(k.count) })])) : []));
     $('q').classList.toggle('hide', tab === 'logins');
-    $('chips').classList.toggle('hide', !a || a.kinds.length < 2);
+    $('chips').classList.toggle('hide', tab !== 'history' && (!a || a.kinds.length < 2));
     $('secLabel').textContent = a ? (a.kinds.length < 2 ? a.kinds[0].label : a.label) : tab === 'history' ? 'History' : 'Logins';
     $('barTools').replaceChildren();
     const k = kindNow();
-    $('note').textContent = tab === 'history' ? 'Every change made on this server, newest first. Click a line to see the record before and after.'
+    const mine = viewNow();
+    $('q').placeholder = mine === 'stockhistory' ? 'Search SKU or PO#' : mine === 'returns' ? 'Search PO, SKU, model, customer, condition…' : mine === 'labels' ? 'Search reference or tracking' : 'Search';
+    $('note').textContent = mine === 'stockhistory' ? '' : tab === 'history' ? 'Every change made on this server itself, newest first. Click a line to see the record before and after.'
       : tab === 'logins' ? 'Each person signs in with their own login. A role decides what they can change.'
-      : !k ? '' : k.fixed ? 'This is a log. Lines are added by the app and never changed.' : k.canWrite ? '' : 'You can look at these but not change them.';
+      : mine ? '' : !k ? '' : k.fixed ? 'This is a log. Lines are added by the app and never changed.' : k.canWrite ? '' : 'You can look at these but not change them.';
   }
   let qTimer = null;
-  $('q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(() => load(), 250); });
+  // the screens copied from the app hold their rows and filter them here;
+  // the plain lists ask the server
+  $('q').addEventListener('input', () => {
+    clearTimeout(qTimer);
+    const mine = viewNow();
+    qTimer = setTimeout(() => (mine === 'stockhistory' ? drawShList() : mine === 'returns' ? drawReturns() : mine === 'labels' ? drawLabels() : load()), mine ? 120 : 250);
+  });
+
+  // which of the app's own screens the current tab shows, if any
+  let histMode = 'stock';
+  const viewNow = () => (tab === 'history' ? (histMode === 'stock' ? 'stockhistory' : '') : kind === 'return' ? 'returns' : kind === 'label' ? 'labels' : '');
 
   async function load(keep) {
     if (tab === 'logins') return drawLogins();
+    const mine = viewNow();
+    if (mine === 'stockhistory') return loadStockHistory(keep);
+    if (mine === 'returns') return loadReturns(keep);
+    if (mine === 'labels') return loadLabels(keep);
     if (tab === 'history') {
       const r = await api('GET', `/api/history?limit=200&q=${encodeURIComponent($('q').value)}`);
       return drawHistory(r.rows || []);
@@ -337,6 +456,287 @@
     $('view').replaceChildren(...[...top,
       el('div', { class: 'tablewrap' }, rows.length ? el('table', {}, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: $('q').value ? 'Nothing matches that search.' : `No ${k.label.toLowerCase()} yet.` })),
       foot].filter(Boolean));
+  }
+
+  /* ================= screens drawn the way DWS Stock draws them ================= */
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const dateUS = (day) => { const p = String(day || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[1]}/${p[2]}/${p[0]}` : ''; };
+  const fmtClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false });
+  const clock = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : fmtClock.format(d); };
+  const fmtDayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const dayKey = (v) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? '' : fmtDayKey.format(d); };
+  const plainMoney = (v) => (Number(v) ? Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');
+  const loading = () => $('view').replaceChildren(el('div', { class: 'empty', text: 'Loading…' }));
+
+  // a filter button with a tick list under it, like the app's Everyone / All actions
+  const closeMenus = () => document.querySelectorAll('.dd-menu').forEach((m) => m.classList.add('hide'));
+  document.addEventListener('click', closeMenus);
+  function dd(base, set, options, { label = (v) => v, dot, count, onChange }) {
+    const btn = el('button', { type: 'button', class: 'dd-btn' });
+    const menu = el('div', { class: 'dd-menu hide' });
+    const sync = () => {
+      btn.replaceChildren(set.size === 0 ? base : set.size === 1 ? label([...set][0]) : `${set.size} chosen`, el('span', { class: 'caret', text: '▾' }));
+      btn.classList.toggle('on', set.size > 0);
+    };
+    menu.append(...options.map((v) => {
+      const box = el('input', { type: 'checkbox' });
+      box.checked = set.has(v);
+      box.addEventListener('change', () => { if (box.checked) set.add(v); else set.delete(v); sync(); onChange(); });
+      return el('label', {}, [box, dot ? el('span', { class: `sh-dot ${dot(v)}` }) : null, el('span', { text: label(v) }), count ? el('span', { class: 'n', text: String(count(v)) }) : null]);
+    }));
+    btn.addEventListener('click', (e) => { e.stopPropagation(); const closed = menu.classList.contains('hide'); closeMenus(); menu.classList.toggle('hide', !closed); });
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    sync();
+    return el('div', { class: 'dd' }, [btn, menu]);
+  }
+  function rangeSelect(state, onChange) {
+    const sel = el('select', { 'aria-label': 'How far back' }, [['0', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days']].map(([v, t]) => el('option', { value: v, text: t })));
+    sel.value = String(state.days);
+    sel.addEventListener('change', () => { state.days = Number(sel.value); onChange(); });
+    return sel;
+  }
+
+  /* ---------- History: the app's Stock history ---------- */
+  const SH_ACT = {
+    sold: { word: 'SOLD', cls: 'act-sold' }, returned: { word: 'RETURNED', cls: 'act-returned' }, added: { word: 'ADDED', cls: 'act-added' },
+    removed: { word: 'REMOVED', cls: 'act-removed' }, shipped: { word: 'SHIPPED', cls: 'act-shipped' }, wholesale: { word: 'WHOLESALE', cls: 'act-wholesale' },
+    cost: { word: 'COST', cls: 'act-cost' }, set: { word: 'SET', cls: 'act-set' }, edited: { word: 'EDITED', cls: 'act-edited' },
+    deleted: { word: 'DELETED', cls: 'act-deleted' }, mapped: { word: 'MAPPED', cls: 'act-mapped' }, unmapped: { word: 'UNMAPPED', cls: 'act-unmapped' },
+  };
+  const SH_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'wholesale', 'cost', 'set', 'edited', 'deleted', 'mapped', 'unmapped'];
+  const shWord = (k) => SH_ACT[k].word[0] + SH_ACT[k].word.slice(1).toLowerCase();
+  function shActionOf(e) {
+    switch (e.reason) {
+      case 'sale': return 'sold';
+      case 'return': return 'returned';
+      case 'return-edit': case 'return-delete': case 'correction': case 'edit-qty': case 'edit-sku': return 'edited';
+      case 'deleted': return 'deleted';
+      case 'set': case 'bulk-set': case 'dropship': return 'set';
+      case 'wfs': case 'substitution': return 'shipped';
+      case 'wholesale': case 'wholesale-void': return 'wholesale';
+      case 'cost': return 'cost';
+      case 'mapped': return 'mapped';
+      case 'unmapped': return 'unmapped';
+      default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
+    }
+  }
+  const pcKey = (name) => String(name || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const shPcOf = (e) => pcKey(e.reason === 'sale' ? e.market : e.computer);
+  const SH_LINK = new Set(['edit-qty', 'edit-sku', 'deleted']);
+  const shDayShort = (d) => (d ? `${+String(d).slice(5, 7)}/${+String(d).slice(8, 10)}` : '');
+  const ICON_CART = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M230.14,58.87A8,8,0,0,0,224,56H62.68L56.6,22.57A8,8,0,0,0,48.73,16H24a8,8,0,0,0,0,16h18L67.56,172.29a24,24,0,0,0,5.33,11.27,28,28,0,1,0,44.4,8.44h45.42A27.75,27.75,0,0,0,160,204a28,28,0,1,0,28-28H91.17a8,8,0,0,1-7.87-6.57L80.13,152h116a24,24,0,0,0,23.61-19.71l12.16-66.86A8,8,0,0,0,230.14,58.87ZM104,204a12,12,0,1,1-12-12A12,12,0,0,1,104,204Zm96,0a12,12,0,1,1-12-12A12,12,0,0,1,200,204Zm4.07-74.57A8,8,0,0,1,196.2,136H77.22L65.59,72H214.41Z"/></svg>';
+  const ICON_PC = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,36H48A28,28,0,0,0,20,64V168a28,28,0,0,0,28,28h68v20H88a12,12,0,0,0,0,24h80a12,12,0,0,0,0-24H140V196h68a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,132a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Z"/></svg>';
+  const cost$ = (v) => `$${(Number(v) || 0).toFixed(2)}`;
+
+  // the "what" of a row: count × SKU, the arrow when a return landed on a
+  // graded listing, the PO / order in grey
+  function shWhat(e) {
+    const n = Math.abs(Number(e.delta) || 0);
+    const sku = (v) => `<span class="mono sh-sku" data-sku="${esc(v)}" title="Click to see only ${esc(v)}">${esc(v)}</span>`;
+    const d = e.dataObj || {};
+    if (SH_LINK.has(e.reason) || e.link_gid) {
+      const back = e.target
+        ? `<button type="button" class="sh-goto" data-goto="${esc(e.target.gid)}" title="Jump to that line">↳ ${e.reason === 'deleted' ? 'deleted' : 'corrects'} the entry from ${shDayShort(e.target.day)}${e.target.computer ? ` by ${esc(pcKey(e.target.computer))}` : ''}</button>`
+        : '';
+      const extra = /·\s*(.+?: (?:removed|count was).*)$/.exec(e.note || '');
+      const tail = extra ? ` <span class="sh-dim">(${esc(extra[1])})</span>` : '';
+      if (e.reason === 'deleted') return `${esc(d.fromQty ?? n)} × ${sku(d.fromSku || e.sku)}${tail} ${back}`;
+      if (d.toSku && d.fromSku && d.toSku !== d.fromSku) return `${esc(d.toQty ?? n)} × ${sku(d.fromSku)} <span class="sh-arrow">→</span> ${sku(d.toSku)}${tail} ${back}`;
+      return `${sku(d.toSku || e.sku)} <span class="sh-dim">${esc(d.fromQty)} → ${esc(d.toQty)} units</span>${tail} ${back}`;
+    }
+    const isSale = e.reason === 'sale';
+    const refLabel = isSale ? 'Order#' : (e.reason === 'wfs' || e.reason === 'dropship') ? 'Ref' : 'PO#';
+    const ref = e.ref ? ` <span class="sh-dim">(${refLabel}: ${esc(e.ref)})</span>` : '';
+    const ordered = /ordered (\S+)/.exec(e.note || '');
+    if (e.delta === null || e.delta === undefined) {
+      const setTo = /set to (\d+)/.exec(e.note || '');
+      return `${sku(e.sku)} to <b>${esc(e.level_after ?? (setTo ? setTo[1] : '?'))}</b>${e.note && !setTo ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
+    }
+    if (e.reason === 'cost') return `${sku(e.sku)} <span class="sh-dim">${Number(d.from) > 0 ? cost$(d.from) : 'no cost'}</span> <span class="sh-arrow">→</span> <b>${cost$(d.to)}</b>${e.note ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
+    if (e.reason === 'mapped' || e.reason === 'unmapped') {
+      const chan = /walmart/i.test(d.source) ? 'Walmart' : /ebay/i.test(d.source) ? 'eBay' : /temu/i.test(d.source) ? 'Temu' : (d.source || 'a channel');
+      return `${sku(e.sku)} <span class="sh-dim">${e.reason === 'mapped' ? 'linked to' : 'no longer linked to'}</span> <span class="mono">${esc(d.channelSku || '?')}</span> <span class="sh-dim">on ${esc(chan)}${d.subSource && d.subSource !== d.source ? ` (${esc(d.subSource)})` : ''}</span>`;
+    }
+    if (e.reason === 'wholesale' || e.reason === 'wholesale-void') {
+      const who = [e.note, e.ref ? `#${e.ref}` : ''].filter(Boolean).join(' · ');
+      return `${e.delta > 0 ? '+' : ''}${n} × ${sku(e.sku)}${who ? ` <span class="sh-dim">(${esc(who)})</span>` : ''}`;
+    }
+    if (e.reason === 'dropship') {
+      const dl = Number(e.delta) || 0; const to = e.level_after;
+      const move = to === null || to === undefined ? `<b>${dl > 0 ? '+' : '−'}${Math.abs(dl)}</b>` : `${to - dl} → <b>${esc(to)}</b>`;
+      return `${sku(e.sku)} <span class="sh-dim">dropship pad</span> ${move}${ref}${shMarks(e)}`;
+    }
+    if (e.reason === 'return' && ordered && ordered[1].toUpperCase() !== e.sku) return `${n} × ${sku(ordered[1])} <span class="sh-arrow">→</span> ${sku(e.sku)}${ref}`;
+    const tail = e.reason === 'wfs' ? ' <span class="sh-dim">to WFS</span>'
+      : e.reason === 'substitution' ? ' <span class="sh-dim">substitution</span>'
+      : (e.reason === 'return-edit' || e.reason === 'return-delete') ? ` <span class="sh-dim">${e.delta > 0 ? 'restocked' : 'taken back'}</span>`
+      : e.reason === 'revert' ? ' <span class="sh-dim">reverted</span>'
+      : e.reason === 'correction' ? ' <span class="sh-dim">corrected</span>'
+      : e.reason === 'bulk-add' ? ' <span class="sh-dim">received</span>'
+      : e.reason === 'new-sku' ? ' <span class="sh-dim">new listing</span>'
+      : '';
+    return `${n} × ${sku(e.sku)}${tail}${ref}${shMarks(e)}`;
+  }
+  function shMarks(e) {
+    return (e.marks || []).map((m) => (m.kind === 'delete'
+      ? ` <button type="button" class="sh-mark is-rev sh-goto" data-goto="${esc(m.gid)}" title="Deleted on ${shDayShort(m.day)} by ${esc(String(m.computer || '').toUpperCase())}. Click to see.">deleted</button>`
+      : ` <button type="button" class="sh-mark is-fix sh-goto" data-goto="${esc(m.gid)}" title="Corrected on ${shDayShort(m.day)} by ${esc(String(m.computer || '').toUpperCase())}. Click to see.">corrected → ${e.eff ? `${esc(e.eff.qty)} ×${e.eff.sku !== e.sku ? ` ${esc(e.eff.sku)}` : ''}` : ''}</button>`)).join('');
+  }
+  function shRowHtml(e) {
+    const act = shActionOf(e); const A = SH_ACT[act];
+    const isSale = e.reason === 'sale';
+    const who = isSale ? (pcKey(e.market) || 'SALE') : (pcKey(e.computer) || '—');
+    const title = [e.note && !/ordered /.test(e.note) ? e.note : '', e.change_source || ''].filter(Boolean).join(' · ');
+    const linked = SH_LINK.has(e.reason) || !!e.link_gid;
+    return `<div class="sh-line${linked ? ' is-linked' : ''}${e.eff && e.eff.deleted ? ' is-deleted' : ''}" data-gid="${esc(e.gid || '')}" title="${esc(title)}">
+      <button type="button" class="sh-act ${A.cls}" data-act="${act}" title="Show only ${A.word.toLowerCase()}">${A.word}</button>
+      <span class="sh-text">${shWhat(e)}</span>
+      <span class="sh-when">${dateUS(e.day)} <span class="sh-dim">${clock(e.created_at)}</span></span>
+      <span class="sh-pc${isSale ? ' is-ext' : ''}" title="${esc(isSale ? `Sold on ${who}` : `Computer: ${e.computer || 'unknown'}${e.by ? ` · by ${e.by}` : ''}`)}">${isSale ? ICON_CART : ICON_PC}${esc(who)}${e.by ? ` <span class="sh-ini">${esc(e.by)}</span>` : ''}</span>
+    </div>`;
+  }
+
+  const hs = { rows: [], pcs: new Set(), acts: new Set(), days: 7, shown: 300 };
+  async function loadStockHistory(keep) {
+    if (!keep) { loading(); hs.shown = 300; }
+    const r = await api('GET', `/api/stockhistory?days=${hs.days}`);
+    if (viewNow() !== 'stockhistory') return;
+    hs.rows = r.rows || [];
+    // a filter menu someone has open stays open through a live update
+    if (!keep || !document.querySelector('.dd-menu:not(.hide)')) drawShTools();
+    drawShList();
+  }
+  function drawShTools() {
+    const pcs = [...new Set(hs.rows.map(shPcOf).filter(Boolean))].sort();
+    for (const v of [...hs.pcs]) if (!pcs.includes(v)) hs.pcs.delete(v);
+    $('barTools').replaceChildren(
+      dd('Everyone', hs.pcs, pcs, { count: (v) => hs.rows.filter((e) => shPcOf(e) === v).length, onChange: drawShList }),
+      dd('All actions', hs.acts, SH_ORDER, { label: shWord, dot: (k) => SH_ACT[k].cls, count: (k) => hs.rows.filter((e) => shActionOf(e) === k).length, onChange: drawShList }),
+      rangeSelect(hs, () => loadStockHistory()));
+  }
+  function drawShList() {
+    const q = $('q').value.trim().toUpperCase();
+    const shown = hs.rows.filter((e) => (!hs.pcs.size || hs.pcs.has(shPcOf(e))) && (!hs.acts.size || hs.acts.has(shActionOf(e)))
+      && (!q || `${e.sku} ${e.ref} ${(e.dataObj && (e.dataObj.fromSku || '')) || ''} ${(e.dataObj && (e.dataObj.toSku || '')) || ''}`.toUpperCase().includes(q)));
+    const range = { 0: 'today', 7: 'the last 7 days', 30: 'the last 30 days' }[hs.days];
+    $('secLabel').textContent = `Stock history · ${shown.length.toLocaleString('en-US')} ${shown.length === 1 ? 'change' : 'changes'}`;
+    if (!shown.length) return $('view').replaceChildren(el('div', { class: 'tablewrap' }, el('div', { class: 'empty', text: hs.rows.length ? 'No changes match those filters.' : `Nothing logged ${range === 'today' ? 'yet today' : `in ${range}`}.` })));
+    const list = el('div', { class: 'sh-list' });
+    list.innerHTML = shown.slice(0, hs.shown).map(shRowHtml).join('');
+    list.addEventListener('click', (ev) => {
+      const pill = ev.target.closest('.sh-act'); const sku = ev.target.closest('.sh-sku'); const go = ev.target.closest('.sh-goto');
+      if (go) {
+        const line = [...list.querySelectorAll('.sh-line')].find((n) => n.dataset.gid === go.dataset.goto);
+        if (line) { line.scrollIntoView({ block: 'center', behavior: 'smooth' }); line.classList.remove('is-flash'); void line.offsetWidth; line.classList.add('is-flash'); }
+        return;
+      }
+      if (pill) { const a = pill.dataset.act; if (hs.acts.size === 1 && hs.acts.has(a)) hs.acts.clear(); else { hs.acts.clear(); hs.acts.add(a); } drawShTools(); drawShList(); return; }
+      if (sku) { $('q').value = sku.dataset.sku; drawShList(); }
+    });
+    $('view').replaceChildren(...[list, shown.length > hs.shown
+      ? el('button', { class: 'more', text: `Show more (${hs.shown.toLocaleString('en-US')} of ${shown.length.toLocaleString('en-US')})`, onclick: () => { hs.shown += 500; drawShList(); } }) : null].filter(Boolean));
+  }
+
+  /* ---------- Returns: the app's Returns log ---------- */
+  const COND = { new: 'New', openbox: 'Open box', used: 'Used', scrap: 'Scrap', different: 'Different return' };
+  const rl = { rows: [], shown: 400 };
+  async function loadReturns(keep) {
+    if (!keep) { loading(); rl.shown = 400; }
+    const r = await api('GET', '/api/records/return?full=1&limit=5000');
+    if (viewNow() !== 'returns') return;
+    rl.rows = r.rows || []; rows = rl.rows; total = r.total || rl.rows.length;
+    drawReturns();
+  }
+  function drawReturns() {
+    const k = kindNow();
+    $('barTools').replaceChildren(...(k && k.canWrite ? [el('button', { class: 'primary', text: 'Add a return', onclick: () => editReturn(null) })] : []));
+    const words = $('q').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const text = (r) => { const d = r.data; return [d.order_number, d.customer, d.tracking, d.received_by, d.note, d.source, ...(d.items || []).flatMap((i) => [i.sku, i.targetSku, i.received, COND[i.condition] || i.condition, i.note])].join(' ').toLowerCase(); };
+    const shown = words.length ? rl.rows.filter((r) => { const t = text(r); return words.every((w) => t.includes(w)); }) : rl.rows;
+    $('secLabel').textContent = `Returns log — ${shown.length.toLocaleString('en-US')} ${shown.length === 1 ? 'entry' : 'entries'}`;
+    const missing = () => el('span', { class: 'missing', text: '—' });
+    const head = el('tr', {}, [gutterHead(), ...[['PO #'], ['Customer name'], ['Tracking #'], ['Date received'], ['Returned SKU'], ['Condition'], ['Units', 'num'], ['Price', 'num'], ['Received by'], ['Notes']]
+      .map(([c, cls]) => el('th', { class: cls || '', text: c }))]);
+    const body = [];
+    shown.slice(0, rl.shown).forEach((r, n) => {
+      const d = r.data;
+      const items = (d.items && d.items.length) ? d.items : [{}];
+      items.forEach((i, ii) => {
+        const target = i.condition === 'different' && (i.received || i.targetSku) ? (i.received || i.targetSku) : (i.targetSku && i.targetSku !== i.sku ? i.targetSku : '');
+        const note = i.note || d.note || '';
+        const c = (label, kids, cls, title) => el('td', { class: cls || '', 'data-label': label, title: title || undefined }, kids);
+        body.push(el('tr', { class: 'click', onclick: () => openRecord(r.id) }, [
+          el('td', { class: `gutter${d.unmatched ? ' unmatched' : ''}`, title: d.unmatched ? 'Not matched to a Linnworks order' : undefined, text: ii === 0 ? String(n + 1) : '' }),
+          c('PO #', d.order_number || missing(), 'mono', d.order_number),
+          c('Customer name', d.customer || missing(), '', d.customer),
+          c('Tracking #', d.tracking || missing(), 'mono', d.tracking),
+          c('Date received', dateUS(d.created_at), 'mono'),
+          c('Returned SKU', [i.sku ? el('span', { text: i.sku }) : missing(), target ? el('div', { class: 'target', title: i.targetSku ? `Stock landed on ${i.targetSku}` : 'What came back', text: `→ ${target}` }) : null], 'mono'),
+          c('Condition', i.sku ? el('span', { class: `cond is-${i.condition || 'new'}` }, [el('i'), COND[i.condition] || i.condition || '']) : missing()),
+          c('Units', String(Number(i.qty) || 1), 'mono num'),
+          c('Price', Number(i.price) ? plainMoney(i.price) : missing(), 'mono num'),
+          c('Received by', [d.received_by || '', d.station ? el('span', { class: 'by-sub', text: d.station }) : null]),
+          c('Notes', note, '', note),
+        ]));
+      });
+    });
+    const foot = shown.length > rl.shown ? el('button', { class: 'more', text: `Show more (${rl.shown} of ${shown.length})`, onclick: () => { rl.shown += 500; drawReturns(); } }) : null;
+    $('view').replaceChildren(...[el('div', { class: 'tablewrap' }, shown.length ? el('table', { class: 'retlog' }, [el('thead', {}, head), el('tbody', {}, body)])
+      : el('div', { class: 'empty', text: rl.rows.length ? 'Nothing matches that search.' : 'No returns yet.' })), foot].filter(Boolean));
+  }
+
+  /* ---------- Ship: the app's Labels table ---------- */
+  const lb = { rows: [], days: 7, kind: '' };
+  async function loadLabels(keep) {
+    if (!keep) loading();
+    const r = await api('GET', '/api/records/label?full=1&limit=5000');
+    if (viewNow() !== 'labels') return;
+    lb.rows = (r.rows || []).map((x) => ({ ...x.data, _id: x.id }));
+    drawLabels();
+  }
+  function drawLabels() {
+    const usd2 = (v) => `$${(Number(v) || 0).toFixed(2)}`;
+    const since = dayKey(Date.now() - lb.days * 86400000);
+    // PO#s with more than one live label, over the last 30 days, on every computer and both accounts
+    const since30 = dayKey(Date.now() - 30 * 86400000);
+    const dups = {};
+    for (const l of lb.rows) {
+      if (l.kind === 'return' || l.voided_at || l.test || !l.reference || dayKey(l.created_at) < since30) continue;
+      const key = String(l.reference).trim().toUpperCase(); dups[key] = (dups[key] || 0) + 1;
+    }
+    for (const key of Object.keys(dups)) if (dups[key] < 2) delete dups[key];
+    const dupOf = (l) => (l.kind === 'return' || l.voided_at || !l.reference ? 0 : dups[String(l.reference).trim().toUpperCase()] || 0);
+    const q = $('q').value.trim().toLowerCase();
+    const dupOnly = lb.kind === 'dup';
+    const inRange = lb.rows.filter((l) => dayKey(l.created_at) >= (dupOnly ? since30 : since));
+    let shown = inRange.filter((l) => (dupOnly ? dupOf(l) > 0 : !lb.kind || (l.kind || 'ship') === lb.kind) && (!q || `${l.reference} ${l.tracking} ${l.party_name}`.toLowerCase().includes(q)));
+    if (dupOnly) shown = shown.slice().sort((a, b) => String(a.reference).localeCompare(String(b.reference)) || String(a.created_at).localeCompare(String(b.created_at)));
+    const live = shown.filter((l) => !l.voided_at);
+    const range = { 0: 'today', 7: 'last 7 days', 30: 'last 30 days' }[lb.days];
+    const nDup = Object.keys(dups).length;
+    const chip = (id, label, cls) => el('button', { class: `${lb.kind === id ? 'on' : ''} ${cls || ''}`, text: label, onclick: () => { lb.kind = id; drawLabels(); } });
+    $('barTools').replaceChildren(
+      el('span', { class: 'lab-sum', text: `${range} · ${live.length} label${live.length === 1 ? '' : 's'} · ${usd2(live.reduce((t, l) => t + (Number(l.cost) || 0), 0))} · every computer` }),
+      el('div', { class: 'seg' }, [chip('', 'All'), chip('ship', 'Ship'), chip('return', 'Return'), nDup || dupOnly ? chip('dup', nDup ? `Duplicates · ${nDup}` : 'Duplicates', 'dupchip') : null]),
+      rangeSelect(lb, drawLabels));
+    $('secLabel').textContent = 'Labels';
+    const fmtShort = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
+    const head = el('tr', {}, [...['Time', 'Reference', 'Type', 'Service', 'Account', 'Computer', 'Tracking'].map((c) => el('th', { text: c })), el('th', { class: 'num', text: 'Value' }), el('th', { class: 'num', text: 'Cost' })]);
+    const body = shown.map((l) => {
+      const mk = /walmart/i.test(l.source) ? 'Walmart' : /ebay/i.test(l.source) ? 'eBay' : /temu/i.test(l.source) ? 'Temu' : '';
+      const n = dupOf(l);
+      const c = (label, kids, cls) => el('td', { class: cls || '', 'data-label': label }, kids);
+      return el('tr', { class: `click${l.voided_at ? ' is-void' : ''}`, onclick: () => openRecord(l._id) }, [
+        c('Time', `${lb.days || dupOnly ? `${fmtShort.format(new Date(l.created_at))} ` : ''}${clock(l.created_at)}`, 'mono'),
+        c('Reference', [l.reference || l.party_name || '', l.reference ? (l.from_po ? null : el('small', { text: '· no PO#' })) : el('small', { text: '· no ref' }),
+          mk ? el('span', { class: `sp-mk ${mk.toLowerCase()}`, text: mk }) : null, n ? el('span', { class: 'sp-dup', title: `This PO# has ${n} live labels across every computer and both accounts`, text: `${n} labels` }) : null], 'mono'),
+        c('Type', [l.voided_at ? el('span', { class: 'sp-k void', text: 'Voided' }) : el('span', { class: `sp-k ${l.kind === 'return' ? 'return' : 'ship'}`, text: l.kind === 'return' ? 'Return' : 'Ship' }), l.test ? el('span', { class: 'sp-mk temu', text: 'Test' }) : null], 'kind'),
+        c('Service', l.service_name || ''), c('Account', l.account_name || ''), c('Computer', l.station || ''), c('Tracking', l.tracking || '', 'mono'),
+        c('Value', Number(l.value) ? usd2(l.value) : '—', 'mono num'), c('Cost', usd2(l.cost), 'mono num'),
+      ]);
+    });
+    $('view').replaceChildren(el('div', { class: 'tablewrap' }, shown.length ? el('table', { class: 'retlog labels' }, [el('thead', {}, head), el('tbody', {}, body)])
+      : el('div', { class: 'empty', text: dupOnly ? 'No PO# has more than one live label in the last 30 days.' : `No labels ${range === 'today' ? 'yet today' : `in the ${range}`}.` })));
   }
 
   /* ---------- history ---------- */

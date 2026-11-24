@@ -41,10 +41,14 @@ function makeDemoFolder(dir) {
   put('returns-NICK.jsonl', []);
 
   /* stock */
-  const sl = (st, i, n, sku, delta, after, reason, note, by) => ({ gid: `${st}:demo-${i}`, created_at: day(n, 15, i), day: day(n).slice(0, 10), sku, location_id: 'loc-1', delta, level_after: after, reason, change_source: `${by} - ${note}`, ref: '', note, computer: st, by, link_kind: '', link_gid: '', data: '' });
-  put('stocklog-STOCK-ROOM.jsonl', [sl('STOCK-ROOM', 1, 5, 'X210-64GB-GRAY', -1, 41, 'sold', 'order packed', 'IS'), sl('STOCK-ROOM', 2, 6, 'S26-256GB-BLUE', -2, 58, 'sold', 'order packed', 'IS'), sl('STOCK-ROOM', 3, 7, 'X306-128GB-GREEN', -50, 120, 'wfs', 'sent to WFS', 'IS')]);
-  put('stocklog-RETURNS-ROOM-PC.jsonl', returnsRoom.slice(0, 8).map((r, i) => sl('RETURNS-ROOM-PC', i + 1, 3 + i, r.rec.items[0].targetSku, 1, 10 + i, 'returned', `return ${r.rec.order_number}`, 'RM')));
-  put('stocklog-IMRAN-WORK-PC.jsonl', [sl('IMRAN-WORK-PC', 1, 4, 'S26-ULTRA-512GB-BLACK', 60, 60, 'received', 'pallet received', 'IM'), sl('IMRAN-WORK-PC', 2, 11, 'BUDS-3-WHITE', 1, 1, 'edit', 'count corrected', 'IM')]);
+  // the reasons DWS Stock itself writes: a hand-set count, a WFS shipment, a
+  // return (with what was ordered when it landed on a graded twin), a bulk
+  // receive, and a correction that points back at the line it corrects
+  const sl = (st, i, n, sku, delta, after, reason, note, by, extra = {}) => ({ gid: `${st}:demo-${i}`, created_at: day(n, 15, i), day: day(n).slice(0, 10), sku, location_id: 'loc-1', delta, level_after: after, reason, change_source: `${by} - ${note}`, ref: '', note, computer: st, by, link_kind: '', link_gid: '', data: '', ...extra });
+  put('stocklog-STOCK-ROOM.jsonl', [sl('STOCK-ROOM', 1, 5, 'X210-64GB-GRAY', null, 41, 'set', 'set to 41', 'IS'), sl('STOCK-ROOM', 2, 6, 'S26-256GB-BLUE', -2, 58, 'other', 'damaged in the stock room', 'IS'), sl('STOCK-ROOM', 3, 7, 'X306-128GB-GREEN', -50, 120, 'wfs', '', 'IS', { ref: 'WFS-1107' })]);
+  put('stocklog-RETURNS-ROOM-PC.jsonl', returnsRoom.slice(0, 8).map((r, i) => { const it = r.rec.items[0]; return sl('RETURNS-ROOM-PC', i + 1, 3 + i, it.targetSku, 1, 10 + i, 'return', it.targetSku === it.sku ? it.condition : `ordered ${it.sku}`, 'RM', { ref: r.rec.order_number }); }));
+  put('stocklog-IMRAN-WORK-PC.jsonl', [sl('IMRAN-WORK-PC', 1, 4, 'S26-ULTRA-512GB-BLACK', 60, 60, 'bulk-add', 'pallet received', 'IM'),
+    sl('IMRAN-WORK-PC', 2, 11, 'S26-ULTRA-512GB-BLACK', -2, 58, 'edit-qty', 'counted 58 on the pallet', 'IM', { link_kind: 'edit', link_gid: 'IMRAN-WORK-PC:demo-1', data: JSON.stringify({ fromQty: 60, toQty: 58, fromSku: 'S26-ULTRA-512GB-BLACK', toSku: 'S26-ULTRA-512GB-BLACK' }) })]);
   put('stockimports-IMRAN-WORK-PC.jsonl', [{ id: 'imp-1', ts: day(11, 19), station: 'IMRAN-WORK-PC', mode: 'edit', file: '', rows: [{ sku: 'BUDS-3-WHITE', before: 0, qty: 1, after: 1 }], skipped: [] }]);
   put('costs-NICK.jsonl', [{ sku: 'S26-256GB-BLUE', cost: 655, updated_at: day(6), station: 'NICK', by: '' }, { sku: 'X620-128GB-GRAY', cost: 438, updated_at: day(7), station: 'NICK', by: '' }]);
   put('costs-IMRAN-MACBOOK-PRO.jsonl', [{ sku: 'S26-256GB-BLUE', cost: 645, updated_at: day(12), station: 'IMRAN-MACBOOK-PRO', by: 'IM' }, { sku: 'S26-ULTRA-512GB-BLACK', cost: 1018, updated_at: day(8), station: 'IMRAN-MACBOOK-PRO', by: 'IM' }]);

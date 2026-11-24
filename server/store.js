@@ -425,14 +425,16 @@ function api(db, file) {
     db.prepare("INSERT OR REPLACE INTO meta (k, v) VALUES ('runTotals', '1')").run();
   }
 
-  function list(kind, { q = '', limit = 100, offset = 0 } = {}) {
+  // `full` hands back each record's own fields too, for the screens that
+  // draw a record the way DWS Stock does (the Returns log, the Labels table)
+  function list(kind, { q = '', limit = 100, offset = 0, full = false } = {}) {
     const where = ['kind = ?', 'deleted = 0']; const args = [kind];
     for (const word of str(q).toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6)) { where.push('search LIKE ?'); args.push(`%${word}%`); }
     const total = db.prepare(`SELECT COUNT(*) AS n FROM records WHERE ${where.join(' AND ')}`).get(...args).n;
     const rows = db.prepare(`SELECT kind, id, data, version, deleted, updated_at, updated_by, created_at, created_by, station FROM records
       WHERE ${where.join(' AND ')} ORDER BY happened_at DESC, id DESC LIMIT ? OFFSET ?`)
-      .all(...args, Math.min(500, Number(limit) || 100), Math.max(0, Number(offset) || 0));
-    return { total, rows: rows.map((r) => shape(r, false)) };
+      .all(...args, Math.min(full ? 5000 : 500, Number(limit) || 100), Math.max(0, Number(offset) || 0));
+    return { total, rows: rows.map((r) => shape(r, !!full)) };
   }
 
   const changedKeys = (a, b) => [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])]
@@ -551,6 +553,83 @@ function api(db, file) {
     return { ok: true };
   }
 
+  /* ---------- stock history ---------- */
+  // The same feed as DWS Stock's Stock history window: every stock line
+  // the computers logged, newest first, each correction pointing back at
+  // the line it corrects and each corrected line carrying its marks, plus
+  // the sales (one line per unit sold). `days` 0 is today, in US Eastern.
+  // Cost lines hold dollar figures, so they are left out unless asked for.
+  const easternDay = (v) => {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  };
+  function stockHistory({ days = 7, sales = true, costs = false, now = Date.now() } = {}) {
+    const n = Math.max(0, Math.min(366, Math.floor(Number(days) || 0)));
+    const sinceDay = easternDay(now - n * 86400000);
+    const coarse = new Date(now - (n + 2) * 86400000).toISOString();
+    const parse = (text) => { try { return JSON.parse(text); } catch { return null; } };
+    const line = (d) => {
+      const data = typeof d.data === 'string' ? (parse(d.data) || {}) : (d.data || {});
+      return { gid: str(d.gid), created_at: str(d.created_at), day: str(d.day) || easternDay(d.created_at), sku: str(d.sku).toUpperCase(),
+        delta: d.delta === null || d.delta === undefined ? null : Number(d.delta), level_after: d.level_after ?? null, reason: str(d.reason),
+        ref: str(d.ref), note: str(d.note), computer: str(d.computer), by: str(d.by), change_source: str(d.change_source),
+        link_gid: str(d.link_gid || d.linkGid), link_kind: str(d.link_kind || d.linkKind), dataObj: data };
+    };
+    // every correction ever made, under the line it points at: a correction
+    // can be made long after its line, so this is not limited to the range
+    const links = new Map();
+    for (const r of db.prepare("SELECT data FROM records WHERE kind = 'stock_change' AND deleted = 0 AND (data LIKE '%link_gid%' OR data LIKE '%linkGid%') ORDER BY happened_at ASC, id ASC").all()) {
+      const d = parse(r.data); if (!d) continue;
+      const l = line(d); if (!l.link_gid) continue;
+      if (!links.has(l.link_gid)) links.set(l.link_gid, []);
+      links.get(l.link_gid).push(l);
+    }
+    const undone = (l) => (links.get(l.gid) || []).some((x) => x.link_kind === 'delete');
+    const effective = (o) => {
+      const isSet = o.delta === null;
+      const eff = { sku: o.sku, qty: isSet ? Number(o.level_after) : Math.abs(o.delta || 0), isSet, deleted: false, corrected: false };
+      for (const l of links.get(o.gid) || []) {
+        if (undone(l)) continue;
+        if (l.link_kind === 'delete') { eff.deleted = true; continue; }
+        if (l.link_kind === 'edit') {
+          if (l.dataObj.toSku) eff.sku = str(l.dataObj.toSku).toUpperCase();
+          if (Number.isFinite(Number(l.dataObj.toQty))) eff.qty = Number(l.dataObj.toQty);
+          eff.corrected = true;
+        }
+      }
+      return eff;
+    };
+    const rows = [];
+    for (const r of db.prepare("SELECT data FROM records WHERE kind = 'stock_change' AND deleted = 0 AND happened_at >= ? ORDER BY happened_at DESC").all(coarse)) {
+      const d = parse(r.data); if (!d) continue;
+      const l = line(d);
+      if (l.day < sinceDay) continue;
+      if (l.reason === 'cost' && !costs) continue;
+      l.eff = effective(l);
+      if (l.link_gid) {
+        const t = raw('stock_change', l.link_gid);
+        const td = t ? line(parse(t.data) || {}) : null;
+        l.target = td ? { gid: td.gid, day: td.day, computer: td.computer, sku: td.sku, reason: td.reason } : null;
+      }
+      l.marks = (links.get(l.gid) || []).filter((k) => !undone(k)).map((k) => ({ gid: k.gid, kind: k.link_kind, day: k.day, computer: k.computer }));
+      rows.push(l);
+    }
+    if (sales) {
+      for (const r of db.prepare("SELECT data FROM records WHERE kind = 'sale' AND deleted = 0 AND happened_at >= ?").all(coarse)) {
+        const d = parse(r.data); if (!d || !d.ts) continue;
+        const day = easternDay(d.ts);
+        if (day < sinceDay) continue;
+        for (const ln of d.lines || []) {
+          if (!ln || !ln.c) continue;
+          rows.push({ gid: '', created_at: str(d.ts), day, sku: str(ln.c).toUpperCase(), delta: -(Number(ln.q) || 1), level_after: null, reason: 'sale',
+            ref: str(d.ref), note: '', computer: '', by: '', market: str(d.source).toUpperCase(), dataObj: {}, marks: [] });
+        }
+      }
+    }
+    rows.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+    return { sinceDay, rows };
+  }
+
   /* ---------- backup ---------- */
   // a full, consistent copy of the database; the newest `keep` are kept
   function backup(dir, keep = 14) {
@@ -574,7 +653,7 @@ function api(db, file) {
     file, tx, close: () => db.close(), onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     userCount, listUsers, createUser, updateUser, publicUser, login, session, logout,
     logHistory, history, historyEntry,
-    get, detail, runStatement, list, create, update, remove, importPut, overview, counts,
+    get, detail, runStatement, stockHistory, list, create, update, remove, importPut, overview, counts,
     changed: (ev) => notify(ev || {}),
     claimOrder, releaseOrder, backup, meta,
   };
