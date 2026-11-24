@@ -164,6 +164,54 @@ const ok = (name) => { passed++; console.log(`  ok  ${name}`); };
   assert.equal((await call('GET', '/api/records/label?full=1', { token: nick })).json.rows.find((r) => r.data.voided_at).data.reference, 'PO-211-90004111');
   ok('the Returns log and the Labels table get each record whole; the plain lists stay light');
 
+  /* ---- the app's own pages, when the server runs inside DWS Stock ---- */
+  assert.deepEqual((await call('GET', '/api/me', { token: owner })).json.app, [], 'on its own, the server has no app to ask');
+  assert.equal((await call('GET', '/api/app/stock', { token: owner })).status, 404);
+  {
+    let asked = 0; let fail = false;
+    const fake = (name) => {
+      asked++;
+      if (fail) throw new Error('Linnworks did not answer');
+      if (name === 'stock') {
+        return { ok: true, locationId: 'h', locationName: 'Digital World Shop', items: [{ sku: 'X210-64GB-GRAY', title: 'Tab', cost: 151.5, secret: 'x',
+          levels: [{ locationId: 'h', locationName: 'Digital World Shop', stockLevel: 41, inOrders: 2, available: 39, minimumLevel: 25 }, { locationId: 'w', locationName: 'WFS FULFILLED', stockLevel: 21, inOrders: 0, available: 21, minimumLevel: 0 }] }] };
+      }
+      if (name === 'recovery') return { ok: true, runs: [{ id: 'r' }], items: [], logRows: 3, settings: { email: 'someone@example.com' } };
+      return { ok: true, channels: [{ key: 'EBAY', source: 'EBAY', fluctuates: false }], products: [{ sku: 'A', stock: 1, stockItemId: 'id', channels: { EBAY: [{ csku: 'A', price: 9, refId: 'ref' }] }, variations: [] }] };
+    };
+    const appData = path.join(tmp, 'data-app');
+    const s3 = await start({ data: appData, port: 0, host: '127.0.0.1', quiet: true, app: fake });
+    const at = (srvX) => `http://127.0.0.1:${srvX.port}`;
+    const c3 = async (url, token, srvX = s3) => { const r = await fetch(at(srvX) + url, { headers: token ? { Authorization: `Bearer ${token}` } : {} }); return { status: r.status, json: await r.json().catch(() => ({})) }; };
+    const post3 = (url, body, token) => fetch(at(s3) + url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }).then((r) => r.json());
+    await post3('/api/setup', { username: 'boss', name: 'Boss', password: 'owner-pass-1' });
+    const own3 = (await post3('/api/login', { username: 'boss', password: 'owner-pass-1', station: 'T' })).token;
+    await post3('/api/users', { username: 'viewer', name: 'Viewer', password: 'viewer-pass-1', role: 'viewer', extra: [] }, own3);
+    const view3 = (await post3('/api/login', { username: 'viewer', password: 'viewer-pass-1', station: 'T' })).token;
+    assert.deepEqual((await c3('/api/me', own3)).json.app, ['stock', 'pricing', 'recovery']);
+    assert.deepEqual((await c3('/api/me', view3)).json.app, ['stock', 'pricing'], 'Recovery needs the Recovery permission');
+    const st = (await c3('/api/app/stock', own3)).json;
+    assert.deepEqual([st.items[0].home, st.items[0].wfs, st.items[0].cost, st.wfsName], [[41, 2, 39, 25], [21, 0, 21, 0], 151.5, 'WFS FULFILLED']);
+    assert.equal(st.items[0].secret, undefined, 'only what the page draws is sent');
+    const stView = (await c3('/api/app/stock', view3)).json;
+    assert.deepEqual([stView.costs, stView.items[0].cost], [false, undefined], 'costs go only to logins that may see costs');
+    assert.equal(asked, 1, 'one answer serves everyone for a minute');
+    assert.equal((await c3('/api/app/recovery', view3)).status, 403);
+    assert.equal((await c3('/api/app/recovery', own3)).json.settings, undefined);
+    assert.equal((await c3('/api/app/pricing', view3)).json.products[0].channels.EBAY[0].price, 9);
+    assert.equal((await c3('/api/app/stock')).status, 401);
+    assert.equal((await c3('/api/app/settings', own3)).status, 404, 'only the three pages can be asked for');
+    await s3.close();
+    fail = true;
+    const s4 = await start({ data: appData, port: 0, host: '127.0.0.1', quiet: true, app: fake });
+    const bad = (await c3('/api/app/stock', own3, s4)).json;
+    assert.deepEqual([bad.ok, bad.error], [false, 'Linnworks did not answer']);
+    fail = false;
+    assert.equal((await c3('/api/app/stock', own3, s4)).json.ok, true, 'a failure is not kept');
+    await s4.close();
+  }
+  ok('inside DWS Stock the server shows the app\'s own stock, prices and Recovery, by permission');
+
   /* ---- two people on one return ---- */
   const a = (await call('GET', `/api/records/return/${encodeURIComponent(rid)}`, { token: rma })).json;
   const b = (await call('GET', `/api/records/return/${encodeURIComponent(rid)}`, { token: owner })).json;

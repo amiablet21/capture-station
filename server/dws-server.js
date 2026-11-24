@@ -40,7 +40,18 @@ const ASSETS = {
 };
 const MAX_BODY = 2 * 1024 * 1024;
 
-function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, quiet = false } = {}) {
+// `app`: when the server runs inside DWS Stock, a function that asks the
+// app itself for what its own Stock, Pricing and Recovery pages show
+// (name -> a promise of that page's data). The server's page then draws
+// the same figures the app does. Without it (run on its own with
+// `npm run server`) those screens are left out and the lists remain.
+const APP_FEEDS = {
+  stock: { ttl: 60000, can: () => true },
+  pricing: { ttl: 120000, can: () => true },
+  recovery: { ttl: 30000, can: (user) => store.canRead(user, 'wm_run') },
+};
+
+function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, quiet = false, app = null } = {}) {
   const db = store.open(path.join(data, 'dws-server.sqlite'));
   const log = (...a) => { if (!quiet) console.log(new Date().toISOString(), ...a); };
 
@@ -48,6 +59,33 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
   const tries = new Map();
   const locked = (key) => { const t = tries.get(key); return !!t && t.n >= 8 && Date.now() - t.at < 5 * 60000; };
   const miss = (key) => { const t = tries.get(key); tries.set(key, { n: t && Date.now() - t.at < 5 * 60000 ? t.n + 1 : 1, at: Date.now() }); };
+
+  /* ---------- the app's own pages, for the screens that mirror them ---------- */
+  const feedCache = new Map();
+  // only what the page draws leaves the building; costs go to logins that may see costs
+  function shapeFeed(name, out, user) {
+    if (name === 'stock') {
+      const costs = store.canRead(user, 'cost');
+      const wfs = (out.items || []).flatMap((it) => it.levels || []).find((l) => /wfs/i.test(l.locationName || ''));
+      const lvl = (it, id) => { const l = (it.levels || []).find((x) => x.locationId === id); return l ? [Number(l.stockLevel) || 0, Number(l.inOrders) || 0, Number(l.available) || 0, Number(l.minimumLevel) || 0] : null; };
+      return { ok: true, at: new Date().toISOString(), locationName: out.locationName || 'warehouse', wfsName: wfs ? wfs.locationName : '', costs,
+        items: (out.items || []).map((it) => ({ sku: it.sku, title: it.title || '', barcode: it.barcode || '', image: it.image || '', composite: !!it.isComposite,
+          ...(costs ? { cost: Number(it.cost) || 0 } : {}), home: lvl(it, out.locationId), wfs: wfs ? lvl(it, wfs.locationId) : null })) };
+    }
+    if (name === 'pricing') {
+      const line = (l) => ({ csku: l.csku, price: l.price, lwPrice: l.lwPrice, fromSales: !!l.fromSales, approx: !!l.approx, wfs: !!l.wfs, got: l.got || null,
+        move: l.ph && l.ph.last && l.ph.since ? { from: l.ph.last.from, to: l.ph.last.to, ts: l.ph.last.ts, mode: l.ph.last.mode, units: l.ph.since.units } : null });
+      const prod = (p) => ({ sku: p.sku, stock: p.stock, image: p.image || '', avgBy: p.avgBy || null,
+        channels: Object.fromEntries(Object.entries(p.channels || {}).map(([k, list]) => [k, (list || []).map(line)])),
+        variations: (p.variations || []).map(prod) });
+      return { ok: true, at: new Date().toISOString(), channels: (out.channels || []).map((c) => ({ key: c.key, source: c.source, fluctuates: !!c.fluctuates })),
+        products: (out.products || []).map(prod), stale: !!out.stale };
+    }
+    if (name === 'recovery') {
+      return { ok: true, at: new Date().toISOString(), runs: out.runs || [], items: out.items || [], logRows: out.logRows || 0 };
+    }
+    return { ok: false, error: 'Not available.' };
+  }
 
   /* ---------- live updates (Server-Sent Events) ---------- */
   const streams = new Set();
@@ -114,7 +152,7 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
     if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
       try {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
-          'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'" });
+          'Content-Security-Policy': "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'" });
         return res.end(fs.readFileSync(PAGE));
       } catch { return send(res, 500, 'The page file is missing.'); }
     }
@@ -172,6 +210,7 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
       if (seg[1] === 'logout' && req.method === 'POST') { db.logout(token); return send(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0` }); }
       if (seg[1] === 'me' && req.method === 'GET') {
         return send(res, 200, { user: db.publicUser(user), station: sess.station, areas: db.overview(user),
+          app: app ? Object.keys(APP_FEEDS).filter((n) => APP_FEEDS[n].can(user)) : [],
           roles: isAdmin ? Object.entries(store.ROLES).map(([id, r]) => ({ id, label: r.label, perms: r.perms })) : undefined,
           perms: isAdmin ? store.PERMS : undefined,
           backup: isAdmin ? { last: db.meta.get('lastBackup') || '', error: db.meta.get('lastBackupError') || '', second: !!backupDir } : undefined });
@@ -184,6 +223,24 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
         streams.add(s);
         req.on('close', () => streams.delete(s));
         return undefined;
+      }
+
+      // What the app's own page shows, asked of the app this server runs in.
+      // One answer serves everyone for a short while, so a phone left open
+      // does not keep the app calling Linnworks.
+      if (seg[1] === 'app' && req.method === 'GET') {
+        const feed = APP_FEEDS[seg[2]];
+        if (!feed || !app) return send(res, 404, { error: 'Not available on this server.' });
+        if (!feed.can(user)) return send(res, 403, { error: 'Your login cannot see this.' });
+        let hit = feedCache.get(seg[2]);
+        if (!hit || Date.now() - hit.at > feed.ttl) {
+          hit = { at: Date.now(), value: Promise.resolve().then(() => app(seg[2])).catch((e) => ({ ok: false, error: String((e && e.message) || e) })) };
+          feedCache.set(seg[2], hit);
+          hit.value.then((v) => { if (!v || !v.ok) feedCache.delete(seg[2]); }); // a failure is not kept
+        }
+        const out = await hit.value;
+        if (!out || !out.ok) return send(res, 200, { ok: false, error: (out && out.error) || 'DWS Stock on the server computer did not answer.' });
+        return send(res, 200, shapeFeed(seg[2], out, user));
       }
 
       // Stock history, as DWS Stock's own window shows it. Cost lines need

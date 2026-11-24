@@ -9143,6 +9143,15 @@ async function startOfficeServer() {
   await officeserver.configure({
     enabled: !!cfg.enabled, port: cfg.port, backupDir: cfg.backupDir, userData: app.getPath('userData'),
     folder: () => String(((config.load().returnsSync || {}).folder) || ''),
+    // The server page's Stock, Pricing and Recovery screens show what this
+    // app shows: three fixed, read-only calls into the app's own handlers,
+    // with no arguments from the browser.
+    app: (name) => {
+      const call = { stock: ['stock:get', {}], pricing: ['pricing:list', {}], recovery: ['recovery:state', undefined] }[name];
+      const fn = call && ipcHandlers.get(call[0]);
+      if (!fn) return { ok: false, error: 'DWS Stock is still starting.' };
+      return fn({ web: true }, call[1]);
+    },
   });
   if (app.isPackaged && !IS_TEST_RUN) {
     try { app.setLoginItemSettings({ openAtLogin: !!cfg.enabled }); } catch { /* not supported here */ }

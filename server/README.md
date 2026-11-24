@@ -58,6 +58,10 @@ Inside DWS Stock the office server does this on its own: every two minutes it co
 
 Recovery › Payment reports lists each Walmart payment period with what was payable and what went to the bank. Opening one shows its statement, worked out from the period's stored lines by the same code DWS Stock's Recovery page uses (`../src/main/recovery/statement.js`). `GET /api/records/wm_run/<id>/statement` returns it; it needs a login that can see Recovery.
 
+## The app's own pages
+
+When the server runs inside DWS Stock, its page shows Stock, Pricing and Recovery as the app does. `GET /api/app/stock`, `/api/app/pricing` and `/api/app/recovery` ask the app for what its own pages show and pass on only what the page draws. Costs need the costs permission and Recovery needs Recovery. Run on its own (`npm run server`) there is no app to ask, so those screens are left out and the record lists remain.
+
 ## Backups
 
 The server writes a full copy of the database into `dws-data/backups` once a day and keeps the newest 14. That copy is on the same computer, so set a second place that leaves the building, such as a folder Google Drive syncs:

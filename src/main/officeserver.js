@@ -33,12 +33,14 @@ async function stop() {
 // the server runs it tops itself up from that folder every two minutes
 // (only reading it), so what the computers save through Drive shows on the
 // server without anyone pressing Bring in.
-async function configure({ enabled, port, backupDir, userData, folder }) {
+// `app`: asks DWS Stock itself for what its Stock, Pricing and Recovery
+// pages show, so the server's page can draw the same thing (read only).
+async function configure({ enabled, port, backupDir, userData, folder, app }) {
   await stop();
   lastPort = Number(port) || 8790;
   if (!enabled) { error = ''; return; }
   try {
-    live = await start({ data: dataDir(userData), port: lastPort, host: '0.0.0.0', backupDir: backupDir || '', quiet: true });
+    live = await start({ data: dataDir(userData), port: lastPort, host: '0.0.0.0', backupDir: backupDir || '', quiet: true, app: typeof app === 'function' ? app : null });
     error = '';
     if (typeof folder === 'function') topUp = keepCurrent(live.db, folder);
   } catch (e) {

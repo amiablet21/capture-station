@@ -211,6 +211,63 @@
   .labels tr.is-void td:not(.kind) { color: var(--faint); text-decoration: line-through; }
   .seg button.dupchip { color: var(--neg-text); }
 
+
+  /* Orders: the app's capture sheet, a band per day */
+  .retlog tr.dayrow td { background: var(--surface-2); height: 28px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .retlog tr.dayrow td small { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; color: var(--faint); }
+  .retlog .gutter.ok { background: var(--pos-bg); color: var(--pos-text); font-weight: 600; }
+  .badge { display: inline-block; font-family: var(--font); font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-right: 8px; background: var(--surface-2); color: var(--muted); }
+  .badge.walmart { background: var(--blue-bg); color: var(--blue-text); } .badge.ebay { background: var(--pos-bg); color: var(--pos-text); } .badge.temu { background: var(--warn-bg); color: var(--warn-text); }
+
+  /* Stock: the app's stock sheet */
+  .sum-line { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+  .stock td.img { width: 44px; padding: 3px 6px; }
+  .stock td.img img, .stock td.img span { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; display: block; background: var(--surface-2); border: 1px solid var(--border-soft); }
+  .retlog th.sortable { cursor: pointer; user-select: none; }
+  .retlog th.sortable:hover { color: var(--text); }
+  .stock td.low { color: var(--neg-text); font-weight: 600; background: var(--neg-bg); }
+  .stock td .sub { display: block; font-family: var(--font); font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+  .feed-note { color: var(--faint); font-size: 11.5px; margin: 8px 2px 0; }
+  .feed-off { background: var(--warn-bg); color: var(--warn-text); border-radius: var(--r-card); padding: 10px 12px; font-size: 12.5px; }
+
+  /* Pricing: a product per row, a column per marketplace */
+  .pr-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow-x: auto; }
+  .pr-grid { display: grid; min-width: min-content; }
+  .pr-hc { background: var(--surface-2); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--faint); padding: 8px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); position: sticky; top: 0; }
+  .pr-cell { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); min-width: 0; font-size: 12.5px; }
+  .pr-num { font-family: var(--mono); font-size: 11px; color: var(--faint); background: var(--surface-2); text-align: center; }
+  .pr-prod { display: flex; gap: 10px; align-items: flex-start; }
+  .pr-prod img, .pr-prod .noimg { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; flex: 0 0 auto; background: var(--surface-2); border: 1px solid var(--border-soft); }
+  .pr-psku { font-family: var(--mono); font-weight: 600; font-size: 12.5px; display: block; overflow-wrap: anywhere; }
+  .pr-pstock { color: var(--muted); font-size: 11.5px; display: block; }
+  .pr-vartog { margin-top: 4px; padding: 1px 8px; font-size: 11px; border-radius: 999px; }
+  .pr-vrow .pr-cell { background: var(--surface-2); }
+  .pr-entry { padding: 2px 0 7px; }
+  .pr-entry + .pr-entry { border-top: 1px dashed var(--border); padding-top: 7px; }
+  .pr-line { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .pr-csku { font-family: var(--mono); font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+  .pr-price { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+  .pr-got { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .pr-got b.hot { color: var(--pos-text); }
+  .pr-move { color: var(--muted); font-size: 11px; }
+  .pr-up { color: var(--pos-text); } .pr-dn { color: var(--neg-text); }
+  .pr-none, .pr-dim { color: var(--faint); font-size: 11.5px; }
+  .pr-avg { color: var(--muted); font-size: 11px; border-top: 1px solid var(--border-soft); padding-top: 5px; margin-top: 2px; }
+
+  /* Recovery: the app's Import and Reconcile tables */
+  .retlog .sub2 { display: block; font-size: 11px; color: var(--faint); font-family: var(--font); }
+  .retlog td .muted { color: var(--muted); }
+  .retlog td.days.t0 { color: var(--neg-text); font-weight: 700; } .retlog td.days.t1 { color: var(--neg-text); } .retlog td.days.t2 { color: var(--warn-text); }
+  .retlog td.neg { color: var(--neg-text); font-weight: 600; } .retlog td.faint { color: var(--faint); }
+  .retlog tr.is-case td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .rc-type.wfs { color: var(--blue-text); font-weight: 600; }
+  .rc-by { color: var(--faint); }
+  .mark-chip { font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--pos-bg); color: var(--pos-text); }
+  .mark-chip.loss { background: var(--neg-bg); color: var(--neg-text); } .mark-chip.never { background: var(--warn-bg); color: var(--warn-text); }
+  .linklike { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; font-size: 12.5px; }
+  .linklike:hover { background: none; text-decoration: underline; text-underline-offset: 3px; }
+  .seg button small.red { color: var(--neg-text); font-weight: 700; }
+
   @media (max-width: 720px) {
     .topbar { padding: 10px 12px; }
     .tabs { padding: 0 6px; }
@@ -229,6 +286,19 @@
     .sh-when, .sh-pc { width: auto; flex: 1 1 40%; }
     .sh-when { text-align: left; }
     .dd-menu { position: fixed; left: 12px; right: 12px; top: auto; }
+    .retlog tr.dayrow td { display: block; }
+    .retlog tr.dayrow td::before { content: none; }
+    .pr-wrap { overflow-x: auto; }
+    table.retlog td, table.retlog td.mono { height: auto; }
+    .retlog td.num, .retlog th.num { text-align: left; }
+    table.stock tbody tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); padding: 8px 4px; }
+    table.stock td.img, table.stock td.gutter { display: none; }
+    table.stock td { display: block; padding: 2px 10px; }
+    table.stock td::before { display: block; font-size: 10.5px; }
+    table.stock td[data-label='SKU'] { grid-column: 1 / -1; font-weight: 600; padding-bottom: 6px; }
+    table.stock td[data-label='SKU']::before { content: none; }
+    table.stock td.num { font-size: 14px; white-space: nowrap; }
+    table.stock td.low { background: none; }
     tbody tr:last-child td { border-bottom: 0; }
     .kv { grid-template-columns: 105px 1fr; }
   }
@@ -383,11 +453,14 @@
     const out = [];
     const push = (area, label, kinds) => { if (kinds && kinds.length) out.push({ area, label, kinds }); };
     const ord = by.orders ? by.orders.kinds : [];
+    // the app's own live pages come first in their tab, when this server
+    // runs inside DWS Stock; the record lists follow them
+    const live = (name, id, label) => ((me.app || []).includes(name) ? [{ kind: id, label, live: true }] : []);
     push('orders', 'Orders', ord.filter((k) => k.kind === 'packed_order'));
-    push('stock', 'Stock', by.stock && by.stock.kinds);
-    push('pricing', 'Pricing', by.pricing && by.pricing.kinds);
+    push('stock', 'Stock', [...live('stock', 'app:stock', 'Stock'), ...((by.stock && by.stock.kinds) || [])]);
+    push('pricing', 'Pricing', [...live('pricing', 'app:pricing', 'Prices'), ...((by.pricing && by.pricing.kinds) || [])]);
     push('returns', 'Returns', by.returns && by.returns.kinds);
-    push('recovery', 'Recovery', by.recovery && by.recovery.kinds);
+    push('recovery', 'Recovery', [...(by.recovery ? [...live('recovery', 'app:periods', 'Periods'), ...live('recovery', 'app:reconcile', 'Reconcile')] : []), ...((by.recovery && by.recovery.kinds) || [])]);
     push('ship', 'Ship', ord.filter((k) => k.kind !== 'packed_order'));
     return out;
   }
@@ -399,14 +472,15 @@
     $('chips').replaceChildren(...(tab === 'history'
       ? histChips.map(([id, label]) => el('button', { class: `chip${histMode === id ? ' on' : ''}`, text: label, onclick: () => { histMode = id; $('q').value = ''; closeDrawer(); drawChips(); load(); } }))
       : a ? a.kinds.map((k) => el('button', { class: `chip${k.kind === kind ? ' on' : ''}`, onclick: () => { kind = k.kind; $('q').value = ''; closeDrawer(); drawChips(); load(); } },
-        [k.label, el('small', { text: String(k.count) })])) : []));
+        [k.label, k.live ? null : el('small', { text: String(k.count) })])) : []));
     $('q').classList.toggle('hide', tab === 'logins');
     $('chips').classList.toggle('hide', tab !== 'history' && (!a || a.kinds.length < 2));
     $('secLabel').textContent = a ? (a.kinds.length < 2 ? a.kinds[0].label : a.label) : tab === 'history' ? 'History' : 'Logins';
     $('barTools').replaceChildren();
     const k = kindNow();
     const mine = viewNow();
-    $('q').placeholder = mine === 'stockhistory' ? 'Search SKU or PO#' : mine === 'returns' ? 'Search PO, SKU, model, customer, condition…' : mine === 'labels' ? 'Search reference or tracking' : 'Search';
+    $('q').placeholder = ({ stockhistory: 'Search SKU or PO#', returns: 'Search PO, SKU, model, customer, condition…', labels: 'Search reference or tracking',
+      orders: 'Search order #, SKU or tracking', stock: 'Search SKU, title or barcode', pricing: 'Search SKU…', periods: 'Search', reconcile: 'Search PO, item or reason' })[mine] || 'Search';
     $('note').textContent = mine === 'stockhistory' ? '' : tab === 'history' ? 'Every change made on this server itself, newest first. Click a line to see the record before and after.'
       : tab === 'logins' ? 'Each person signs in with their own login. A role decides what they can change.'
       : mine ? '' : !k ? '' : k.fixed ? 'This is a log. Lines are added by the app and never changed.' : k.canWrite ? '' : 'You can look at these but not change them.';
@@ -417,12 +491,14 @@
   $('q').addEventListener('input', () => {
     clearTimeout(qTimer);
     const mine = viewNow();
-    qTimer = setTimeout(() => (mine === 'stockhistory' ? drawShList() : mine === 'returns' ? drawReturns() : mine === 'labels' ? drawLabels() : load()), mine ? 120 : 250);
+    const redraw = { stockhistory: drawShList, returns: drawReturns, labels: drawLabels, orders: drawOrders, stock: drawStock, pricing: drawPricing, periods: drawPeriods, reconcile: drawReconcile }[mine];
+    qTimer = setTimeout(() => (redraw ? redraw() : load()), mine ? 120 : 250);
   });
 
   // which of the app's own screens the current tab shows, if any
   let histMode = 'stock';
-  const viewNow = () => (tab === 'history' ? (histMode === 'stock' ? 'stockhistory' : '') : kind === 'return' ? 'returns' : kind === 'label' ? 'labels' : '');
+  const viewNow = () => (tab === 'history' ? (histMode === 'stock' ? 'stockhistory' : '')
+    : ({ return: 'returns', label: 'labels', packed_order: 'orders', 'app:stock': 'stock', 'app:pricing': 'pricing', 'app:periods': 'periods', 'app:reconcile': 'reconcile' })[kind] || '');
 
   async function load(keep) {
     if (tab === 'logins') return drawLogins();
@@ -430,6 +506,10 @@
     if (mine === 'stockhistory') return loadStockHistory(keep);
     if (mine === 'returns') return loadReturns(keep);
     if (mine === 'labels') return loadLabels(keep);
+    if (mine === 'orders') return loadOrders(keep);
+    if (mine === 'stock') return loadStock(keep);
+    if (mine === 'pricing') return loadPricing(keep);
+    if (mine === 'periods' || mine === 'reconcile') return loadRecovery(keep);
     if (tab === 'history') {
       const r = await api('GET', `/api/history?limit=200&q=${encodeURIComponent($('q').value)}`);
       return drawHistory(r.rows || []);
@@ -467,6 +547,7 @@
   const dayKey = (v) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? '' : fmtDayKey.format(d); };
   const plainMoney = (v) => (Number(v) ? Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');
   const loading = () => $('view').replaceChildren(el('div', { class: 'empty', text: 'Loading…' }));
+  const sheetCell = (label, kids, cls, title) => el('td', { class: cls || '', 'data-label': label, title: title || undefined }, el('span', { class: 'cellbox' }, kids));
 
   // a filter button with a tick list under it, like the app's Everyone / All actions
   const closeMenus = () => document.querySelectorAll('.dd-menu').forEach((m) => m.classList.add('hide'));
@@ -664,7 +745,7 @@
       items.forEach((i, ii) => {
         const target = i.condition === 'different' && (i.received || i.targetSku) ? (i.received || i.targetSku) : (i.targetSku && i.targetSku !== i.sku ? i.targetSku : '');
         const note = i.note || d.note || '';
-        const c = (label, kids, cls, title) => el('td', { class: cls || '', 'data-label': label, title: title || undefined }, kids);
+        const c = sheetCell;
         body.push(el('tr', { class: 'click', onclick: () => openRecord(r.id) }, [
           el('td', { class: `gutter${d.unmatched ? ' unmatched' : ''}`, title: d.unmatched ? 'Not matched to a Linnworks order' : undefined, text: ii === 0 ? String(n + 1) : '' }),
           c('PO #', d.order_number || missing(), 'mono', d.order_number),
@@ -725,7 +806,7 @@
     const body = shown.map((l) => {
       const mk = /walmart/i.test(l.source) ? 'Walmart' : /ebay/i.test(l.source) ? 'eBay' : /temu/i.test(l.source) ? 'Temu' : '';
       const n = dupOf(l);
-      const c = (label, kids, cls) => el('td', { class: cls || '', 'data-label': label }, kids);
+      const c = sheetCell;
       return el('tr', { class: `click${l.voided_at ? ' is-void' : ''}`, onclick: () => openRecord(l._id) }, [
         c('Time', `${lb.days || dupOnly ? `${fmtShort.format(new Date(l.created_at))} ` : ''}${clock(l.created_at)}`, 'mono'),
         c('Reference', [l.reference || l.party_name || '', l.reference ? (l.from_po ? null : el('small', { text: '· no PO#' })) : el('small', { text: '· no ref' }),
@@ -737,6 +818,270 @@
     });
     $('view').replaceChildren(el('div', { class: 'tablewrap' }, shown.length ? el('table', { class: 'retlog labels' }, [el('thead', {}, head), el('tbody', {}, body)])
       : el('div', { class: 'empty', text: dupOnly ? 'No PO# has more than one live label in the last 30 days.' : `No labels ${range === 'today' ? 'yet today' : `in the ${range}`}.` })));
+  }
+
+  /* ---------- Orders: the app's capture sheet, every computer's orders ---------- */
+  const od = { rows: [], days: 7, shown: 600 };
+  async function loadOrders(keep) {
+    if (!keep) { loading(); od.shown = 600; }
+    const r = await api('GET', '/api/records/packed_order?full=1&limit=5000');
+    if (viewNow() !== 'orders') return;
+    od.rows = (r.rows || []).map((x) => ({ ...x.data, _id: x.id, station: x.data.station || x.station }));
+    od.total = r.total || od.rows.length;
+    drawOrders();
+  }
+  function drawOrders() {
+    const since = dayKey(Date.now() - od.days * 86400000);
+    const words = $('q').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const itemsOf = (o) => (o.items || []).map((it) => (typeof it === 'string' ? { sku: it, qty: 1 } : { sku: it.sku || it.SKU || '', qty: Number(it.qty) || 1 }));
+    const text = (o) => `${o.order_number} ${o.tracking} ${o.channel} ${o.station} ${itemsOf(o).map((i) => i.sku).join(' ')} ${o.notes || ''}`.toLowerCase();
+    // a search looks through everything loaded; without one the day range applies
+    const shown = od.rows.filter((o) => (words.length ? words.every((w) => text(o).includes(w)) : (o.day || dayKey(o.created_at)) >= since));
+    const range = { 0: 'today', 7: 'the last 7 days', 30: 'the last 30 days' }[od.days];
+    $('barTools').replaceChildren(rangeSelect(od, drawOrders));
+    $('secLabel').textContent = `Orders — ${shown.length.toLocaleString('en-US')} ${shown.length === 1 ? 'order' : 'orders'}${words.length ? '' : ` · ${range}`} · every computer`;
+    const head = el('tr', {}, [gutterHead(), ...['Order #', 'Items', 'Tracking', 'Carrier', 'Packed', 'Computer', 'Notes'].map((c) => el('th', { text: c }))]);
+    const body = [];
+    let day = ''; let n = 0;
+    for (const o of shown.slice(0, od.shown)) {
+      const d = o.day || dayKey(o.created_at);
+      if (d !== day) {
+        day = d; n = 0;
+        const count = shown.filter((x) => (x.day || dayKey(x.created_at)) === d).length;
+        body.push(el('tr', { class: 'dayrow' }, el('td', { colspan: '8' }, [dateUS(d), el('small', { text: `${count} order${count === 1 ? '' : 's'}` })])));
+      }
+      n += 1;
+      const ch = /walmart/i.test(o.channel) ? 'Walmart' : /ebay/i.test(o.channel) ? 'eBay' : /temu/i.test(o.channel) ? 'Temu' : (o.channel || '');
+      const failed = /fail/i.test(o.status || '');
+      const c = sheetCell;
+      body.push(el('tr', { class: 'click', onclick: () => openRecord(o._id) }, [
+        el('td', { class: `gutter${failed ? ' unmatched' : /sync/i.test(o.status || '') ? ' ok' : ''}`, title: o.status ? `Status: ${o.status}` : undefined, text: String(n) }),
+        c('Order #', [ch ? el('span', { class: `badge ${ch.toLowerCase()}`, text: ch }) : null, o.order_number || ''], 'mono', o.order_number),
+        c('Items', itemsOf(o).map((i) => `${i.qty} × ${i.sku}`).join(', '), 'mono'),
+        c('Tracking', o.tracking || el('span', { class: 'missing', text: '—' }), 'mono', o.tracking),
+        c('Carrier', o.carrier || ''), c('Packed', clock(o.created_at), 'mono'), c('Computer', o.station || ''), c('Notes', o.notes || '', '', o.notes),
+      ]));
+    }
+    const foot = shown.length > od.shown ? el('button', { class: 'more', text: `Show more (${od.shown} of ${shown.length})`, onclick: () => { od.shown += 600; drawOrders(); } })
+      : od.total > od.rows.length ? el('p', { class: 'feed-note', text: `The newest ${od.rows.length.toLocaleString('en-US')} of ${od.total.toLocaleString('en-US')} orders are loaded.` }) : null;
+    $('view').replaceChildren(...[el('div', { class: 'tablewrap' }, shown.length ? el('table', { class: 'retlog' }, [el('thead', {}, head), el('tbody', {}, body)])
+      : el('div', { class: 'empty', text: words.length ? 'Nothing matches that search.' : `No orders packed ${range === 'today' ? 'yet today' : `in ${range}`}.` })), foot].filter(Boolean));
+  }
+
+  // one of the app's own pages, asked of DWS Stock on the server computer
+  async function feed(name) {
+    const r = await api('GET', `/api/app/${name}`);
+    return r.ok ? r : { ok: false, error: r.error || 'no answer' };
+  }
+  const feedOff = (what, error) => $('view').replaceChildren(el('div', { class: 'feed-off', text: `${what} comes from DWS Stock on the server computer, and it did not answer: ${error}` }));
+  const asOf = (iso) => `Read from DWS Stock on the server computer at ${fmtTime.format(new Date(iso))}.`;
+
+  /* ---------- Stock: the app's stock sheet ---------- */
+  const sk = { data: null, view: '', sort: { key: 'level', dir: -1 }, shown: 400 };
+  const condRank = (sku) => { const u = String(sku || '').toUpperCase(); return u.startsWith('OPEN-BOX-') ? 1 : u.startsWith('USED-') ? 2 : u.startsWith('SCRAP-') ? 3 : 0; };
+  async function loadStock(keep) {
+    if (!keep) { loading(); sk.shown = 400; }
+    const r = await feed('stock');
+    if (viewNow() !== 'stock') return;
+    if (!r.ok) { $('barTools').replaceChildren(); return feedOff('The stock list', r.error); }
+    sk.data = r;
+    drawStock();
+  }
+  function drawStock() {
+    const d = sk.data; if (!d) return;
+    const wfsView = sk.view === 'wfs';
+    const lvl = (it) => (wfsView ? it.wfs : it.home) || [0, 0, 0, 0];
+    const isLow = (it) => !!(it.home && it.home[3] > 0 && it.home[2] < it.home[3]);
+    const q = $('q').value.trim().toLowerCase();
+    const cut = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const hit = (it) => !q || [it.sku, it.title, it.barcode].some((v) => String(v || '').toLowerCase().includes(q) || cut(v).includes(cut(q)));
+    const views = [['', 'All'], ['new', 'New'], ['open', 'Open box'], ['used', 'Used'], ['scrap', 'Scrap'], ...(d.wfsName ? [['wfs', 'WFS']] : []), ['low', 'Low']];
+    const inView = (it) => (sk.view === 'new' ? condRank(it.sku) === 0 : sk.view === 'open' ? condRank(it.sku) === 1 : sk.view === 'used' ? condRank(it.sku) === 2 : sk.view === 'scrap' ? condRank(it.sku) === 3
+      : sk.view === 'low' ? isLow(it) : wfsView ? !!(it.wfs && (it.wfs[0] || it.wfs[2])) : true);
+    const get = { sku: (it) => it.sku, cost: (it) => it.cost || 0, level: (it) => lvl(it)[0], orders: (it) => lvl(it)[1], avail: (it) => lvl(it)[2], home: (it) => (it.home ? it.home[0] : 0) };
+    const rowsNow = d.items.filter(inView).filter(hit).sort((a, b) => {
+      if (!sk.view) { const cr = condRank(a.sku) - condRank(b.sku); if (cr) return cr; }
+      const av = get[sk.sort.key](a); const bv = get[sk.sort.key](b);
+      const cmp = sk.sort.key === 'sku' ? String(av).localeCompare(String(bv), 'en', { numeric: true }) : av - bv;
+      return (cmp * sk.sort.dir) || String(a.sku).localeCompare(String(b.sku), 'en', { numeric: true });
+    });
+    const units = rowsNow.reduce((t, it) => t + lvl(it)[0], 0);
+    $('barTools').replaceChildren(el('div', { class: 'seg' }, views.map(([id, label]) => el('button', { class: sk.view === id ? 'on' : '', text: label, onclick: () => { sk.view = id; sk.shown = 400; drawStock(); } }))));
+    $('secLabel').textContent = 'Stock';
+    const sum = wfsView ? `${rowsNow.length.toLocaleString('en-US')} SKUs · ${units.toLocaleString('en-US')} units at ${d.wfsName} — Walmart's counts; the warehouse column is yours`
+      : sk.view === 'low' ? `${rowsNow.length.toLocaleString('en-US')} SKU${rowsNow.length === 1 ? '' : 's'} below minimum · ${units.toLocaleString('en-US')} units left`
+        : `${rowsNow.length.toLocaleString('en-US')} SKUs · ${units.toLocaleString('en-US')} units${sk.view ? ` · ${views.find((v) => v[0] === sk.view)[1]} view` : ''}`;
+    const th = (key, label, cls) => el('th', { class: `sortable ${cls || ''}`, title: 'Click to sort', text: `${label}${sk.sort.key === key ? (sk.sort.dir < 0 ? ' ▾' : ' ▴') : ''}`,
+      onclick: () => { sk.sort = { key, dir: sk.sort.key === key ? -sk.sort.dir : (key === 'sku' ? 1 : -1) }; drawStock(); } });
+    const cols = wfsView ? [th('sku', 'SKU'), th('level', 'At WFS', 'num'), th('home', 'At warehouse', 'num')]
+      : [th('sku', 'SKU'), ...(d.costs ? [th('cost', 'Cost', 'num')] : []), th('level', 'In stock', 'num'), th('orders', 'In orders', 'num'), th('avail', 'Available', 'num')];
+    const head = el('tr', {}, [gutterHead(), el('th', {}), ...cols]);
+    const c = sheetCell;
+    const body = rowsNow.slice(0, sk.shown).map((it, i) => {
+      const l = lvl(it);
+      return el('tr', {}, [
+        gutter(i + 1),
+        el('td', { class: 'img' }, it.image ? el('img', { src: it.image, alt: '', loading: 'lazy' }) : el('span', {})),
+        c('SKU', [it.sku, it.title ? el('span', { class: 'sub', text: it.title }) : null], 'mono', it.title),
+        ...(wfsView ? [c('At WFS', String(l[0]), 'mono num'), c('At warehouse', String(it.home ? it.home[0] : 0), 'mono num')]
+          : [...(d.costs ? [c('Cost', it.cost > 0 ? `$${plainMoney(it.cost)}` : '—', 'mono num')] : []), c('In stock', String(it.composite ? l[2] : l[0]), 'mono num'), c('In orders', String(l[1]), 'mono num'),
+            c('Available', String(l[2]), `mono num${isLow(it) ? ' low' : ''}`, isLow(it) ? `Below the minimum of ${it.home[3]}` : '')]),
+      ]);
+    });
+    $('view').replaceChildren(...[el('p', { class: 'sum-line', text: sum }),
+      el('div', { class: 'tablewrap' }, rowsNow.length ? el('table', { class: 'retlog stock' }, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: 'No SKUs match.' })),
+      rowsNow.length > sk.shown ? el('button', { class: 'more', text: `Show more (${sk.shown} of ${rowsNow.length})`, onclick: () => { sk.shown += 600; drawStock(); } }) : null,
+      el('p', { class: 'feed-note', text: `${asOf(d.at)} Counts are changed in DWS Stock.` })].filter(Boolean));
+  }
+
+  /* ---------- Pricing: the app's grid, a product per row and a column per marketplace ---------- */
+  const pg = { data: null, open: new Set(), shown: 150 };
+  const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
+  const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
+  const md = (iso) => (iso ? `${+String(iso).slice(5, 7)}/${+String(iso).slice(8, 10)}` : '');
+  async function loadPricing(keep) {
+    if (!keep) { loading(); pg.shown = 150; }
+    const r = await feed('pricing');
+    if (viewNow() !== 'pricing') return;
+    if (!r.ok) { $('barTools').replaceChildren(); return feedOff('The price grid', r.error); }
+    pg.data = r;
+    drawPricing();
+  }
+  function prCells(p) {
+    const cols = pg.data.channels;
+    const maxU = Math.max(0, ...cols.flatMap((c) => (p.channels[c.key] || []).map((x) => (x.got ? x.got.units : 0))));
+    return cols.map((c) => {
+      const lines = p.channels[c.key] || [];
+      const inner = lines.map((l) => {
+        const g = l.got;
+        const sold = g ? `<b class="${g.units === maxU && maxU > 0 ? 'hot' : ''}">${esc(g.units)} sold</b> · last ${prMoney(g.last)} ${md(g.lastOn)}${g.units > 1 && Math.abs(g.avg - g.last) >= 0.01 ? ` · avg ${prMoney(g.avg)}` : ''}`
+          : '<span class="pr-dim">no sales in 30 days</span>';
+        const mv = l.move ? `<div class="pr-move">${l.move.to - l.move.from < 0 ? '<span class="pr-dn">▼</span>' : '<span class="pr-up">▲</span>'} ${prMoney(Math.abs(l.move.to - l.move.from))} on ${md(l.move.ts)} · <b>${esc(l.move.units)}</b> sold since</div>` : '';
+        const tip = c.fluctuates ? (l.fromSales ? `The repricer owns this price. This is what the listing last sold at, before tax. Linnworks has ${prMoney(l.lwPrice)} on file.` : 'The repricer owns this price. No sale in 60 days, so this is the Linnworks figure.') : `The price on ${c.source}`;
+        return `<div class="pr-entry"><div class="pr-line"><span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span><span class="pr-price" title="${esc(tip)}">${prMoney(l.price)}</span></div><div class="pr-got">${sold}</div>${mv}</div>`;
+      }).join('');
+      const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
+      return `<div class="pr-cell">${lines.length ? inner : '<span class="pr-none">not listed</span>'}${avg ? `<div class="pr-avg">30-day avg <b>${prMoney(avg.avg)}</b> · ${esc(avg.units)} sold</div>` : ''}</div>`;
+    }).join('');
+  }
+  function drawPricing() {
+    const d = pg.data; if (!d) return;
+    $('barTools').replaceChildren();
+    $('secLabel').textContent = 'Pricing';
+    const q = $('q').value.trim().toLowerCase();
+    const one = (p) => !q || String(p.sku).toLowerCase().includes(q) || d.channels.some((c) => (p.channels[c.key] || []).some((l) => String(l.csku).toLowerCase().includes(q)));
+    const match = (p) => one(p) || (p.variations || []).some(one);
+    const list = d.products.filter(match);
+    if (!list.length) return $('view').replaceChildren(el('div', { class: 'tablewrap' }, el('div', { class: 'empty', text: q ? 'No SKUs match.' : 'No linked listings yet.' })));
+    const cols = `44px minmax(230px, 1fr) repeat(${d.channels.length}, minmax(240px, 1.15fr))`;
+    const prod = (p, num, isVar) => `<div class="pr-cell pr-num">${isVar ? '└' : num}</div><div class="pr-cell pr-prod">${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
+        <div><span class="pr-psku">${esc(p.sku)}</span><span class="pr-pstock">${esc(p.stock)} in stock</span>${!isVar && (p.variations || []).length
+    ? `<button type="button" class="pr-vartog" data-vt="${esc(p.sku)}">${pg.open.has(p.sku) || (q && !one(p)) ? '▾' : '▸'} ${p.variations.length} variation${p.variations.length === 1 ? '' : 's'} · ${p.variations.reduce((a, v) => a + (Number(v.stock) || 0), 0)} units</button>` : ''}</div></div>${prCells(p)}`;
+    const grid = el('div', { class: 'pr-grid' });
+    grid.style.gridTemplateColumns = cols;
+    grid.innerHTML = `<div class="pr-hc">#</div><div class="pr-hc">PRODUCT</div>${d.channels.map((c, i) => `<div class="pr-hc" style="color:${PR_COLORS[i % PR_COLORS.length]}">${esc(String(c.source).toUpperCase())}</div>`).join('')}`
+      + list.slice(0, pg.shown).map((p, i) => {
+        const open = (p.variations || []).length && (pg.open.has(p.sku) || (q && !one(p)));
+        return `<div class="pr-row" style="display:contents">${prod(p, i + 1, false)}</div>${open ? p.variations.map((v) => `<div class="pr-vrow" style="display:contents">${prod(v, 0, true)}</div>`).join('') : ''}`;
+      }).join('');
+    grid.addEventListener('click', (ev) => { const b = ev.target.closest('[data-vt]'); if (!b) return; if (pg.open.has(b.dataset.vt)) pg.open.delete(b.dataset.vt); else pg.open.add(b.dataset.vt); drawPricing(); });
+    $('view').replaceChildren(...[el('div', { class: 'pr-wrap' }, grid),
+      list.length > pg.shown ? el('button', { class: 'more', text: `Show more (${pg.shown} of ${list.length})`, onclick: () => { pg.shown += 200; drawPricing(); } }) : null,
+      el('p', { class: 'feed-note', text: `${asOf(d.at)} Prices are changed in DWS Stock.${d.stale ? ' These are the last figures it saved; fresh ones are being read.' : ''}` })].filter(Boolean));
+  }
+
+  /* ---------- Recovery: the app's Imported periods and Reconcile ---------- */
+  const rc = { data: null, bucket: 'notReceived', sort: null };
+  const RC_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const rcMoney = (n) => `$${Math.abs(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  function rcMonDay(v) {
+    const t = String(v || ''); let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    if (m) return `${RC_MON[Number(m[2]) - 1]} ${Number(m[3])}`;
+    m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(t);
+    return m ? `${RC_MON[Number(m[1]) - 1]} ${Number(m[2])}` : '';
+  }
+  async function loadRecovery(keep) {
+    if (!keep) loading();
+    const r = await feed('recovery');
+    const mine = viewNow();
+    if (mine !== 'periods' && mine !== 'reconcile') return;
+    if (!r.ok) { $('barTools').replaceChildren(); return feedOff('Recovery', r.error); }
+    rc.data = r;
+    return mine === 'periods' ? drawPeriods() : drawReconcile();
+  }
+  function drawPeriods() {
+    const d = rc.data; if (!d) return;
+    $('barTools').replaceChildren();
+    const q = $('q').value.trim().toLowerCase();
+    const runs = d.runs.filter((r) => !q || `${r.label} ${r.station} ${r.by}`.toLowerCase().includes(q));
+    $('secLabel').textContent = `Imported periods ${runs.length}`;
+    const head = el('tr', {}, [gutterHead(), el('th', { text: 'Period' }), el('th', { text: 'Imported' }), ...['Refunds', 'Received', 'Not received', 'WFS waiting', 'Open today'].map((c) => el('th', { class: 'num', text: c }))]);
+    const body = runs.map((r, i) => {
+      const cnt = (k) => (r.counts && r.counts[k]) || { count: 0, total: 0 };
+      const who = [r.station, r.by].filter(Boolean).join(' · ');
+      const pair = (k, label) => sheetCell(label, [`${cnt(k).count} `, el('span', { class: 'muted', text: `· ${rcMoney(cnt(k).total)}` })], 'mono num');
+      return el('tr', {}, [gutter(i + 1),
+        el('td', { 'data-label': 'Period' }, el('button', { class: 'linklike', title: 'Open this period\'s statement', text: String(r.label || '').replace(' - ', ' – '), onclick: () => openRecordOf('wm_run', r.id) })),
+        sheetCell('Imported', [when(r.ranAt), who ? el('span', { class: 'sub2', text: who }) : null], '', who),
+        el('td', { class: 'mono num', 'data-label': 'Refunds', text: String(r.totalRefunds ?? '') }),
+        pair('received', 'Received'), pair('notReceived', 'Not received'), pair('wfsWaiting', 'WFS waiting'),
+        el('td', { class: `mono num ${r.open ? 'neg' : 'faint'}`, 'data-label': 'Open today', text: r.open ? String(r.open) : 'clear' })]);
+    });
+    $('view').replaceChildren(el('div', { class: 'tablewrap' }, runs.length ? el('table', { class: 'retlog' }, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: 'No period imported yet.' })),
+      el('p', { class: 'feed-note', text: `${asOf(d.at)} Periods are imported in DWS Stock.${d.logRows ? ` Each refund is checked against ${Number(d.logRows).toLocaleString('en-US')} returns in the log.` : ''}` }));
+  }
+  function drawReconcile() {
+    const d = rc.data; if (!d) return;
+    const items = d.items || [];
+    const open = items.filter((it) => it.status === 'outstanding' && !it.adjustment);
+    const groups = {
+      notReceived: open.filter((it) => !it.wfsWaiting), wfsPending: open.filter((it) => it.wfsWaiting),
+      paid: items.filter((it) => it.status === 'reimbursed' || it.status === 'reimbursed_pending'),
+      marked: items.filter((it) => (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped' || it.status === 'loss'),
+    };
+    if (!groups[rc.bucket] || ((rc.bucket === 'paid' || rc.bucket === 'marked') && !groups[rc.bucket].length)) rc.bucket = 'notReceived';
+    const tabs = [['notReceived', 'Not received'], ['wfsPending', 'WFS pending'], ...(groups.paid.length ? [['paid', 'Walmart paid']] : []), ...(groups.marked.length ? [['marked', 'Marked']] : [])];
+    $('barTools').replaceChildren(el('div', { class: 'seg' }, tabs.map(([k, label]) => el('button', { class: rc.bucket === k ? 'on' : '', onclick: () => { rc.bucket = k; rc.sort = null; drawReconcile(); } },
+      [label, el('small', { class: k === 'notReceived' && groups[k].length ? 'red' : '', text: String(groups[k].length) })]))));
+    const isMarked = rc.bucket === 'marked'; const isPaid = rc.bucket === 'paid';
+    const daysLeft = (it) => { let n = it.daysLeft; if (n == null && it.daysOld != null) n = it.isWfs ? (it.daysOld < 90 ? 90 - it.daysOld : 135 - it.daysOld) : 45 - it.daysOld; return n == null || !Number.isFinite(Number(n)) ? null : Number(n); };
+    const so = rc.sort || (isMarked ? { key: 'refundTs', dir: -1 } : isPaid ? { key: 'gap', dir: -1 } : { key: 'left', dir: 1 });
+    const q = $('q').value.trim().toLowerCase();
+    const list = groups[rc.bucket].map((it) => ({ ...it, left: daysLeft(it), units: Number(it.qty) || 1, amount: Number(it.amount) || 0, refundTs: Number.isFinite(Date.parse(it.refundDate)) ? Date.parse(it.refundDate) : null,
+      paid: Number(it.settlementSeen) || 0, gap: Number(it.lostAmount) || 0, reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : it.status === 'loss' ? 'Loss' : 'Received' }))
+      .filter((it) => !q || `${it.po} ${it.sku} ${it.item} ${it.reason} ${it.type}`.toLowerCase().includes(q))
+      .sort((a, b) => { const av = a[so.key]; const bv = b[so.key]; if (av == null && bv == null) return 0; if (av == null) return 1; if (bv == null) return -1;
+        return (typeof av === 'string' ? av.localeCompare(String(bv)) : av - bv) * so.dir; });
+    $('secLabel').textContent = `Reconcile — ${list.length.toLocaleString('en-US')} ${list.length === 1 ? 'refund' : 'refunds'}`;
+    const th = (key, label, cls) => el('th', { class: `sortable ${cls || ''}`, title: 'Click to sort', text: `${label}${so.key === key ? (so.dir < 0 ? ' ▾' : ' ▴') : ''}`,
+      onclick: () => { rc.sort = { key, dir: so.key === key ? -so.dir : (['po', 'type', 'sku', 'reasonText', 'markText', 'left'].includes(key) ? 1 : -1) }; drawReconcile(); } });
+    const head = el('tr', {}, [gutterHead(), th('po', 'PO #'), th('type', 'Type'), th('sku', 'Item'), th('units', 'Units', 'num'), th('refundTs', 'Refunded'), th('amount', 'Net refund', 'num'),
+      ...(isMarked ? [] : isPaid ? [th('paid', 'Walmart paid', 'num'), th('gap', 'Still lost', 'num')] : [th('left', 'Days left', 'num')]), th('reasonText', 'Reason'), ...(isMarked ? [th('markText', 'Mark')] : [])]);
+    const c = sheetCell;
+    const issuer = (it) => { const t = String(it.refundedBy || '').trim().toLowerCase(); return !t ? '' : /customer care/.test(t) ? 'Customer Care' : /seller/.test(t) ? 'Seller' : 'Customer'; };
+    const body = list.map((it, i) => {
+      const n = it.left;
+      const win = it.wfsWaiting ? 'Walmart pays back by day 90' : it.isWfs ? 'WFS: file within 135 days of the refund' : 'Seller: dispute within 45 days of the refund';
+      const days = n == null ? c('Days left', '—', 'mono num days faint', 'No refund date to count from')
+        : c('Days left', String(n), `mono num days ${n <= 0 ? 't0' : n <= 7 ? 't1' : n <= 14 ? 't2' : ''}`, n > 0 ? `${n} days left · ${win}` : n === 0 ? `Last day · ${win}` : `Window passed ${-n} days ago · ${win}`);
+      const reason = String(it.reason || '').toLowerCase().replace(/^./, (ch) => ch.toUpperCase());
+      const markWho = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(it.status === 'loss' ? it.writtenOffAt : it.status === 'never_shipped' ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
+      return el('tr', { class: it.caseOpened ? 'is-case' : '' }, [gutter(i + 1),
+        c('PO #', [it.po, it.caseOpened ? el('span', { class: 'sub2', text: `case opened ${rcMonDay(it.caseOpenedAt)}${it.caseId ? ` · #${it.caseId}` : ''}` }) : null], 'mono'),
+        c('Type', it.type || '', `rc-type${it.type === 'WFS' ? ' wfs' : ''}`),
+        c('Item', [it.sku || it.item || '', it.sku && it.item ? el('span', { class: 'sub2', text: it.item }) : null], 'mono', it.item),
+        c('Units', String(it.units), 'mono num'),
+        c('Refunded', [rcMonDay(it.refundDate), it.daysOld != null ? el('span', { class: 'muted', text: ` · ${it.daysOld} days ago` }) : null], 'mono'),
+        c('Net refund', rcMoney(it.amount), 'mono num'),
+        ...(isMarked ? [] : isPaid ? [c('Walmart paid', it.status === 'reimbursed_pending' ? 'pending' : [rcMoney(it.paid), it.settlementDate ? el('span', { class: 'muted', text: ` · ${rcMonDay(it.settlementDate)}` }) : null], 'mono num'),
+          c('Still lost', it.gap > 0 ? rcMoney(it.gap) : '—', `mono num ${it.gap > 0 ? 'neg' : 'faint'}`)] : [days]),
+        c('Reason', [reason, issuer(it) ? el('span', { class: 'rc-by', text: ` · ${issuer(it)}` }) : null], '', [it.reason, it.refundedBy ? `refunded by: ${it.refundedBy}` : ''].filter(Boolean).join(' · ')),
+        ...(isMarked ? [c('Mark', [el('span', { class: `mark-chip ${it.status === 'loss' ? 'loss' : it.status === 'never_shipped' ? 'never' : ''}`, text: it.markText }), markWho ? el('span', { class: 'muted', text: ` ${markWho}` }) : null])] : []),
+      ]);
+    });
+    const empty = items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : q ? 'Nothing matches that search.' : 'Everything has come back.') : 'Nothing imported yet.';
+    $('view').replaceChildren(el('div', { class: 'tablewrap' }, list.length ? el('table', { class: 'retlog' }, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: empty })),
+      el('p', { class: 'feed-note', text: `${asOf(d.at)} Cases are opened and marked in DWS Stock.` }));
   }
 
   /* ---------- history ---------- */
@@ -804,8 +1149,10 @@
     return out;
   }
 
-  async function openRecord(id) {
-    const k = kindNow();
+  const kindOf = (name) => me.areas.flatMap((a) => a.kinds).find((x) => x.kind === name);
+  function openRecordOf(name, id) { return openRecord(id, kindOf(name)); }
+  async function openRecord(id, as) {
+    const k = as || kindNow();
     const r = await api('GET', `/api/records/${k.kind}/${encodeURIComponent(id)}`);
     if (!r.ok) return;
     const st = k.kind === 'wm_run' ? await api('GET', `/api/records/wm_run/${encodeURIComponent(id)}/statement`) : null;
