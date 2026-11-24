@@ -7572,6 +7572,35 @@ exit 1
     };
   });
 
+  // Box sizes saved from the form (owner 2026-11-24: "allow me to add custom
+  // dimensions and save them"). They live with this computer's Shipping
+  // settings; a name already on the list takes the new size.
+  const BOX_MAX = 40;
+  ipcMain.handle('ship:boxSave', (_e, { name, length, width, height } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const nm = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+    const n = (v) => Math.round((Number(v) || 0) * 100) / 100;
+    const box = { name: nm, length: n(length), width: n(width), height: n(height) };
+    if (!nm) return { ok: false, error: 'Give the box a name.' };
+    if (/^custom( size)?$/i.test(nm)) return { ok: false, error: 'Pick another name: "Custom size" is already the list\'s own.' };
+    if (![box.length, box.width, box.height].every(v => v > 0 && v <= 108)) return { ok: false, error: 'Enter all three dimensions, up to 108 in each.' };
+    const boxes = [...((config.load().ups || {}).boxes || [])];
+    const at = boxes.findIndex(b => String(b.name).toLowerCase() === nm.toLowerCase());
+    if (at < 0 && boxes.length >= BOX_MAX) return { ok: false, error: `The list holds ${BOX_MAX} boxes. Remove one first.` };
+    if (at >= 0) boxes[at] = box; else boxes.push(box);
+    config.save({ ups: { boxes } });
+    return { ok: true, boxes, name: nm, replaced: at >= 0 };
+  });
+  ipcMain.handle('ship:boxDelete', (_e, { name } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const nm = String(name || '').trim().toLowerCase();
+    const cur = (config.load().ups || {}).boxes || [];
+    const boxes = cur.filter(b => String(b.name).toLowerCase() !== nm);
+    if (boxes.length === cur.length) return { ok: false, error: 'That box is no longer on the list.' };
+    config.save({ ups: { boxes } });
+    return { ok: true, boxes };
+  });
+
   ipcMain.handle('ship:lookup', async (_e, { ref } = {}) => {
     if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const reference = String(ref || '').trim();

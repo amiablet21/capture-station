@@ -168,6 +168,8 @@ contextBridge.exposeInMainWorld('api', {
   wholesalePrint: (gid) => ipcRenderer.invoke('wholesale:print', { gid }),
   // Ship tab (owner 2026-10-19): UPS labels on either company's account
   shipInfo: () => ipcRenderer.invoke('ship:info'),
+  shipBoxSave: (box) => ipcRenderer.invoke('ship:boxSave', box),
+  shipBoxDelete: (name) => ipcRenderer.invoke('ship:boxDelete', { name }),
   shipLookup: (ref) => ipcRenderer.invoke('ship:lookup', { ref }),
   shipRates: (payload) => ipcRenderer.invoke('ship:rates', payload),
   shipCreate: (payload) => ipcRenderer.invoke('ship:create', payload),

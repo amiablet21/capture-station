@@ -114,6 +114,8 @@ if (!window.api) {
     wholesaleDiscardDraft: async () => ({ ok: true }),
     wholesalePrint: async () => ({ ok: false, error: 'Preview mode' }),
     shipInfo: async () => ({ ok: true, test: true, printer: '', boxes: [{ name: 'Phone box', length: 8, width: 6, height: 4 }], shipFrom: {}, returnTo: {}, shipFromProblem: 'Name is missing', returnToProblem: 'Name is missing', accounts: [] }),
+    shipBoxSave: async () => ({ ok: false, error: 'Preview mode' }),
+    shipBoxDelete: async () => ({ ok: false, error: 'Preview mode' }),
     shipLookup: async () => ({ ok: false, error: 'Preview mode' }),
     shipRates: async () => ({ ok: false, error: 'Preview mode' }),
     shipCreate: async () => ({ ok: false, error: 'Preview mode' }),
@@ -15990,6 +15992,88 @@ function spRenderBanner() {
   if (a) a.onclick = () => openSettings('shipping');
 }
 
+/* Box sizes saved from the form (owner 2026-11-24: "allow me to add custom
+   dimensions and save them"). Beside the dimensions: a typed size offers
+   "Save as a box" and asks only for a name; a saved box offers Remove. The
+   Ship tab and the Orders drawer share one list (this computer's Shipping
+   settings), so a box saved in one shows in the other. */
+const shipBoxes = () => (sp.info && sp.info.boxes) || [];
+const boxNameOf = (selId) => { const v = $(selId).value; const b = v === '' || v === 'custom' ? null : shipBoxes()[Number(v)]; return b ? b.name : ''; };
+// rebuild one Box list around a box's name ('' = Custom size); the typed
+// dimensions are left alone
+function boxListFill(selId, name) {
+  const sel = $(selId);
+  if (!sel) return;
+  sel.innerHTML = shipBoxes().map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('') + '<option value="custom">Custom size</option>';
+  const i = shipBoxes().findIndex(b => b.name === name);
+  sel.value = i >= 0 ? String(i) : 'custom';
+}
+// both lists follow a change to the saved boxes, each keeping its own pick
+function boxListsUpdate(boxes, picks) {
+  const keep = { osBox: boxNameOf('osBox'), spBox: boxNameOf('spBox'), ...picks };
+  if (sp.info) sp.info.boxes = boxes;
+  for (const id of ['osBox', 'spBox']) boxListFill(id, keep[id]);
+  osBoxTool.render(); spBoxTool.render();
+}
+function boxTool({ host, sel, dims, changed }) {
+  let naming = false;
+  let busy = false;
+  const size = () => dims.map(id => Math.round((parseFloat($(id).value) || 0) * 100) / 100);
+  function render() {
+    const el = $(host);
+    const name = boxNameOf(sel);
+    const [l, w, h] = size();
+    if (name) { naming = false; el.innerHTML = '<button type="button" class="sp-link rm" data-box="rm">Remove box</button>'; return; }
+    if (!(l > 0 && w > 0 && h > 0)) { naming = false; el.innerHTML = ''; return; }
+    if (!naming) { el.innerHTML = '<button type="button" class="sp-link" data-box="name">Save as a box</button>'; return; }
+    if (el.querySelector('input')) return; // mid-typing: the name stays
+    el.innerHTML = '<input class="input" data-box="in" maxlength="30" placeholder="Box name" autocomplete="off" /><button type="button" class="btn btn-primary" data-box="save">Save</button><button type="button" class="sp-link" data-box="cancel">Cancel</button>';
+    el.querySelector('input').focus();
+  }
+  async function save() {
+    const inp = $(host).querySelector('input');
+    const name = inp ? inp.value.trim() : '';
+    if (busy) return;
+    if (!name) { if (inp) inp.focus(); return; }
+    const [length, width, height] = size();
+    busy = true;
+    const res = await api.shipBoxSave({ name, length, width, height }).catch(e => ({ ok: false, error: e.message }));
+    busy = false;
+    if (!res || !res.ok) { toast((res && res.error) || 'Could not save the box.', 4000); return; }
+    naming = false;
+    $(host).innerHTML = '';
+    boxListsUpdate(res.boxes, { [sel]: res.name });
+    changed();
+    toast(res.replaced ? `${res.name} now measures ${length} × ${width} × ${height}` : `${res.name} saved to the Box list`, 3000);
+  }
+  async function remove() {
+    const name = boxNameOf(sel);
+    if (!name || busy) return;
+    const yes = await rcConfirm({ title: 'Remove this box?', body: `${name} leaves the Box list on this computer. The size stays typed in, and packages already saved for items keep theirs.`, ok: 'Remove' });
+    if (!yes) return;
+    busy = true;
+    const res = await api.shipBoxDelete(name).catch(e => ({ ok: false, error: e.message }));
+    busy = false;
+    if (!res || !res.ok) { toast((res && res.error) || 'Could not remove the box.', 4000); return; }
+    boxListsUpdate(res.boxes, { [sel]: '' });
+    changed();
+  }
+  $(host).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-box]');
+    if (!b) return;
+    const act = b.dataset.box;
+    if (act === 'name') { naming = true; render(); }
+    else if (act === 'cancel') { naming = false; $(host).innerHTML = ''; render(); }
+    else if (act === 'save') save();
+    else if (act === 'rm') remove();
+  });
+  $(host).addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('[data-box="in"]')) { e.preventDefault(); save(); } });
+  return { render };
+}
+const spBoxTool = boxTool({ host: 'spBoxTool', sel: 'spBox', dims: ['spDl', 'spDw', 'spDh'], changed: () => { try { localStorage.setItem('spBox', $('spBox').value); } catch { /* best effort */ } } });
+// var: the drawer's code further down fills it in
+var osBoxTool = { render() {} };
+
 function spFillBoxes() {
   const sel = $('spBox');
   const boxes = (sp.info && sp.info.boxes) || [];
@@ -16007,6 +16091,7 @@ function spApplyBox(remember = true) {
   const b = ((sp.info && sp.info.boxes) || [])[Number(v)];
   if (b) { $('spDl').value = b.length; $('spDw').value = b.width; $('spDh').value = b.height; }
   if (remember) { try { localStorage.setItem('spBox', v); } catch { /* best effort */ } }
+  spBoxTool.render();
 }
 
 function spRenderAll() {
@@ -16658,7 +16743,7 @@ $('spPaste').addEventListener('input', () => {
 });
 $('spBox').addEventListener('change', () => { spApplyBox(); spScheduleRates(); });
 for (const id of ['spWt', 'spDl', 'spDw', 'spDh']) {
-  $(id).addEventListener('input', () => { if ($(id) !== $('spWt')) $('spBox').value = 'custom'; spScheduleRates(700); });
+  $(id).addEventListener('input', () => { if ($(id) !== $('spWt')) { $('spBox').value = 'custom'; spBoxTool.render(); } spScheduleRates(700); });
 }
 // the declared value changes the price (UPS charges for coverage over $100)
 $('spVal').addEventListener('input', () => spScheduleRates(700));
@@ -17154,6 +17239,7 @@ function osShowDeliver() {
 function osApplyBox() {
   const b = ((sp.info && sp.info.boxes) || [])[Number($('osBox').value)];
   if (b && $('osBox').value !== 'custom') { $('osDl').value = b.length; $('osDw').value = b.width; $('osDh').value = b.height; }
+  osBoxTool.render();
 }
 
 // the package as it stands, in the shape it is saved in
@@ -17169,6 +17255,7 @@ function osFillPkg(p) {
   sel.value = i >= 0 ? String(i) : 'custom';
   $('osWt').value = p.weight || '';
   $('osDl').value = p.length || ''; $('osDw').value = p.width || ''; $('osDh').value = p.height || '';
+  osBoxTool.render();
 }
 // Package header: "✓ Saved" when it matches what was saved for these items,
 // otherwise a Save button (owner 2026-10-20: dimensions saved per item)
@@ -17376,10 +17463,13 @@ $('osBox').addEventListener('change', () => {
 });
 for (const id of ['osWt', 'osVal', 'osDl', 'osDw', 'osDh']) {
   $(id).addEventListener('input', () => {
-    if (['osDl', 'osDw', 'osDh'].includes(id)) $('osBox').value = 'custom';
+    if (['osDl', 'osDw', 'osDh'].includes(id)) { $('osBox').value = 'custom'; osBoxTool.render(); }
     osPkgTag(); osSchedule(700);
   });
 }
+// a box saved or removed here changes only the list: the size on screen is
+// the same, so the rates stand and only the "saved for this item" tag moves
+osBoxTool = boxTool({ host: 'osBoxTool', sel: 'osBox', dims: ['osDl', 'osDw', 'osDh'], changed: () => { try { localStorage.setItem('spBox', $('osBox').value); } catch { /* best effort */ } if (os) osPkgTag(); } });
 // a signature changes what UPS charges, so the rates are asked for again;
 // Walmart's protection is priced on its own rows and needs no new rates
 $('osSig').addEventListener('change', () => { if (os) { clearTimeout(os.timer); osFetch(); } });

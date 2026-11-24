@@ -2213,6 +2213,15 @@ module.exports = async function run({ app, win, db, clipboard }) {
             osShowExtras({ signature: 0 }, { signature: { ok: true, price: 4.94 }, protection: { ok: false, price: null, covers: 0 } });
             out.x.popup = $('osLabelExtras').textContent; out.x.popupBad = !!$('osLabelExtras').querySelector('.bad');
             osShowExtras({ signature: 0 }, null); out.x.popupNone = $('osLabelExtras').hidden;
+            // a typed size can be saved as a box, under a name
+            out.bx = { preset: $('osBoxTool').textContent };
+            for (const [id, v] of [['osDl', '7'], ['osDw', '4'], ['osDh', '2']]) { $(id).value = v; $(id).dispatchEvent(new Event('input')); }
+            out.bx.custom = $('osBox').value === 'custom'; out.bx.offer = $('osBoxTool').textContent;
+            $('osBoxTool').querySelector('[data-box="name"]').click();
+            const nm = $('osBoxTool').querySelector('input'); out.bx.asks = !!nm && document.activeElement === nm;
+            if (nm) { nm.value = 'S25 box'; $('osBoxTool').querySelector('[data-box="save"]').click(); await new Promise(r => setTimeout(r, 500)); }
+            out.bx.picked = $('osBox').selectedOptions[0].textContent; out.bx.after = $('osBoxTool').textContent;
+            out.bx.shipTab = [...$('spBox').options].map(o => o.textContent); out.bx.dims = [$('osDl').value, $('osDw').value, $('osDh').value].join('x');
             osClose(); return out; })()`);
           check('order ship: Ship opens the drawer with the customer, the item and Ref 1, and it survives a re-render',
             ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
@@ -2230,6 +2239,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
           check('extras: Walmart protection shows its quote where Walmart gives one; with no quote the row stays clean and the summary says "+ protection"',
             x.prot && /Protection \$2\.90, covers \$189\.99/.test(x.prot.fedex.eta) && x.prot.fedex.pr === '$19.64' && !/Protection/.test(x.prot.ground.eta) && x.prot.ground.pr === '$14.30'
               && /\$14\.30 \+ protection/.test(x.sumGround) && !/Protection/.test(x.prot.ups.eta) && /\$19\.64$/.test(x.sum), { prot: x.prot, sum: x.sum, sumGround: x.sumGround });
+          const bx = ui.bx || {};
+          check('boxes: a typed size offers Save as a box, asks only for a name, and the new box is picked in the drawer and listed in the Ship tab',
+            bx.preset === 'Remove box' && bx.custom && bx.offer === 'Save as a box' && bx.asks && bx.picked === 'S25 box · 7 × 4 × 2' && bx.after === 'Remove box'
+              && bx.shipTab.includes('S25 box · 7 × 4 × 2') && bx.shipTab[bx.shipTab.length - 1] === 'Custom size' && bx.dims === '7x4x2', bx);
+          {
+            const info = await exec('api.shipInfo()');
+            const again = await exec(`api.shipBoxSave({ name: 's25 BOX', length: 7.5, width: 4, height: 2 })`);
+            const bad = await exec(`Promise.all([api.shipBoxSave({ name: 'No size', length: 0, width: 4, height: 2 }), api.shipBoxSave({ name: '  ', length: 7, width: 4, height: 2 }), api.shipBoxSave({ name: 'Custom size', length: 7, width: 4, height: 2 })])`);
+            const gone = await exec(`(async () => { const r = await api.shipBoxDelete('S25 BOX'); if (r.ok) boxListsUpdate(r.boxes, {}); localStorage.setItem('spBox', '0'); return [r, await api.shipBoxDelete('S25 box'), [...$('spBox').options].map(o => o.textContent)]; })()`);
+            check('boxes: the saved box is kept in Settings, the same name takes a new size, a nameless or sizeless box is refused, and Remove takes it off both lists',
+              info.boxes.length === 4 && info.boxes[3].name === 'S25 box' && info.boxes[3].length === 7 && again.ok && again.replaced && again.boxes.length === 4 && again.boxes[3].length === 7.5
+                && bad.every(b => !b.ok) && gone[0].ok && gone[0].boxes.length === 3 && !gone[1].ok && !gone[2].some(t => /S25/.test(t)), { info: info.boxes, again, bad, gone });
+          }
           check('extras: the label popup says what the label carries, in red when Walmart left one off',
             /Signature required · \$4\.94/.test(x.popup) && /did not add the protection/.test(x.popup) && x.popupBad && x.popupNone === true, x);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
