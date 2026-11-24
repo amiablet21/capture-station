@@ -9140,7 +9140,10 @@ async function stopWeb() {
 // depend on it being up.
 async function startOfficeServer() {
   const cfg = config.load().server || {};
-  await officeserver.configure({ enabled: !!cfg.enabled, port: cfg.port, backupDir: cfg.backupDir, userData: app.getPath('userData') });
+  await officeserver.configure({
+    enabled: !!cfg.enabled, port: cfg.port, backupDir: cfg.backupDir, userData: app.getPath('userData'),
+    folder: () => String(((config.load().returnsSync || {}).folder) || ''),
+  });
   if (app.isPackaged && !IS_TEST_RUN) {
     try { app.setLoginItemSettings({ openAtLogin: !!cfg.enabled }); } catch { /* not supported here */ }
   }

@@ -10,7 +10,8 @@ const os = require('node:os');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { start } = require('./dws-server');
-const { importFolder } = require('./import-folder');
+const { importFolder, keepCurrent } = require('./import-folder');
+const store = require('./store');
 const { makeDemoFolder } = require('./demo-folder');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dws-server-test-'));
@@ -107,6 +108,34 @@ const ok = (name) => { passed++; console.log(`  ok  ${name}`); };
   assert.equal((await call('PUT', '/api/records/stock_change/STOCK-ROOM%3Ademo-1', { token: owner, body: { data: { sku: 'X' }, version: 1 } })).status, 405);
   ok('log lines (stock changes, sales) cannot be rewritten, even by the owner');
 
+  /* ---- a payment period, opened up ---- */
+  const stmt = (await call('GET', '/api/records/wm_run/run-oct-a/statement', { token: owner })).json;
+  assert.equal(stmt.payable, 34011.04);
+  assert.equal(stmt.paidTotal, 34011.04);
+  assert.deepEqual(stmt.paid, [{ date: '2026-10-19', amount: 14011.04 }, { date: '2026-10-12', amount: 20000 }]);
+  assert.deepEqual(stmt.sections.map((x) => [x.name, x.total]), [['Sales', 38260.37], ['Refunds', -2999.07], ['Fees', -1480.25], ['Adjustments', 229.99]]);
+  assert.deepEqual(stmt.sections[1].lines[0].by.map((b) => b.label), ['Customer returns', 'Walmart Customer Care issued']);
+  const runRow = (await call('GET', '/api/records/wm_run', { token: owner })).json.rows.find((r) => r.id === 'run-oct-a');
+  assert.ok(runRow.cells.includes('$34,011.04'), 'the list shows what was payable without opening the period');
+  assert.equal((await call('GET', '/api/records/wm_run/run-oct-b/statement', { token: owner })).json.hasLines, false);
+  assert.equal((await call('GET', '/api/records/wm_run/run-oct-a/statement', { token: rma })).status, 403);
+  assert.equal((await call('GET', '/api/records/wm_run/nope/statement', { token: owner })).status, 404);
+  ok('a payment period opens into its statement: payable, paid to the bank, each section');
+  // a period brought in before the totals were kept gets them when the server next starts
+  {
+    const file = path.join(tmp, 'older.sqlite');
+    let old = store.open(file);
+    old.importPut('wm_run', 'r1', { label: 'Sep 5 - Sep 19, 2026' }, { srcTs: 5, detail: JSON.stringify({ lines: [{ type: 'PaymentSummary', amount: 1200.5, count: 1 }] }) });
+    old.close();
+    const { DatabaseSync } = require('node:sqlite');
+    const rawDb = new DatabaseSync(file); rawDb.exec("DELETE FROM meta WHERE k = 'runTotals'"); rawDb.close();
+    old = store.open(file);
+    assert.equal(old.get('wm_run', 'r1').data.stmt.payable, 1200.5);
+    assert.equal(old.get('wm_run', 'r1').version, 1, 'filled in quietly: not a change to the record');
+    old.close();
+  }
+  ok('periods already on the server get their totals without being brought in again');
+
   /* ---- two people on one return ---- */
   const a = (await call('GET', `/api/records/return/${encodeURIComponent(rid)}`, { token: rma })).json;
   const b = (await call('GET', `/api/records/return/${encodeURIComponent(rid)}`, { token: owner })).json;
@@ -183,6 +212,35 @@ const ok = (name) => { passed++; console.log(`  ok  ${name}`); };
   assert.match(chunk, /"kind":"return".*"action":"create"/);
   ctl.abort();
   ok('other computers hear about a change as it happens');
+  /* ---- keeping itself current from the folder ---- */
+  const kc = keepCurrent(srv.db, () => folder, { every: 3600000, first: 3600000 });
+  await kc.run();
+  assert.equal(kc.status.lastChange, '', 'everything in the folder is already here');
+  assert.ok(kc.status.lastCheck);
+  const histBefore = srv.db.history({ limit: 500 }).total;
+  const runsBefore = n('wm_run');
+  const salesBefore = n('sale');
+  fs.appendFileSync(path.join(folder, 'wmruns-IMRAN-WORK-PC.jsonl'), `${JSON.stringify({ op: 'put', id: 'run-nov', ts: Date.now(), run: { id: 'run-nov', label: 'Oct 31 - Nov 14, 2026', ranAt: new Date().toISOString(), station: 'IMRAN-WORK-PC' }, refunds: [], payouts: [], ledger: [], orders: [], lines: [{ type: 'PaymentSummary', amount: 500, count: 1 }] })}\n`);
+  fs.appendFileSync(path.join(folder, 'chansales-NICK.jsonl'), `${JSON.stringify({ id: 'n-new', ref: 'NEW-ORDER-1', ts: new Date().toISOString(), source: 'EBAY', lines: [{ c: 'X210-64GB-GRAY', q: 1 }] })}\n`);
+  const seenBefore = JSON.parse(srv.db.meta.get('folderSeen'));
+  await kc.run();
+  assert.equal(n('wm_run'), runsBefore + 1);
+  assert.equal(n('sale'), salesBefore + 1);
+  assert.equal(srv.db.get('wm_run', 'run-nov').data.stmt.payable, 500);
+  assert.equal(kc.status.lastCount, 2);
+  assert.equal(srv.db.history({ limit: 500 }).total, histBefore, 'a top-up does not fill the history with "Imported" lines');
+  const seenAfter = JSON.parse(srv.db.meta.get('folderSeen'));
+  assert.deepEqual(Object.keys(seenAfter).filter((g) => seenAfter[g] !== seenBefore[g]).sort(), ['chansales', 'wmruns'], 'only the files that changed were read again');
+  const stamp = kc.status.lastChange;
+  await new Promise((r) => setTimeout(r, 5));
+  await kc.run();
+  assert.equal(kc.status.lastChange, stamp);
+  const missing = keepCurrent(srv.db, () => path.join(tmp, 'no-such-folder'), { every: 3600000, first: 3600000 });
+  await missing.run();
+  assert.match(missing.status.error, /not set/);
+  missing.stop(); kc.stop();
+  ok('the server tops itself up from the folder: new periods and sales arrive on their own');
+
   srv.runBackup();
   const backups = fs.readdirSync(path.join(tmp, 'data', 'backups'));
   assert.equal(backups.length, 1);

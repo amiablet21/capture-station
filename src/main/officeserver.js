@@ -12,9 +12,10 @@
 const os = require('node:os');
 const path = require('node:path');
 const { start } = require('../../server/dws-server');
-const { importFolder, checkFolder, reportText, summarize } = require('../../server/import-folder');
+const { importFolder, checkFolder, reportText, summarize, keepCurrent } = require('../../server/import-folder');
 
 let live = null;   // { port, db, runBackup, close } while the server runs
+let topUp = null;  // the automatic bring-in from the shared Drive folder, while the server runs
 let error = '';
 let lastPort = 8790;
 
@@ -23,17 +24,23 @@ const dataDir = (userData) => path.join(userData, 'dws-server');
 async function stop() {
   const s = live;
   live = null;
+  if (topUp) { topUp.stop(); topUp = null; }
   if (s) { try { await s.close(); } catch { /* already closed */ } }
 }
 
 // boot and every settings change: (re)start to match the setting
-async function configure({ enabled, port, backupDir, userData }) {
+// `folder`: a function giving this computer's shared Drive folder. While
+// the server runs it tops itself up from that folder every two minutes
+// (only reading it), so what the computers save through Drive shows on the
+// server without anyone pressing Bring in.
+async function configure({ enabled, port, backupDir, userData, folder }) {
   await stop();
   lastPort = Number(port) || 8790;
   if (!enabled) { error = ''; return; }
   try {
     live = await start({ data: dataDir(userData), port: lastPort, host: '0.0.0.0', backupDir: backupDir || '', quiet: true });
     error = '';
+    if (typeof folder === 'function') topUp = keepCurrent(live.db, folder);
   } catch (e) {
     error = e && e.code === 'EADDRINUSE' ? `Port ${lastPort} is in use by another program.` : String((e && e.message) || e);
   }
@@ -60,7 +67,8 @@ function info(enabled, backupDir) {
     } catch { /* closing */ }
   }
   return { ok: true, enabled: !!enabled, running: !!live, error, port: lastPort, local: `http://localhost:${lastPort}`,
-    addresses: live ? addresses() : [], records, logins, lastBackup, backupError, backupDir: String(backupDir || '') };
+    addresses: live ? addresses() : [], records, logins, lastBackup, backupError, backupDir: String(backupDir || ''),
+    topUp: topUp ? { ...topUp.status } : null };
 }
 
 // a dry run of bringing the shared folder in: a report, nothing changed
@@ -108,4 +116,7 @@ function resetPassword(id, password) {
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
-module.exports = { configure, stop, info, check, bringIn, backupNow, logins, resetPassword, running: () => !!live };
+// one look at the folder now (the tests use it; the timer does the rest)
+const topUpNow = () => (topUp ? topUp.run() : Promise.resolve(null));
+
+module.exports = { configure, stop, info, check, bringIn, backupNow, logins, resetPassword, topUpNow, running: () => !!live };

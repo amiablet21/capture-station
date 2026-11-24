@@ -118,6 +118,16 @@
   .conflict .kv dt { color: inherit; opacity: 0.8; }
   .conflict .actions { margin-top: 8px; }
   .conflict button:not(.primary) { background: var(--surface); color: var(--text); }
+  .stmt-top { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 4px; }
+  .stmt-top div { border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 9px 12px; background: var(--surface-2); }
+  .stmt-top small { display: block; color: var(--muted); font-size: 11px; }
+  .stmt-top b { font-family: var(--mono); font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .stmt { font-size: 12.5px; }
+  .stmt .ln { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
+  .stmt .ln span:last-child { font-family: var(--mono); white-space: nowrap; }
+  .stmt .ln.sum { font-weight: 600; border-bottom: 0; }
+  .stmt .ln.sub { color: var(--muted); font-size: 11.5px; border-bottom: 0; padding: 1px 0 1px 14px; }
+  .stmt small { color: var(--faint); }
   .diff { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 10px; }
   .checks label { display: inline; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 400; color: var(--text); margin: 0 12px 0 4px; }
 
@@ -207,7 +217,7 @@
   const cell = (v) => (ISO.test(v) ? when(v) : v);
   // codes and numbers read in the mono face, like the app's sheets; a cell
   // that is cut short says the whole thing on hover
-  const MONO = /^(Date|When|Imported|Changed|Order #|PO #|PO # \/ reference|Tracking|SKU|Items|Lines|Listing|Grouped under|Cost|Amount|Change|Level after|Paid out|Case ID|Weight \(lb\)|Size \(in\)|Refunds|Seller-fulfilled|WFS|Username|Period|File)$/;
+  const MONO = /^(Date|When|Imported|Changed|Payable|Paid to bank|Order #|PO #|PO # \/ reference|Tracking|SKU|Items|Lines|Listing|Grouped under|Cost|Amount|Change|Level after|Paid out|Case ID|Weight \(lb\)|Size \(in\)|Refunds|Seller-fulfilled|WFS|Username|Period|File)$/;
   const td = (text, label, kids) => el('td', { class: `${MONO.test(label) && !kids ? 'mono' : ''}${text || kids ? '' : ' blank'}`, 'data-label': label, title: kids ? undefined : (String(text || '').length > 24 ? text : undefined), text: kids ? undefined : text }, kids || []);
   const gutter = (n) => el('td', { class: 'gutter', text: String(n) });
   const gutterHead = () => el('th', { class: 'gutter', text: '#' });
@@ -363,10 +373,42 @@
   function closeDrawer() { $('drawer').classList.add('hide'); $('drawer').dataset.busy = '0'; }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
+  // A payment period opened up, laid out as DWS Stock's Recovery page lays
+  // it out: what Walmart says is payable, what went to the bank, then each
+  // section of the statement with its lines.
+  const usd = (n) => { const v = Number(n) || 0; return `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
+  const stmtDay = (d) => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[2]}/${m[3]}/${m[1]}` : String(d || ''); };
+  function statementView(st) {
+    if (!st || !st.ok) return [];
+    if (!st.hasLines) return [el('h3', { text: 'Statement' }), el('p', { class: 'note', text: 'This period was brought in without its statement lines, so only the summary above is here. Importing the report again in DWS Stock adds them.' })];
+    const line = (label, amount, cls, count) => el('div', { class: `ln ${cls || ''}` }, [
+      el('span', {}, [label, count > 1 ? el('small', { text: `  ${Number(count).toLocaleString('en-US')} lines` }) : null].filter(Boolean)), el('span', { text: usd(amount) })]);
+    const out = [
+      el('div', { class: 'stmt-top' }, [
+        el('div', {}, [el('small', { text: 'Payable for this period' }), el('b', { text: st.payable === null ? '—' : usd(st.payable) })]),
+        el('div', {}, [el('small', { text: 'Paid to the bank' }), el('b', { text: st.paid.length ? usd(st.paidTotal) : '—' })]),
+      ]),
+    ];
+    if (st.paid.length) {
+      out.push(el('h3', { text: 'Paid to the bank, by day' }),
+        el('div', { class: 'stmt' }, st.paid.map((p) => line(stmtDay(p.date) || 'No date', p.amount))));
+    }
+    for (const sec of st.sections) {
+      out.push(el('h3', { text: sec.name }), el('div', { class: 'stmt' }, [
+        ...sec.lines.flatMap((l) => [line(l.label, l.amount, '', l.count), ...(l.by || []).map((b) => line(b.label, b.amount, 'sub', 0))]),
+        line(`${sec.name} total`, sec.total, 'sum'),
+      ]));
+    }
+    out.push(el('div', { class: 'stmt', style: 'margin-top:14px' }, [line('All activity in this period', st.activity, 'sum')]));
+    out.push(el('p', { class: 'note', style: 'margin-top:8px', text: 'These are the amounts on Walmart\'s own statement for the period. Your own expenses are not taken off here; they are in the Expenses list.' }));
+    return out;
+  }
+
   async function openRecord(id) {
     const k = kindNow();
     const r = await api('GET', `/api/records/${k.kind}/${encodeURIComponent(id)}`);
     if (!r.ok) return;
+    const st = k.kind === 'wm_run' ? await api('GET', `/api/records/wm_run/${encodeURIComponent(id)}/statement`) : null;
     const h = await api('GET', `/api/history?kind=${k.kind}&id=${encodeURIComponent(id)}&limit=50`);
     const editable = k.kind === 'return' && k.canWrite;
     showDrawer([
@@ -377,6 +419,7 @@
         el('button', { class: 'primary', text: 'Edit', onclick: () => editReturn(r) }),
         el('button', { class: 'danger', text: 'Delete', onclick: () => deleteRecord(k, r) }),
       ]) : (k.fixed ? null : el('p', { class: 'note', text: k.canWrite ? 'Changes to this are made in DWS Stock.' : '' })),
+      ...statementView(st),
       el('h3', { text: 'History of this record' }),
       ...((h.rows || []).length ? h.rows.map((x) => el('div', { class: 'hist' }, [
         el('span', { class: `pill ${x.action}`, text: ACTION[x.action] || x.action }), ` ${x.changed || ''} `,

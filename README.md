@@ -2,6 +2,13 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.147 highlights
+
+- **A payment period opens into its statement on the office server** (owner: "I want my boss to have access to the payments as well"). Recovery › Payment reports on the server page now shows *Payable* and *Paid to bank* for every period in the list, and a click opens the period: payable, each transfer to the bank by day, then Sales, Refunds (with who issued them), Fees and Adjustments with their totals. The figures come from the same code as DWS Stock's Recovery page (`src/main/recovery/statement.js`), so the two cannot disagree. The owner's own expenses are not taken off; they stay in the Expenses list. Periods already on the server get their totals on the first start, without being brought in again.
+- **A login for looking at payments:** *View only* with **Recovery** ticked sees the Recovery tab and nothing in the other sections changes for it. Logins without it still cannot open a statement.
+- **The server keeps itself up to date from the Drive folder.** While the office server runs, every two minutes it looks at the shared folder's files and reads only the kinds that changed, so a payment period imported on the work PC, a return, a label or a sale shows on the server a few minutes later without anyone pressing *Bring it in*. It only reads the folder. A record changed on the server itself is never overwritten. Settings › General › Office server says when it last looked and when it last brought something in. *Check my Drive folder* and *Bring it in* still work as before.
+- Money on the server page reads with thousands separators ($34,011.04).
+
 ## v1.32.146 highlights
 
 - **Each computer signs in to the office server** (owner: "how can I set up the other computers?"). Settings › General › **Shared server** takes the address shown on the server computer (`OFFICE-PC:8790`) and a person's own username and password, then shows who is signed in, their role, and whether the server answers. *Test* checks it on the spot; *Sign out* forgets the sign-in and keeps the address. On the server computer itself, *This computer* fills the address in.

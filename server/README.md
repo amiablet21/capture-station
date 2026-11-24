@@ -52,6 +52,12 @@ node import-folder.js "G:\My Drive\returns-sync"
 
 Add `--check` for a dry run that only prints the report. It only reads the folder. Nothing in it is changed, moved or deleted. It combines every computer's files by the rules DWS Stock uses (newest change wins, an order logged by several computers counts once, a deleted record stays deleted), prints how many records of each kind came in, and names any file it has no table for. Running it again only adds what is new.
 
+Inside DWS Stock the office server does this on its own: every two minutes it compares the folder's file sizes and times with the last look and reads only the kinds of file that changed (`keepCurrent` in `import-folder.js`). A record changed on the server is left alone.
+
+## Payment periods
+
+Recovery › Payment reports lists each Walmart payment period with what was payable and what went to the bank. Opening one shows its statement, worked out from the period's stored lines by the same code DWS Stock's Recovery page uses (`../src/main/recovery/statement.js`). `GET /api/records/wm_run/<id>/statement` returns it; it needs a login that can see Recovery.
+
 ## Backups
 
 The server writes a full copy of the database into `dws-data/backups` once a day and keeps the newest 14. That copy is on the same computer, so set a second place that leaves the building, such as a folder Google Drive syncs:

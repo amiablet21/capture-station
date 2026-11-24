@@ -192,6 +192,8 @@ function start({ data = DATA, port = PORT, host = HOST, backupDir = BACKUP_DIR, 
         if (!store.canRead(user, kind)) return send(res, 403, { error: 'Your login cannot see this.' });
         const id = seg[3];
         if (req.method === 'GET' && !id) return send(res, 200, db.list(kind, { q: url.searchParams.get('q') || '', limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset') }));
+        // a payment period opened up: its statement, worked out from the stored lines
+        if (req.method === 'GET' && kind === 'wm_run' && seg[4] === 'statement') { const st = db.runStatement(id); return st ? send(res, 200, st) : send(res, 404, { error: 'Not found.' }); }
         if (req.method === 'GET') { const r = db.get(kind, id); return r && !r.deleted ? send(res, 200, r) : send(res, 404, { error: 'Not found.' }); }
         if (!store.canWrite(user, kind)) return send(res, 403, { error: 'Your login cannot change this.' });
         if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data)) { if (req.method !== 'DELETE') return send(res, 400, { error: 'Nothing to save.' }); }

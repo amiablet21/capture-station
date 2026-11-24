@@ -21,6 +21,7 @@ const { DatabaseSync } = require('node:sqlite');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { buildStatement } = require('../src/main/recovery/statement');
 
 const AREAS = [
   ['returns', 'Returns'],
@@ -31,7 +32,11 @@ const AREAS = [
 ];
 
 const str = (v) => (v === null || v === undefined ? '' : String(v));
-const money = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? '' : `$${Number(v).toFixed(2)}`);
+const money = (v) => {
+  if (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) return '';
+  const n = Number(v);
+  return `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 const stationOf = (id) => { const s = str(id); const cut = s.lastIndexOf(':'); return cut > 0 ? s.slice(0, cut) : ''; };
 const CHANNEL = { WALMART: 'Walmart', EBAY: 'eBay', TEMU: 'Temu', 'TEMU US': 'Temu' };
 const channel = (v) => CHANNEL[str(v).toUpperCase()] || str(v);
@@ -130,8 +135,9 @@ const KINDS = {
     area: 'recovery', label: 'Payment reports', one: 'Payment report', write: 'recovery', read: 'recovery',
     when: (d) => d.ranAt || d.ran_at,
     title: (d) => str(d.label),
-    cols: ['Period', 'Imported', 'Refunds', 'Seller-fulfilled', 'WFS', 'File', 'By', 'Computer'],
-    row: (d) => [d.label, d.ranAt || d.ran_at, d.totalRefunds ?? d.total_refunds, d.sellerCount ?? d.seller_count,
+    cols: ['Period', 'Payable', 'Paid to bank', 'Imported', 'Refunds', 'Seller-fulfilled', 'WFS', 'File', 'By', 'Computer'],
+    row: (d) => [d.label, d.stmt && d.stmt.payable !== null ? money(d.stmt.payable) : '', d.stmt && d.stmt.paid ? money(d.stmt.paid) : '',
+      d.ranAt || d.ran_at, d.totalRefunds ?? d.total_refunds, d.sellerCount ?? d.seller_count,
       d.wfsCount ?? d.wfs_count, d.csvName || d.csv_name, d.by, d.station],
   },
   wm_mark: {
@@ -161,6 +167,15 @@ const KINDS = {
 // What each role may change. Everyone signed in can read; costs and Recovery
 // are private and need their own permission to be seen at all.
 const PERMS = ['returns', 'stock', 'costs', 'orders', 'pricing', 'recovery', 'admin'];
+// A payment period's headline figures, kept on the record so the list can
+// show them without opening every statement: what Walmart says is payable
+// and what it sent to the bank. Null when the period has no statement lines.
+function runTotals(lines) {
+  if (!Array.isArray(lines) || !lines.length) return null;
+  const st = buildStatement(lines, '', 'cycle', '', [], []);
+  return { payable: st.payable, paid: st.paidTotal, activity: st.activity };
+}
+
 const ROLES = {
   owner: { label: 'Owner', perms: PERMS },
   returns: { label: 'Returns room', perms: ['returns'] },
@@ -378,6 +393,37 @@ function api(db, file) {
   });
   const raw = (kind, id) => db.prepare('SELECT * FROM records WHERE kind = ? AND id = ?').get(kind, str(id));
   const get = (kind, id) => shape(raw(kind, id), true);
+  // the bulky part of a record (a payment period's full statement), read
+  // only when someone opens it
+  const detail = (kind, id) => {
+    const r = raw(kind, id);
+    if (!r || r.deleted || !r.detail) return null;
+    try { return JSON.parse(r.detail); } catch { return null; }
+  };
+  // One payment period as DWS Stock's Recovery page shows it. The owner's
+  // own expenses are left out: this is Walmart's statement, and the
+  // expenses have a list of their own.
+  function runStatement(id) {
+    const r = raw('wm_run', id);
+    if (!r || r.deleted) return null;
+    const d = detail('wm_run', id) || {};
+    const run = JSON.parse(r.data);
+    const st = buildStatement(Array.isArray(d.lines) ? d.lines : [], str(run.label), 'cycle', str(id), [run], []);
+    return { ...st, refunds: (d.refunds || []).length };
+  }
+  // periods brought in before the totals were kept get them once, quietly:
+  // the record itself is unchanged, so no version bump and no history line
+  if (!db.prepare("SELECT v FROM meta WHERE k = 'runTotals'").get()) {
+    for (const r of db.prepare("SELECT id, data, detail FROM records WHERE kind = 'wm_run' AND deleted = 0 AND detail IS NOT NULL").all()) {
+      try {
+        const data = JSON.parse(r.data);
+        if (data.stmt !== undefined) continue;
+        data.stmt = runTotals((JSON.parse(r.detail) || {}).lines);
+        db.prepare("UPDATE records SET data = ?, search = ? WHERE kind = 'wm_run' AND id = ?").run(JSON.stringify(data), searchText('wm_run', data, r.id), r.id);
+      } catch { /* an unreadable row stays as it is */ }
+    }
+    db.prepare("INSERT OR REPLACE INTO meta (k, v) VALUES ('runTotals', '1')").run();
+  }
 
   function list(kind, { q = '', limit = 100, offset = 0 } = {}) {
     const where = ['kind = ?', 'deleted = 0']; const args = [kind];
@@ -528,9 +574,10 @@ function api(db, file) {
     file, tx, close: () => db.close(), onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     userCount, listUsers, createUser, updateUser, publicUser, login, session, logout,
     logHistory, history, historyEntry,
-    get, list, create, update, remove, importPut, overview, counts,
+    get, detail, runStatement, list, create, update, remove, importPut, overview, counts,
+    changed: (ev) => notify(ev || {}),
     claimOrder, releaseOrder, backup, meta,
   };
 }
 
-module.exports = { open, KINDS, AREAS, ROLES, PERMS, permsOf, can, canRead, canWrite, stationOf };
+module.exports = { open, runTotals, KINDS, AREAS, ROLES, PERMS, permsOf, can, canRead, canWrite, stationOf };

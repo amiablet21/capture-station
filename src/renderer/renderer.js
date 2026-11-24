@@ -16780,6 +16780,14 @@ $('setLinkTest').addEventListener('click', async () => {
    database. The tick takes effect on Save; Check reads the shared folder
    and changes nothing; Bring it in copies the folder's records into the
    server (the folder is only read). */
+// the server keeping itself current from the Drive folder, in a sentence
+function serverTopUpNote(t) {
+  if (!t) return '';
+  if (t.error) return ` ${t.error}`;
+  const at = (v) => new Date(v).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  if (!t.lastCheck) return ' It keeps itself up to date from your Drive folder; the first look is in a moment.';
+  return ` It keeps itself up to date from your Drive folder: last looked ${at(t.lastCheck)}${t.lastChange ? `, last brought something in ${at(t.lastChange)}` : ''}.`;
+}
 async function fillServerSettings() {
   const v = await api.serverInfo();
   $('setSrvOn').checked = !!v.enabled;
@@ -16790,7 +16798,7 @@ async function fillServerSettings() {
   $('setSrvUrl').title = (v.addresses || []).join('   ');
   $('setSrvImport').hidden = !v.running;
   $('setSrvNote').textContent = v.error ? v.error
-    : v.running ? `Running. ${v.records.toLocaleString()} records, ${v.logins} login${v.logins === 1 ? '' : 's'}. Other computers in the office use the address below. Keep DWS Stock open on this computer.`
+    : v.running ? `Running. ${v.records.toLocaleString()} records, ${v.logins} login${v.logins === 1 ? '' : 's'}. Other computers in the office use the address below. Keep DWS Stock open on this computer.${serverTopUpNote(v.topUp)}`
     : v.enabled ? 'Starting…'
     : 'Tick this on one always-on computer in the office, then Save. The other computers keep working as they do now.';
   $('setSrvNote').classList.toggle('is-fail', !!v.error);

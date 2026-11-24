@@ -79,7 +79,16 @@ function makeDemoFolder(dir) {
   /* recovery */
   const run = (id, label, n, st) => ({ op: 'put', id, ts: t(n), run: { id, label, ranAt: day(n), csvName: `MP_${label}.csv`, csvHash: `h-${id}`, format: 'v1', totalRefunds: 31, sellerCount: 19, wfsCount: 12, logRows: 14, counts: {}, summary: {}, station: st, by: 'IM' },
     refunds: [{ po: '129034412212588', order_no: 'W-1', item: 'Phone', sku: 'X210-64GB-GRAY', qty: 1, net: -229.99 }], payouts: [], ledger: [], orders: [], lines: [] });
-  put('wmruns-IMRAN-MACBOOK-PRO.jsonl', [run('run-oct-a', 'Oct 3 - Oct 17, 2026', 8, 'IMRAN-MACBOOK-PRO'), run('run-old', 'Sep 19 - Oct 3, 2026', 5, 'IMRAN-MACBOOK-PRO'), { op: 'del', id: 'run-old', ts: t(6) }]);
+  // one period carries its statement lines, as a report imported today does
+  const L = (type, amountType, desc, amount, count, date) => ({ run_id: 'run-oct-a', type, amountType, desc, amount, count, date: date || '', pos: '' });
+  const withLines = { ...run('run-oct-a', 'Oct 3 - Oct 17, 2026', 8, 'IMRAN-MACBOOK-PRO'), lines: [
+    L('Sale', 'Product Price', 'Purchase', 41250.4, 212), L('Sale', 'Commission on Product', 'Purchase', -3300.03, 212), L('Sale', 'Shipping', 'Purchase', 310, 31),
+    L('Refund', 'Product Price', 'Return Refund', -2759.88, 12), L('Refund', 'Product Price', 'Walmart Customer Care Refund', -459.98, 2), L('Refund', 'Commission on Product', 'Return Refund', 220.79, 12),
+    L('Service Fee', '', 'WFS Fulfillment fee', -1480.25, 96), L('Adjustment', '', 'WFS Lost Inventory', 229.99, 1),
+    L('Instant Transfer', '', 'Deposit', -20000, 1, '2026-10-12'), L('Instant Transfer', '', 'Deposit', -14011.04, 1, '2026-10-19'),
+    L('PaymentSummary', '', '', 34011.04, 1),
+  ] };
+  put('wmruns-IMRAN-MACBOOK-PRO.jsonl', [withLines, run('run-old', 'Sep 19 - Oct 3, 2026', 5, 'IMRAN-MACBOOK-PRO'), { op: 'del', id: 'run-old', ts: t(6) }]);
   put('wmruns-IMRAN-WORK-PC.jsonl', [run('run-oct-b', 'Oct 17 - Oct 31, 2026', 11, 'IMRAN-WORK-PC')]);
   const mark = (po, n, patch) => ({ caseOpened: false, caseOpenedAt: null, caseId: null, caseApproved: false, caseApprovedAt: null, writtenOff: false, writtenOffAt: null, note: null, paidOut: 0, po, updated_at: day(n), station: 'IMRAN-HOMEDESKTOP', by: '', removed: false, ...patch });
   put('wmmarks-IMRAN-HOMEDESKTOP.jsonl', [mark('129034412212588', 7, { caseOpened: true, caseOpenedAt: day(7), caseId: 'C-55120' }), mark('129034412212588', 12, { caseOpened: true, caseOpenedAt: day(7), caseId: 'C-55120', caseApproved: true, caseApprovedAt: day(12), paidOut: 229.99 }), mark('129034412299001', 7, { writtenOff: true, writtenOffAt: day(7) })]);

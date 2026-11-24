@@ -18,9 +18,20 @@ const store = require('./store');
 const FILE_RE = /^([a-z]+(?:-[a-z]+)*)-([A-Z0-9][A-Z0-9-]*)\.jsonl$/;
 const ms = (v) => (typeof v === 'number' ? v : Date.parse(v) || 0);
 
-function readFolder(folder) {
+// Files that have to be read together: a WFS shipment is its own line plus
+// any later edit or "received" mark, which live in two more files. Every
+// other kind of file stands alone.
+const GROUPS = [
+  ['returns'], ['stocklog'], ['stockimports'], ['costs'], ['wfs', 'wfsedit', 'wfsrecv'],
+  ['captures'], ['shiplabels'], ['shippkgs'], ['chansales'], ['pricechanges'], ['pricegroups'],
+  ['wmruns'], ['wmwfs'], ['wmmarks'], ['wmexpenses'],
+];
+
+// `only`: a list of file prefixes to read; every other file is left unopened
+function readFolder(folder, only) {
   const byPrefix = {};
   const skipped = [];
+  const want = only ? new Set(only) : null;
   for (const name of fs.readdirSync(folder).sort()) {
     const full = path.join(folder, name);
     let st; try { st = fs.statSync(full); } catch { continue; }
@@ -28,6 +39,7 @@ function readFolder(folder) {
     const m = name.match(FILE_RE);
     if (!m) { skipped.push(name); continue; }
     const [, prefix, station] = m;
+    if (want && !want.has(prefix)) continue;
     const lines = [];
     let torn = 0;
     for (const ln of fs.readFileSync(full, 'utf8').split('\n')) {
@@ -70,8 +82,12 @@ const latestBy = (files, keyOf, tsOf) => {
   return win;
 };
 
-function importFolder(db, folder) {
-  const { byPrefix, skipped } = readFolder(folder);
+// `only` brings in just those kinds of file (the automatic top-up reads
+// what changed, not the whole folder); `quiet` leaves the "Imported N
+// records" line out of the history, which a top-up every few minutes
+// would fill.
+function importFolder(db, folder, { only = null, quiet = false } = {}) {
+  const { byPrefix, skipped } = readFolder(folder, only);
   const counts = {};
   const add = (kind, n = 1) => { counts[kind] = (counts[kind] || 0) + n; };
   const known = new Set();
@@ -165,7 +181,7 @@ function importFolder(db, folder) {
     /* Recovery: the summary is the record, the full statement rides along as its detail */
     for (const [id, w] of foldPutDel(take('wmruns'), (ev) => ev.id)) {
       const run = w.ev.run || {};
-      const data = { ...run, station: run.station || w.station };
+      const data = { ...run, station: run.station || w.station, stmt: w.ev.op === 'del' ? null : store.runTotals(w.ev.lines) };
       const detail = w.ev.op === 'del' ? null : JSON.stringify({ refunds: w.ev.refunds || [], payouts: w.ev.payouts || [], ledger: w.ev.ledger || [], orders: w.ev.orders || null, lines: w.ev.lines || null });
       put('wm_run', id, data, { srcTs: w.ts, station: data.station, detail, deleted: w.ev.op === 'del' });
     }
@@ -189,8 +205,65 @@ function importFolder(db, folder) {
   for (const [prefix, files] of Object.entries(byPrefix)) if (!known.has(prefix)) for (const f of files) notImported.push(f.name);
   const torn = Object.values(byPrefix).flat().filter((f) => f.torn).map((f) => `${f.name} (${f.torn})`);
   const total = Object.entries(counts).filter(([k]) => !/read|history/.test(k)).reduce((a, [, n]) => a + n, 0);
-  if (total) db.logHistory({ actor: { user: 'import', station: '' }, action: 'import', summary: `Imported ${total} records from ${path.basename(folder)}` });
-  return { counts, notImported, skipped, torn };
+  if (total && !quiet) db.logHistory({ actor: { user: 'import', station: '' }, action: 'import', summary: `Imported ${total} records from ${path.basename(folder)}` });
+  return { counts, notImported: only ? [] : notImported, skipped, torn, total };
+}
+
+// What each group of files looks like right now: every file's name, size
+// and last-written time. A group whose line differs from the one kept
+// after its last read has something new in it.
+function folderSignature(folder) {
+  const groupOf = {};
+  for (const g of GROUPS) for (const prefix of g) groupOf[prefix] = g[0];
+  const parts = {};
+  for (const name of fs.readdirSync(folder).sort()) {
+    const m = name.match(FILE_RE);
+    if (!m || !groupOf[m[1]]) continue;
+    let st; try { st = fs.statSync(path.join(folder, name)); } catch { continue; }
+    if (!st.isFile()) continue;
+    (parts[groupOf[m[1]]] = parts[groupOf[m[1]]] || []).push(`${name}:${st.size}:${Math.round(st.mtimeMs)}`);
+  }
+  return Object.fromEntries(Object.entries(parts).map(([g, list]) => [g, list.join('|')]));
+}
+
+// Keeps the database topped up from the folder without anyone pressing
+// Bring in (owner 2026-11-23: a new payment period should reach the server
+// on its own). Every `every` ms it looks at the files' sizes and times and
+// reads only the groups that changed, one group per turn of the event loop
+// so the app it runs inside stays responsive. The folder is only read.
+// `folder` is a function, so a changed setting is picked up at the next look.
+function keepCurrent(db, folder, { every = 120000, first = 30000 } = {}) {
+  const status = { on: true, lastCheck: '', lastChange: '', lastCount: 0, error: '' };
+  let stopped = false; let busy = false;
+  const seenNow = () => { try { return JSON.parse(db.meta.get('folderSeen') || '{}') || {}; } catch { return {}; } };
+  async function run() {
+    if (busy || stopped) return status;
+    busy = true;
+    try {
+      const dir = String(folder() || '').trim();
+      if (!dir || !fs.existsSync(dir)) { status.error = 'The shared Drive folder is not set on this computer.'; return status; }
+      const seen = seenNow();
+      const sig = folderSignature(dir);
+      let total = 0;
+      for (const g of GROUPS) {
+        if (stopped) return status;
+        if (!sig[g[0]] || sig[g[0]] === seen[g[0]]) continue;
+        total += importFolder(db, dir, { only: g, quiet: true }).total;
+        seen[g[0]] = sig[g[0]]; // the look taken BEFORE the read: a file written meanwhile differs next time
+        db.meta.set('folderSeen', JSON.stringify(seen));
+        await new Promise((r) => setImmediate(r));
+      }
+      const at = new Date().toISOString();
+      status.lastCheck = at; status.error = '';
+      if (total) { status.lastChange = at; status.lastCount = total; db.changed({}); }
+    } catch (e) {
+      if (!stopped) status.error = `The shared Drive folder could not be read: ${e.message}`;
+    } finally { busy = false; }
+    return status;
+  }
+  const t0 = setTimeout(run, first); t0.unref();
+  const timer = setInterval(run, every); timer.unref();
+  return { status, run, stop: () => { stopped = true; status.on = false; clearTimeout(t0); clearInterval(timer); } };
 }
 
 // A dry run: the same import, into a database that only exists in memory
@@ -260,7 +333,7 @@ function reportText(rep, { changed = false, compare = {} } = {}) {
   return out.join('\n');
 }
 
-module.exports = { importFolder, checkFolder, reportText, summarize, readFolder };
+module.exports = { importFolder, checkFolder, reportText, summarize, readFolder, folderSignature, keepCurrent, GROUPS };
 
 if (require.main === module) {
   const folder = process.argv[2];

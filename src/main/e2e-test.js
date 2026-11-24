@@ -2966,6 +2966,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const after = await exec('api.serverInfo()');
       check('server: Bring it in fills the server; a second time adds nothing',
         inn.ok && v.records > 100 && again.ok && after.records === v.records, { inn, records: v.records, after: after.records });
+      // the automatic top-up from the Drive folder runs with the server
+      // (its rules are checked in server/test-server.js); one look now
+      // must leave a time or say plainly why it could not look
+      const looked = await officeserver.topUpNow();
+      check('server: while it runs it keeps itself up to date from the Drive folder',
+        !!after.topUp && after.topUp.on === true && !!looked && (!!looked.lastCheck || /Drive folder/.test(looked.error)), { topUp: after.topUp, looked });
       // a second backup folder, and a password reset from the server computer
       const bdir = path.join(app.getPath('temp'), `dws-e2e-backup-${Date.now()}`);
       await exec(`api.setConfig(${JSON.stringify({ server: { backupDir: bdir } })})`);
