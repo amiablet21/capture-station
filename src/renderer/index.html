@@ -343,35 +343,32 @@
       <div class="osd-col">
         <section class="osd-bx">
           <div class="osd-t">Package <span class="r" id="osPkTag"></span></div>
-          <!-- three groups (owner 2026-11-24: "we need to organize how this
-               looks"): the box, what prints on the label, the paid extras -->
-          <div class="osd-pk">
-            <label class="os-f"><span>Box</span><select id="osBox" class="input"></select></label>
-            <label class="os-f"><span>Weight (lb)</span><input id="osWt" class="input mono" inputmode="decimal" placeholder="0.0" autocomplete="off" /></label>
-          </div>
-          <div class="osd-pkd">
-            <div class="os-f os-dims"><span>Dimensions (in)</span><div><input id="osDl" class="input mono" inputmode="decimal" aria-label="Length" /><b>×</b><input id="osDw" class="input mono" inputmode="decimal" aria-label="Width" /><b>×</b><input id="osDh" class="input mono" inputmode="decimal" aria-label="Height" /></div></div>
-            <div class="box-tool" id="osBoxTool"></div>
-          </div>
-          <div class="osd-grp">
-            <div class="osd-gt">On the label</div>
-            <div class="osd-pk2">
-              <div class="os-f"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
-              <label class="os-f"><span>Reference #2</span><input id="osRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></label>
-            </div>
-          </div>
-          <!-- paid extras (owner 2026-11-24): a signature on any label; the
-               protection is Walmart's own, on Walmart orders only -->
-          <div class="osd-grp">
-            <div class="osd-gt">Extras</div>
-            <div class="osd-pkx">
-              <label class="os-f"><span>Declared value</span><input id="osVal" class="input mono" inputmode="decimal" placeholder="0.00" autocomplete="off" /></label>
-              <div class="os-opts">
-                <label class="check"><input id="osSig" type="checkbox" /> Signature required</label>
-                <label class="check" id="osProtWrap" hidden title="Walmart labels only. Every Walmart label is covered to $100; this buys Walmart's cover above that, up to $500. Walmart sets the amount from the order."><input id="osProt" type="checkbox" /> Walmart protection, up to $500</label>
-              </div>
-            </div>
-          </div>
+          <!-- one thing per row, names down the left (owner 2026-11-24 picked
+               layout B of variants/ship-package.html). The size is one list of
+               the saved sizes, with "Add a new size" as its last line; the
+               three dimension boxes only show while one is being added. The
+               extras: a signature on any label, and Walmart's own protection
+               on Walmart orders only. -->
+          <div class="osd-row"><span>Box size</span>
+            <div class="osd-rin"><select id="osBox" class="input"></select><button type="button" class="sp-link rm" id="osBoxRm" hidden>Remove</button></div></div>
+          <div class="osd-row" id="osNewSize" hidden><span>New size (in)</span>
+            <div class="osd-rin">
+              <div class="os-dims"><div><input id="osDl" class="input mono" inputmode="decimal" aria-label="Length" /><b>×</b><input id="osDw" class="input mono" inputmode="decimal" aria-label="Width" /><b>×</b><input id="osDh" class="input mono" inputmode="decimal" aria-label="Height" /></div></div>
+              <input id="osBoxName" class="input" maxlength="30" placeholder="Name" autocomplete="off" />
+              <button type="button" class="btn btn-primary" id="osBoxAdd">Add</button>
+              <button type="button" class="sp-link" id="osBoxCancel">Cancel</button>
+            </div></div>
+          <label class="osd-row"><span>Weight</span>
+            <div class="osd-rin"><input id="osWt" class="input mono osd-short" inputmode="decimal" placeholder="0.0" autocomplete="off" /><small>lb</small></div></label>
+          <div class="osd-row"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
+          <label class="osd-row"><span>Reference #2</span><input id="osRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></label>
+          <label class="osd-row"><span>Declared value</span>
+            <div class="osd-rin"><input id="osVal" class="input mono osd-short" inputmode="decimal" placeholder="0.00" autocomplete="off" /></div></label>
+          <div class="osd-row"><span>Extras</span>
+            <div class="os-opts">
+              <label class="check"><input id="osSig" type="checkbox" /> Signature required</label>
+              <label class="check" id="osProtWrap" hidden title="Walmart labels only. Every Walmart label is covered to $100; this buys Walmart's cover above that, up to $500. Walmart sets the amount from the order."><input id="osProt" type="checkbox" /> Walmart protection, up to $500</label>
+            </div></div>
         </section>
         <section class="osd-bx">
           <div class="osd-t">Rates <span class="os-chips" id="osChips"></span></div>

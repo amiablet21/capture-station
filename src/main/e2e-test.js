@@ -2213,15 +2213,27 @@ module.exports = async function run({ app, win, db, clipboard }) {
             osShowExtras({ signature: 0 }, { signature: { ok: true, price: 4.94 }, protection: { ok: false, price: null, covers: 0 } });
             out.x.popup = $('osLabelExtras').textContent; out.x.popupBad = !!$('osLabelExtras').querySelector('.bad');
             osShowExtras({ signature: 0 }, null); out.x.popupNone = $('osLabelExtras').hidden;
-            // a typed size can be saved as a box, under a name
-            out.bx = { preset: $('osBoxTool').textContent };
-            for (const [id, v] of [['osDl', '7'], ['osDw', '4'], ['osDh', '2']]) { $(id).value = v; $(id).dispatchEvent(new Event('input')); }
-            out.bx.custom = $('osBox').value === 'custom'; out.bx.offer = $('osBoxTool').textContent;
-            $('osBoxTool').querySelector('[data-box="name"]').click();
-            const nm = $('osBoxTool').querySelector('input'); out.bx.asks = !!nm && document.activeElement === nm;
-            if (nm) { nm.value = 'S25 box'; $('osBoxTool').querySelector('[data-box="save"]').click(); await new Promise(r => setTimeout(r, 500)); }
-            out.bx.picked = $('osBox').selectedOptions[0].textContent; out.bx.after = $('osBoxTool').textContent;
-            out.bx.shipTab = [...$('spBox').options].map(o => o.textContent); out.bx.dims = [$('osDl').value, $('osDw').value, $('osDh').value].join('x');
+            // the size is one list; its last line adds a new size
+            const pickNew = () => { $('osBox').value = 'new'; $('osBox').dispatchEvent(new Event('change')); };
+            const type = (l, w, h) => { for (const [id, v] of [['osDl', l], ['osDw', w], ['osDh', h]]) { $(id).value = v; $(id).dispatchEvent(new Event('input')); } };
+            const dimsNow = () => [$('osDl').value, $('osDw').value, $('osDh').value].join('x');
+            const sizeNow = () => $('osBox').selectedOptions[0].textContent;
+            out.bx = { opts: [...$('osBox').options].map(o => o.textContent), start: sizeNow(), formHidden: $('osNewSize').hidden, rm: !$('osBoxRm').hidden, dims0: dimsNow() };
+            pickNew();
+            out.bx.open = !$('osNewSize').hidden && document.activeElement === $('osDl') && dimsNow() === 'xx' && $('osBoxRm').hidden;
+            type('7', '4', '2'); out.bx.staysNew = $('osBox').value === 'new';
+            $('osBoxName').value = 'S25 box'; $('osBoxAdd').click(); await new Promise(r => setTimeout(r, 500));
+            out.bx.added = sizeNow(); out.bx.closed = $('osNewSize').hidden; out.bx.dims = dimsNow(); out.bx.shipTab = [...$('spBox').options].map(o => o.textContent);
+            // Cancel puts the size back; a size added without a name is listed by its measurements
+            pickNew(); type('9', '5', '3'); $('osBoxCancel').click();
+            out.bx.cancel = sizeNow() + ' ' + dimsNow() + ' ' + $('osNewSize').hidden;
+            pickNew(); type('9', '5', ''); $('osBoxAdd').click(); await new Promise(r => setTimeout(r, 300));
+            out.bx.needsAll = !$('osNewSize').hidden && document.activeElement === $('osDh');
+            type('9', '5', '3'); $('osBoxAdd').click(); await new Promise(r => setTimeout(r, 500));
+            out.bx.unnamed = sizeNow();
+            // Esc lets go of a size being added and leaves the drawer open
+            pickNew(); $('osDl').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+            out.bx.esc = $('osNewSize').hidden && !!os && sizeNow();
             osClose(); return out; })()`);
           check('order ship: Ship opens the drawer with the customer, the item and Ref 1, and it survives a re-render',
             ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
@@ -2240,17 +2252,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
             x.prot && /Protection \$2\.90, covers \$189\.99/.test(x.prot.fedex.eta) && x.prot.fedex.pr === '$19.64' && !/Protection/.test(x.prot.ground.eta) && x.prot.ground.pr === '$14.30'
               && /\$14\.30 \+ protection/.test(x.sumGround) && !/Protection/.test(x.prot.ups.eta) && /\$19\.64$/.test(x.sum), { prot: x.prot, sum: x.sum, sumGround: x.sumGround });
           const bx = ui.bx || {};
-          check('boxes: a typed size offers Save as a box, asks only for a name, and the new box is picked in the drawer and listed in the Ship tab',
-            bx.preset === 'Remove box' && bx.custom && bx.offer === 'Save as a box' && bx.asks && bx.picked === 'S25 box · 7 × 4 × 2' && bx.after === 'Remove box'
-              && bx.shipTab.includes('S25 box · 7 × 4 × 2') && bx.shipTab[bx.shipTab.length - 1] === 'Custom size' && bx.dims === '7x4x2', bx);
+          check('boxes: the size is one list ending in Add a new size, which opens three empty boxes and a name; the new size is picked and the Ship tab lists it',
+            bx.opts && bx.opts.join('|') === 'Phone box · 8 × 6 × 4|Tablet box · 13 × 10 × 4|2-phone box · 10 × 8 × 5|＋ Add a new size…' && bx.start === 'Phone box · 8 × 6 × 4' && bx.formHidden && bx.rm && bx.dims0 === '8x6x4'
+              && bx.open && bx.staysNew && bx.added === 'S25 box · 7 × 4 × 2' && bx.closed && bx.dims === '7x4x2' && bx.shipTab.includes('S25 box · 7 × 4 × 2') && bx.shipTab[bx.shipTab.length - 1] === 'Custom size', bx);
+          check('boxes: Cancel and Esc put the size back, a size needs all three dimensions, and one added without a name is listed by its measurements',
+            bx.cancel === 'S25 box · 7 × 4 × 2 7x4x2 true' && bx.needsAll && bx.unnamed === '9 × 5 × 3' && bx.esc === '9 × 5 × 3', bx);
           {
             const info = await exec('api.shipInfo()');
             const again = await exec(`api.shipBoxSave({ name: 's25 BOX', length: 7.5, width: 4, height: 2 })`);
             const bad = await exec(`Promise.all([api.shipBoxSave({ name: 'No size', length: 0, width: 4, height: 2 }), api.shipBoxSave({ name: '  ', length: 7, width: 4, height: 2 }), api.shipBoxSave({ name: 'Custom size', length: 7, width: 4, height: 2 })])`);
-            const gone = await exec(`(async () => { const r = await api.shipBoxDelete('S25 BOX'); if (r.ok) boxListsUpdate(r.boxes, {}); localStorage.setItem('spBox', '0'); return [r, await api.shipBoxDelete('S25 box'), [...$('spBox').options].map(o => o.textContent)]; })()`);
-            check('boxes: the saved box is kept in Settings, the same name takes a new size, a nameless or sizeless box is refused, and Remove takes it off both lists',
-              info.boxes.length === 4 && info.boxes[3].name === 'S25 box' && info.boxes[3].length === 7 && again.ok && again.replaced && again.boxes.length === 4 && again.boxes[3].length === 7.5
-                && bad.every(b => !b.ok) && gone[0].ok && gone[0].boxes.length === 3 && !gone[1].ok && !gone[2].some(t => /S25/.test(t)), { info: info.boxes, again, bad, gone });
+            const gone = await exec(`(async () => { const r = await api.shipBoxDelete('S25 BOX'); const r2 = await api.shipBoxDelete('9 × 5 × 3'); if (r2.ok) boxListsUpdate(r2.boxes, {}); localStorage.setItem('spBox', '0'); return [r, await api.shipBoxDelete('S25 box'), [...$('spBox').options].map(o => o.textContent), r2]; })()`);
+            check('boxes: an added size is kept in Settings, the same name takes a new size, a nameless or sizeless box is refused, and Remove takes it off both lists',
+              info.boxes.length === 5 && info.boxes[3].name === 'S25 box' && info.boxes[3].length === 7 && info.boxes[4].name === '9 × 5 × 3' && again.ok && again.replaced && again.boxes.length === 5 && again.boxes[3].length === 7.5
+                && bad.every(b => !b.ok) && gone[0].ok && gone[3].ok && gone[3].boxes.length === 3 && !gone[1].ok && !gone[2].some(t => /S25|9 × 5/.test(t)), { info: info.boxes, again, bad, gone });
           }
           check('extras: the label popup says what the label carries, in red when Walmart left one off',
             /Signature required · \$4\.94/.test(x.popup) && /did not add the protection/.test(x.popup) && x.popupBad && x.popupNone === true, x);

@@ -16001,10 +16001,14 @@ const shipBoxes = () => (sp.info && sp.info.boxes) || [];
 const boxNameOf = (selId) => { const v = $(selId).value; const b = v === '' || v === 'custom' ? null : shipBoxes()[Number(v)]; return b ? b.name : ''; };
 // rebuild one Box list around a box's name ('' = Custom size); the typed
 // dimensions are left alone
+// a box in a list: its name and its size, or the size alone when it was
+// saved without a name
+const boxSize = (b) => `${b.length} × ${b.width} × ${b.height}`;
+const boxLabel = (b) => (b.name === boxSize(b) ? b.name : `${b.name} · ${boxSize(b)}`);
 function boxListFill(selId, name) {
   const sel = $(selId);
   if (!sel) return;
-  sel.innerHTML = shipBoxes().map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('') + '<option value="custom">Custom size</option>';
+  sel.innerHTML = shipBoxes().map((b, i) => `<option value="${i}">${esc(boxLabel(b))}</option>`).join('') + '<option value="custom">Custom size</option>';
   const i = shipBoxes().findIndex(b => b.name === name);
   sel.value = i >= 0 ? String(i) : 'custom';
 }
@@ -16012,8 +16016,9 @@ function boxListFill(selId, name) {
 function boxListsUpdate(boxes, picks) {
   const keep = { osBox: boxNameOf('osBox'), spBox: boxNameOf('spBox'), ...picks };
   if (sp.info) sp.info.boxes = boxes;
-  for (const id of ['osBox', 'spBox']) boxListFill(id, keep[id]);
-  osBoxTool.render(); spBoxTool.render();
+  boxListFill('spBox', keep.spBox);
+  spBoxTool.render();
+  osBoxFill(keep.osBox || 'custom');
 }
 function boxTool({ host, sel, dims, changed }) {
   let naming = false;
@@ -16071,14 +16076,11 @@ function boxTool({ host, sel, dims, changed }) {
   return { render };
 }
 const spBoxTool = boxTool({ host: 'spBoxTool', sel: 'spBox', dims: ['spDl', 'spDw', 'spDh'], changed: () => { try { localStorage.setItem('spBox', $('spBox').value); } catch { /* best effort */ } } });
-// var: the drawer's code further down fills it in
-var osBoxTool = { render() {} };
-
 function spFillBoxes() {
   const sel = $('spBox');
   const boxes = (sp.info && sp.info.boxes) || [];
   const prev = sel.value;
-  sel.innerHTML = boxes.map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('')
+  sel.innerHTML = boxes.map((b, i) => `<option value="${i}">${esc(boxLabel(b))}</option>`).join('')
     + '<option value="custom">Custom size</option>';
   let want = prev;
   if (!want) { try { want = localStorage.getItem('spBox') || ''; } catch { /* default */ } }
@@ -17132,6 +17134,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || !os || os.creating || custCard || document.querySelector('dialog[open]')) return;
   e.preventDefault();
   e.stopPropagation();
+  // a size being added is let go first; the drawer stays
+  if (os.boxAdd) { osBoxAddCancel(); $('osBox').focus(); return; }
   osClose();
   focusScan();
 }, true);
@@ -17166,12 +17170,13 @@ function osFillDrawer(row) {
   osShowDeliver();
   osRenderCustomer(meta.customer ? { name: meta.customer.name, company: meta.customer.company, lines: meta.customer.address || [], phone: meta.customer.phone } : null);
   osRenderItems((meta.items || []).map(i => ({ sku: i.sku || i.channelSku || '', title: i.title || '', qty: i.qty || 1, total: Number(i.lineTotal) || 0, img: i.img || '' })));
-  const boxes = ((sp.info && sp.info.boxes) || []);
-  const sel = $('osBox');
-  sel.innerHTML = boxes.map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('') + '<option value="custom">Custom size</option>';
+  // starts on the size used last, else the first on the list
   let lastBox = '';
   try { lastBox = localStorage.getItem('spBox') || ''; } catch { /* default */ }
-  sel.value = [...sel.options].some(o => o.value === lastBox) ? lastBox : (boxes.length ? '0' : 'custom');
+  const first = shipBoxes()[Number(lastBox)] && lastBox !== 'custom' ? shipBoxes()[Number(lastBox)] : shipBoxes()[0];
+  for (const id of ['osDl', 'osDw', 'osDh']) $(id).value = '';
+  os.boxAdd = null;
+  osBoxFill(first ? first.name : 'custom');
   osApplyBox();
   $('osWt').value = '';
   $('osVal').value = '';
@@ -17236,10 +17241,74 @@ function osShowDeliver() {
     .map(([l, v, ic, key]) => `<div class="osd-date${key && v ? ' is-key' : ''}${v ? '' : ' is-none'}">${ic}<span>${l}</span><b>${esc(day(v))}</b></div>`).join('') : '';
 }
 
+/* The size list (owner 2026-11-24: "instead of making it like 3 dimensions,
+   can you make it a drop down with the ability to add a new dimension").
+   One list: every saved size, then "Add a new size". The three dimension
+   boxes stay the package's size underneath, but only show while a size is
+   being added. A size that is on screen without being on the list (a package
+   saved for an item before, or a box just removed) shows as its own line. */
+const osDims = () => ['osDl', 'osDw', 'osDh'].map(id => Math.round((parseFloat($(id).value) || 0) * 100) / 100);
+// pick: a saved box's name, 'custom' (the size on screen) or 'new' (adding)
+function osBoxFill(pick) {
+  const sel = $('osBox');
+  const d = osDims();
+  const i = shipBoxes().findIndex(b => b.name === pick);
+  const opts = shipBoxes().map((b, n) => `<option value="${n}">${esc(boxLabel(b))}</option>`);
+  if (i < 0 && pick !== 'new') opts.push(`<option value="custom">${d.every(v => v > 0) ? d.join(' × ') : 'No size'}</option>`);
+  opts.push('<option value="new">＋ Add a new size…</option>');
+  sel.innerHTML = opts.join('');
+  sel.value = i >= 0 ? String(i) : pick === 'new' ? 'new' : 'custom';
+  $('osBoxRm').hidden = i < 0;
+  $('osNewSize').hidden = pick !== 'new';
+  if (os && pick !== 'new') os.boxPick = i >= 0 ? pick : 'custom'; // where Cancel goes back to
+}
 function osApplyBox() {
-  const b = ((sp.info && sp.info.boxes) || [])[Number($('osBox').value)];
-  if (b && $('osBox').value !== 'custom') { $('osDl').value = b.length; $('osDw').value = b.width; $('osDh').value = b.height; }
-  osBoxTool.render();
+  const b = shipBoxes()[Number($('osBox').value)];
+  if (b) { $('osDl').value = b.length; $('osDw').value = b.width; $('osDh').value = b.height; }
+}
+// "Add a new size" picked: the three boxes open empty, and what was there
+// is kept for Cancel
+function osBoxAddOpen(from) {
+  if (!os) return;
+  os.boxAdd = { pick: from, dims: ['osDl', 'osDw', 'osDh'].map(id => $(id).value) };
+  for (const id of ['osDl', 'osDw', 'osDh']) $(id).value = '';
+  $('osBoxName').value = '';
+  osBoxFill('new');
+  $('osDl').focus();
+}
+function osBoxAddCancel() {
+  if (!os || !os.boxAdd) return;
+  const was = os.boxAdd;
+  os.boxAdd = null;
+  ['osDl', 'osDw', 'osDh'].forEach((id, n) => { $(id).value = was.dims[n]; });
+  osBoxFill(was.pick);
+  osPkgTag(); osSchedule();
+}
+async function osBoxAdd() {
+  if (!os || !os.boxAdd || os.boxAdd.busy) return;
+  const [length, width, height] = osDims();
+  const bad = ['osDl', 'osDw', 'osDh'].find((id, n) => !([length, width, height][n] > 0));
+  if (bad) { $(bad).focus(); return; }
+  const rowId = os.rowId;
+  os.boxAdd.busy = true;
+  const res = await api.shipBoxSave({ name: $('osBoxName').value.trim() || `${length} × ${width} × ${height}`, length, width, height }).catch(e => ({ ok: false, error: e.message }));
+  if (!os || os.rowId !== rowId) return;
+  if (os.boxAdd) os.boxAdd.busy = false;
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not add the size.', 4000); return; }
+  os.boxAdd = null;
+  boxListsUpdate(res.boxes, { osBox: res.name });
+  try { localStorage.setItem('spBox', $('osBox').value); } catch { /* best effort */ }
+  osPkgTag(); osSchedule();
+}
+async function osBoxRemove() {
+  const b = shipBoxes()[Number($('osBox').value)];
+  if (!os || !b) return;
+  const yes = await rcConfirm({ title: 'Remove this size?', body: `${boxLabel(b)} leaves the list on this computer. This order keeps the size, and packages already saved for items keep theirs.`, ok: 'Remove' });
+  if (!yes || !os) return;
+  const res = await api.shipBoxDelete(b.name).catch(e => ({ ok: false, error: e.message }));
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not remove the size.', 4000); return; }
+  boxListsUpdate(res.boxes, { osBox: 'custom' });
+  if (os) osPkgTag();
 }
 
 // the package as it stands, in the shape it is saved in
@@ -17250,12 +17319,11 @@ function osPkgNow() {
   return { box: sel.value === 'custom' || !b ? 'custom' : b.name, weight: v('osWt'), length: v('osDl'), width: v('osDw'), height: v('osDh') };
 }
 function osFillPkg(p) {
-  const sel = $('osBox');
-  const i = ((sp.info && sp.info.boxes) || []).findIndex(b => b.name === p.box);
-  sel.value = i >= 0 ? String(i) : 'custom';
   $('osWt').value = p.weight || '';
   $('osDl').value = p.length || ''; $('osDw').value = p.width || ''; $('osDh').value = p.height || '';
-  osBoxTool.render();
+  if (os) os.boxAdd = null;
+  // a saved package whose box is no longer on the list keeps its own size
+  osBoxFill(shipBoxes().some(b => b.name === p.box) ? p.box : 'custom');
 }
 // Package header: "✓ Saved" when it matches what was saved for these items,
 // otherwise a Save button (owner 2026-10-20: dimensions saved per item)
@@ -17457,19 +17525,27 @@ async function osCreate() {
 }
 
 $('osBox').addEventListener('change', () => {
+  if (!os) return;
+  const v = $('osBox').value;
+  if (v === 'new') { osBoxAddOpen(os.boxPick || 'custom'); return; }
+  os.boxAdd = null;
   osApplyBox();
-  try { localStorage.setItem('spBox', $('osBox').value); } catch { /* best effort */ }
+  osBoxFill(v === 'custom' ? 'custom' : boxNameOf('osBox'));
+  if (v !== 'custom') { try { localStorage.setItem('spBox', v); } catch { /* best effort */ } }
   osPkgTag(); osSchedule();
 });
+$('osBoxAdd').addEventListener('click', osBoxAdd);
+$('osBoxCancel').addEventListener('click', osBoxAddCancel);
+$('osBoxRm').addEventListener('click', osBoxRemove);
+$('osNewSize').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); osBoxAdd(); } });
 for (const id of ['osWt', 'osVal', 'osDl', 'osDw', 'osDh']) {
   $(id).addEventListener('input', () => {
-    if (['osDl', 'osDw', 'osDh'].includes(id)) { $('osBox').value = 'custom'; osBoxTool.render(); }
+    // typed outside the add form (nothing on screen does that today): the
+    // list follows the size
+    if (['osDl', 'osDw', 'osDh'].includes(id) && !os.boxAdd) osBoxFill('custom');
     osPkgTag(); osSchedule(700);
   });
 }
-// a box saved or removed here changes only the list: the size on screen is
-// the same, so the rates stand and only the "saved for this item" tag moves
-osBoxTool = boxTool({ host: 'osBoxTool', sel: 'osBox', dims: ['osDl', 'osDw', 'osDh'], changed: () => { try { localStorage.setItem('spBox', $('osBox').value); } catch { /* best effort */ } if (os) osPkgTag(); } });
 // a signature changes what UPS charges, so the rates are asked for again;
 // Walmart's protection is priced on its own rows and needs no new rates
 $('osSig').addEventListener('change', () => { if (os) { clearTimeout(os.timer); osFetch(); } });
