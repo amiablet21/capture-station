@@ -64,7 +64,7 @@ function snap(l) {
     service_code: l.service_code || '', service_name: l.service_name || '', tracking: l.tracking || '',
     carrier: l.carrier || '', cost: l.cost == null ? null : Number(l.cost), value: Number(l.value) || 0,
     weight: Number(l.weight) || 0, dims: l.dims || '', party_name: l.party_name || '', test: l.test ? 1 : 0,
-    voided_at: l.voided_at || '', row_id: Number(l.row_id) || 0, part: l.part || '',
+    voided_at: l.voided_at || '', row_id: Number(l.row_id) || 0, part: l.part || '', signature: l.signature ? 1 : 0,
   };
 }
 
@@ -233,7 +233,7 @@ function listFar(sinceDay) {
       service_code: l.service_code || '', service_name: l.service_name || '', tracking: l.tracking || '', shipment_id: '',
       cost: l.cost == null ? null : Number(l.cost), value: Number(l.value) || 0, weight: Number(l.weight) || 0, dims: l.dims || '',
       party_name: l.party_name || '', test: l.test ? 1 : 0, voided_at: l.voided_at || '', carrier: l.carrier || '',
-      row_id: Number(l.row_id) || 0, station: l.station, remote: true,
+      row_id: Number(l.row_id) || 0, signature: l.signature ? 1 : 0, station: l.station, remote: true,
     });
   }
   return out;

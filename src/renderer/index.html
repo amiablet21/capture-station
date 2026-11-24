@@ -353,7 +353,12 @@
             <div class="os-f"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
           </div>
           <div class="osd-pk2">
-            <div></div>
+            <!-- paid extras (owner 2026-11-24): a signature on any label; the
+                 protection is Walmart's own, on Walmart orders only -->
+            <div class="os-opts">
+              <label class="check"><input id="osSig" type="checkbox" /> Signature required</label>
+              <label class="check" id="osProtWrap" hidden title="Walmart labels only. Every Walmart label is covered to $100; this buys Walmart's cover above that, up to $500. Walmart sets the amount from the order."><input id="osProt" type="checkbox" /> Walmart protection, up to $500</label>
+            </div>
             <label class="os-f"><span>Reference #2</span><input id="osRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></label>
           </div>
         </section>
@@ -374,6 +379,7 @@
   <dialog id="osLabelDlg" class="dlg os-dlg">
     <div class="dlg-body">
       <div class="sp-done-h"><span class="ok" id="osLabelOk">✓</span><b id="osLabelTitle">Label created</b><span class="trk" id="osLabelTrk"></span></div>
+      <div class="os-extras" id="osLabelExtras" hidden></div>
       <div class="osp-sheet" id="osSheet"><div class="sp-label" id="osLabelImg"></div></div>
       <div class="osp-fmt" id="osPrintFmt">
         <button type="button" data-fmt="label">Label 4×6</button>
@@ -474,6 +480,7 @@
                 <option value="">None</option><option value="Walmart">Walmart</option><option value="eBay">eBay</option><option value="Temu">Temu</option>
               </select></div></label>
           </div>
+          <label class="check sp-sig" id="spSigWrap"><input id="spSig" type="checkbox" /> Signature required</label>
         </div>
       </div>
 

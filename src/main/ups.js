@@ -118,6 +118,17 @@ function declaredValue(v) {
   return n > 0 ? { DeclaredValue: { CurrencyCode: 'USD', MonetaryValue: n.toFixed(2) } } : null;
 }
 
+// the package's paid extras: a declared value, and a signature on delivery
+// (owner 2026-11-24). DCISType 2 is UPS's "Delivery Confirmation Signature
+// Required"; within the US it is asked for on the package, on the rate and
+// the label alike, so the price shown already includes it. A return label
+// is signed for by us, never the customer, so it carries none.
+function packageOptions({ kind, value, signature }) {
+  const o = { ...(declaredValue(value) || {}) };
+  if (signature && kind !== 'return') o.DeliveryConfirmation = { DCISType: '2' };
+  return Object.keys(o).length ? o : null;
+}
+
 // who is where on a label. Ship: our ship-from -> the customer. Return: the
 // customer -> our return address, on a UPS Print Return Label. The Shipper
 // is always us (the paying account at our warehouse address).
@@ -145,7 +156,7 @@ function yyyymmdd(d = new Date()) {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function buildRateRequest({ account, kind, shipFrom, returnTo, other, pkg, value }) {
+function buildRateRequest({ account, kind, shipFrom, returnTo, other, pkg, value, signature }) {
   const { from, to } = legs({ kind, shipFrom, returnTo, other });
   const p = {
     PackagingType: { Code: '02' },
@@ -153,8 +164,8 @@ function buildRateRequest({ account, kind, shipFrom, returnTo, other, pkg, value
   };
   const dims = pkgDims(pkg);
   if (dims) p.Dimensions = dims;
-  const dv = declaredValue(value);
-  if (dv) p.PackageServiceOptions = dv;
+  const opts = packageOptions({ kind, value, signature });
+  if (opts) p.PackageServiceOptions = opts;
   return {
     RateRequest: {
       Request: { TransactionReference: { CustomerContext: 'DWS Stock rates' } },
@@ -176,7 +187,7 @@ function buildRateRequest({ account, kind, shipFrom, returnTo, other, pkg, value
 // ever prints on a label (owner 2026-10-19)
 const LABEL_DESC = { ship: 'Merchandise', return: 'Merchandise return' };
 
-function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value, serviceCode, reference, reference2 }) {
+function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value, signature, serviceCode, reference, reference2 }) {
   const { from, to } = legs({ kind, shipFrom, returnTo, other });
   const p = {
     Packaging: { Code: '02' },
@@ -184,8 +195,8 @@ function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value
   };
   const dims = pkgDims(pkg);
   if (dims) p.Dimensions = dims;
-  const dv = declaredValue(value);
-  if (dv) p.PackageServiceOptions = dv;
+  const opts = packageOptions({ kind, value, signature });
+  if (opts) p.PackageServiceOptions = opts;
   // Ref 1 prints on the label (the PO#); package-level is the one valid
   // for US-to-US shipments
   // Ref 2 (owner 2026-10-21) is optional and prints under Ref 1

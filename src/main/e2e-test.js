@@ -1936,9 +1936,21 @@ module.exports = async function run({ app, win, db, clipboard }) {
             orderLines: { orderLine: [{ lineNumber: '1', item: { sku: 'WM-X133', productName: 'Galaxy' }, orderLineQuantity: { amount: '1' } }] } } }));
           if (req.url === '/v3/shipping/labels/shipping-estimates') return res.end(JSON.stringify({ data: { estimates: [
             { name: 'USPS_GROUND_ADVANTAGE', displayName: 'USPS Ground Advantage', carrierName: 'USPS', estimatedRate: { amount: 5.5 } },
-            { name: 'UPS_GROUND', displayName: 'UPS Ground', carrierName: 'UPS', estimatedRate: { amount: 8.4 }, deliveryDate: '2026-10-23T23:59:00Z' },
-            { name: 'FEDEX_2_DAY', displayName: 'FedEx 2Day', carrierName: 'FedEx', estimatedRate: { amount: 11.8 } } ] } }));
-          if (req.url === '/v3/shipping/labels' && req.method === 'POST') return res.end(JSON.stringify({ data: { trackingNo: '1Z9WM0000000000077', carrierName: 'UPS', carrierServiceType: 'UPS Ground' } }));
+            // the add-ons as Walmart answers them: a signature price on most
+            // services, none on a few, and a protection quote only sometimes
+            { name: 'UPS_GROUND', displayName: 'UPS Ground', carrierName: 'UPS', estimatedRate: { amount: 8.4 }, deliveryDate: '2026-10-23T23:59:00Z', addOns: [{ name: 'SIGNATURE', charge: { amount: 5.9, currency: 'USD' }, isApplicable: false }] },
+            { name: 'FEDEX_2_DAY', displayName: 'FedEx 2Day', carrierName: 'FedEx', estimatedRate: { amount: 11.8 },
+              addOns: [{ name: 'SIGNATURE', charge: { amount: 4.94, currency: 'USD' } }, { name: 'INSURANCE', charge: { amount: 2.9, currency: 'USD' }, declaredValue: { amount: 189.99, currency: 'USD' } }] },
+            { name: 'UPS_NEXT_DAY_AIR_EARLY', displayName: 'UPS Next Day Air Early', carrierName: 'UPS', estimatedRate: { amount: 56.04 }, addOns: [] } ] } }));
+          if (req.url === '/v3/shipping/labels' && req.method === 'POST') {
+            // the label answers with the add-ons it was really bought with;
+            // this Walmart leaves the protection off a UPS Ground label
+            const asked = JSON.parse(body || '{}');
+            const addOns = [];
+            if ((asked.addOns || []).includes('SIGNATURE')) addOns.push({ name: 'SIGNATURE', charge: { amount: asked.carrierName === 'FedEx' ? 4.94 : 5.9, currency: 'USD' }, status: 'Active' });
+            if ((asked.addOns || []).includes('INSURANCE') && asked.carrierServiceType !== 'UPS_GROUND') addOns.push({ name: 'INSURANCE', charge: { amount: 2.9, currency: 'USD' }, declaredValue: { amount: 189.99, currency: 'USD' }, status: 'Active' });
+            return res.end(JSON.stringify({ data: { trackingNo: '1Z9WM0000000000077', carrierName: asked.carrierName || 'UPS', carrierServiceType: 'UPS Ground', ...(addOns.length ? { addOns } : {}) } }));
+          }
           if (req.url === '/v3/shipping/labels/carriers') return res.end(JSON.stringify([{ carrierId: '1000', shortName: 'FedEx', carrierName: 'FedEx' }, { carrierId: '1001', shortName: 'USPS', carrierName: 'USPS' }]));
           if (req.url.startsWith('/v3/shipping/labels/carriers/')) {
             if (req.method === 'DELETE') return res.end(JSON.stringify({ data: 'true' }));
@@ -2100,7 +2112,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
           r = await exec(`api.orderShipRates(${JSON.stringify({ rowId: wRow.id, party: cust, pkg, value: 189.99 })})`);
           const wm = r.ok && r.sources.find(x => x.id === 'wm');
           check('order ship: one list from Walmart and both UPS accounts, USPS never offered',
-            r.ok && r.sources.map(x => x.id).join(',') === 'wm,a,b' && wm.ok && wm.rates.map(x => x.code).join(',') === 'UPS_GROUND,FEDEX_2_DAY', r);
+            r.ok && r.sources.map(x => x.id).join(',') === 'wm,a,b' && wm.ok && wm.rates.map(x => x.code).join(',') === 'UPS_GROUND,FEDEX_2_DAY,UPS_NEXT_DAY_AIR_EARLY', r);
           r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: wRow.id, via: 'wm', code: 'UPS_GROUND', name: 'UPS Ground', carrier: 'UPS', price: 8.4, party: cust, pkg, value: 189.99 })})`);
           let rowNow = db.getRow(wRow.id);
           check('order ship: a Walmart label fills the row\'s tracking, image kept, not processed',
@@ -2117,6 +2129,44 @@ module.exports = async function run({ app, win, db, clipboard }) {
           r = await exec(`api.shipVoid(${wmLabel.id})`);
           check('order ship: voiding the Walmart label takes the tracking back off the row',
             r.ok && upsSeen.some(x => x.method === 'DELETE' && x.url.includes('/v3/shipping/labels/carriers/UPS/trackings/1Z9WM0000000000077')) && db.getRow(wRow.id).tracking === '', r);
+          // Signature and Walmart protection (owner 2026-11-24)
+          {
+            const lastBody = (test) => { const hit = [...upsSeen].reverse().find(test); return hit ? JSON.parse(hit.body || '{}') : null; };
+            const first = upsSeen.find(x => x.url.startsWith('/api/rating/'));
+            check('extras: without a tick UPS is asked for no signature', first && !/DeliveryConfirmation/.test(first.body), first && first.body.slice(0, 200));
+            r = await exec(`api.orderShipRates(${JSON.stringify({ rowId: wRow.id, party: cust, pkg, value: 189.99, signature: true })})`);
+            const wm2 = r.ok && r.sources.find(x => x.id === 'wm');
+            const by = (code) => (wm2 && wm2.rates.find(x => x.code === code)) || {};
+            const est = lastBody(x => x.url === '/v3/shipping/labels/shipping-estimates');
+            check('extras: Walmart is asked for add-on prices and each service answers with its own',
+              est && est.addOns === true && by('UPS_GROUND').signature === 5.9 && by('UPS_GROUND').protection === null && by('UPS_GROUND').price === 8.4
+                && by('FEDEX_2_DAY').signature === 4.94 && by('FEDEX_2_DAY').protection.price === 2.9 && by('FEDEX_2_DAY').protection.covers === 189.99
+                && by('UPS_NEXT_DAY_AIR_EARLY').signature === null, { est: est && est.addOns, rates: wm2 && wm2.rates });
+            const upsRate = lastBody(x => x.url.startsWith('/api/rating/'));
+            const opts = upsRate && upsRate.RateRequest.Shipment.Package[0].PackageServiceOptions;
+            check('extras: a ticked signature goes to UPS on the rate, beside the declared value',
+              opts && opts.DeliveryConfirmation && opts.DeliveryConfirmation.DCISType === '2' && opts.DeclaredValue.MonetaryValue === '189.99', opts);
+            const shipReq = (kind) => upsMod.buildShipRequest({ account: { accountNumber: 'A1B2C3' }, kind, shipFrom: cust, returnTo: cust, other: cust, pkg, value: 0, signature: true, serviceCode: '03', reference: 'X' })
+              .ShipmentRequest.Shipment.Package[0].PackageServiceOptions;
+            check('extras: a UPS label carries the signature, a return label never does',
+              shipReq('ship') && shipReq('ship').DeliveryConfirmation.DCISType === '2' && !shipReq('return'), { ship: shipReq('ship'), ret: shipReq('return') });
+            // FedEx through Walmart, both extras: Walmart's answer prices them
+            r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: wRow.id, via: 'wm', code: 'FEDEX_2_DAY', name: 'FedEx 2Day', carrier: 'FedEx', price: 11.8, party: cust, pkg, value: 0, signature: true, protection: true })})`);
+            const lab = lastBody(x => x.url === '/v3/shipping/labels' && x.method === 'POST');
+            check('extras: a Walmart label is bought with the ticked add-ons, and its cost and cover come from Walmart\'s answer',
+              r.ok && lab && lab.addOns.join(',') === 'SIGNATURE,INSURANCE' && r.label.cost === 19.64 && r.label.value === 189.99 && r.label.signature === 1
+                && r.extras.signature.ok && r.extras.signature.price === 4.94 && r.extras.protection.ok && r.extras.protection.covers === 189.99, { lab: lab && lab.addOns, r: r.ok ? { ...r.label, extras: r.extras } : r });
+            if (r.ok) await exec(`api.shipVoid(${r.label.id})`);
+            // UPS Ground through Walmart: this Walmart leaves the protection off
+            r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: wRow.id, via: 'wm', code: 'UPS_GROUND', name: 'UPS Ground', carrier: 'UPS', price: 8.4, party: cust, pkg, value: 0, protection: true })})`);
+            const lab2 = lastBody(x => x.url === '/v3/shipping/labels' && x.method === 'POST');
+            check('extras: protection Walmart did not add is reported, never assumed',
+              r.ok && lab2.addOns.join(',') === 'INSURANCE' && r.extras.protection.ok === false && r.extras.signature === null && r.label.value === 0 && r.label.cost === 8.4 && r.label.signature === 0, r.ok ? { ...r.label, extras: r.extras } : r);
+            if (r.ok) await exec(`api.shipVoid(${r.label.id})`);
+            check('extras: both test labels voided, the line is free again', db.getRow(wRow.id).tracking === '', db.getRow(wRow.id));
+            const list = await exec('api.shipList(0)');
+            check('extras: the labels list carries the signature flag', list.ok && list.labels.some(l => l.signature === 1) && list.labels.some(l => l.signature === 0), list.ok ? list.labels.map(l => l.signature) : list);
+          }
           await exec(`(async () => { showPage('capture'); setCapHist(false); state = await api.getState(); render(); })()`);
           await sleep(500);
           const ui = await exec(`(async () => {
@@ -2146,6 +2196,21 @@ module.exports = async function run({ app, win, db, clipboard }) {
             await new Promise(r => setTimeout(r, 400));
             document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn').click(); await new Promise(r => setTimeout(r, 900));
             out.refilled = $('osWt').value === '1.3' && /Saved for this item/.test($('osPkTag').textContent);
+            // the extras: off on every open, protection offered on a Walmart order
+            await new Promise(r => setTimeout(r, 2500)); // the saved package rates on its own
+            const row = (k) => { const el = document.querySelector('#osRates .sp-rate[data-k="' + k + '"]'); return el ? { cls: el.className, eta: el.querySelector('.eta').textContent, pr: el.querySelector('.pr').textContent } : null; };
+            out.x = { startOff: !$('osSig').checked && !$('osProt').checked, protShown: !$('osProtWrap').hidden, plain: row('wm:UPS_GROUND') };
+            $('osSig').click(); await new Promise(r => setTimeout(r, 2500));
+            out.x.sig = { ground: row('wm:UPS_GROUND'), early: row('wm:UPS_NEXT_DAY_AIR_EARLY'), ups: row('b:03'), order: [...document.querySelectorAll('#osRates .sp-rate')].map(e => e.dataset.k) };
+            document.querySelector('#osRates .sp-rate[data-k="wm:UPS_NEXT_DAY_AIR_EARLY"]').click();
+            out.x.offPick = os.pick;
+            $('osProt').click(); await new Promise(r => setTimeout(r, 200));
+            out.x.prot = { ground: row('wm:UPS_GROUND'), fedex: row('wm:FEDEX_2_DAY'), ups: row('b:03') };
+            document.querySelector('#osRates .sp-rate[data-k="wm:FEDEX_2_DAY"]').click();
+            out.x.sum = $('osdSum').textContent;
+            osShowExtras({ signature: 0 }, { signature: { ok: true, price: 4.94 }, protection: { ok: false, price: null, covers: 0 } });
+            out.x.popup = $('osLabelExtras').textContent; out.x.popupBad = !!$('osLabelExtras').querySelector('.bad');
+            osShowExtras({ signature: 0 }, null); out.x.popupNone = $('osLabelExtras').hidden;
             osClose(); return out; })()`);
           check('order ship: Ship opens the drawer with the customer, the item and Ref 1, and it survives a re-render',
             ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
@@ -2154,6 +2219,17 @@ module.exports = async function run({ app, win, db, clipboard }) {
             ui.ref2 === 'X133-128GB-GRAY | 1 unit sold' && ui.ref2Many === 'X133-128GB-GRAY, OPE | 3 units sold' && ui.ref2Many.length <= 35, ui);
           check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
           check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
+          const x = ui.x || {};
+          check('extras: both tick boxes start off, and Walmart protection is offered on a Walmart order',
+            x.startOff && x.protShown && x.plain && x.plain.pr === '$8.40' && !/Signature/.test(x.plain.eta), x);
+          check('extras: Signature adds Walmart\'s price to each service, a UPS account prices it in, and a service without it cannot be picked',
+            x.sig && x.sig.ground.pr === '$14.30' && /Signature \$5\.90/.test(x.sig.ground.eta) && /is-off/.test(x.sig.early.cls) && /No signature on this service/.test(x.sig.early.eta)
+              && /Signature included/.test(x.sig.ups.eta) && x.sig.order[x.sig.order.length - 1] === 'wm:UPS_NEXT_DAY_AIR_EARLY' && x.offPick !== 'wm:UPS_NEXT_DAY_AIR_EARLY', x.sig);
+          check('extras: Walmart protection shows its quote where Walmart gives one, says so where it does not, and leaves UPS accounts alone',
+            x.prot && /Protection \$2\.90, covers \$189\.99/.test(x.prot.fedex.eta) && x.prot.fedex.pr === '$19.64' && /Walmart prices it on the label/.test(x.prot.ground.eta) && x.prot.ground.pr === '$14.30'
+              && !/Protection/.test(x.prot.ups.eta) && /\$19\.64/.test(x.sum), { prot: x.prot, sum: x.sum });
+          check('extras: the label popup says what the label carries, in red when Walmart left one off',
+            /Signature required · \$4\.94/.test(x.popup) && /did not add the protection/.test(x.popup) && x.popupBad && x.popupNone === true, x);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
             /Deliver by10\/22\/2026/.test(ui.deliver) && /Ordered10\/20\/2026/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
           const lr = await exec(`(async () => {

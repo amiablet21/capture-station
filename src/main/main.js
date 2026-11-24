@@ -7551,7 +7551,10 @@ exit 1
     if (p2) return { error: `${kind === 'return' ? 'Their' : 'Ship-to'} address: ${p2.toLowerCase()}.` };
     if (!(pkg.weight > 0)) return { error: 'Enter the weight.' };
     if (pkg.weight > 150) return { error: 'UPS takes up to 150 lb per package.' };
-    return { cfg, u, input: { kind, shipFrom: u.shipFrom, returnTo: u.returnTo, other, pkg, value: Math.max(0, Number(payload && payload.value) || 0) } };
+    // a signature on delivery (owner 2026-11-24): the customer signs, so
+    // never on a return label, which comes back to us
+    const signature = kind === 'ship' && !!(payload && payload.signature);
+    return { cfg, u, input: { kind, shipFrom: u.shipFrom, returnTo: u.returnTo, other, pkg, value: Math.max(0, Number(payload && payload.value) || 0), signature } };
   }
 
   ipcMain.handle('ship:info', () => {
@@ -7623,7 +7626,7 @@ exit 1
       serviceName: ups.SERVICE_NAMES[serviceCode] || String(serviceName || `UPS service ${serviceCode}`),
       tracking: res.tracking, shipmentId: res.shipmentId, carrier: 'UPS', rowId,
       cost: res.charge ?? (Number.isFinite(Number(price)) ? Number(price) : null),
-      value: prep.input.value, weight: pkg.weight,
+      value: prep.input.value, signature: prep.input.signature, weight: pkg.weight,
       dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
       partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
       labelGif: res.labelGif, test: !!prep.u.test,
@@ -7936,7 +7939,7 @@ exit 1
     if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const { row, error } = orderRowFor(payload.rowId);
     if (error) return { ok: false, error };
-    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
+    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value, signature: payload.signature });
     if (prep.error) return { ok: false, error: prep.error };
     const jobs = [upsRatesAll(prep)];
     const useWm = row.channel === 'walmart' && wmReady();
@@ -7960,7 +7963,7 @@ exit 1
     if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const { row, error } = orderRowFor(payload.rowId);
     if (error) return { ok: false, error };
-    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
+    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value, signature: payload.signature });
     if (prep.error) return { ok: false, error: prep.error };
     // the order already has a label, here or on another computer: buying
     // another takes a deliberate "second label" (owner 2026-11-14)
@@ -7970,22 +7973,38 @@ exit 1
     }
     try {
       let label;
+      let extras = null; // a Walmart label: what Walmart says it was bought with
       if (payload.via === 'wm') {
         if (row.channel !== 'walmart' || !wmReady()) return { ok: false, error: 'Walmart labels are for Walmart orders, with the Walmart keys set.' };
         const client = new walmart.WalmartClient(config.load().walmart);
         const order = await wmOrder(row.order_number);
+        // Walmart's extras (owner 2026-11-24): a signature on delivery, and
+        // protection above the $100 every label carries. Walmart sets the
+        // covered amount itself; the typed declared value is for UPS accounts.
+        const asked = { signature: prep.input.signature, protection: !!payload.protection };
         const bought = await client.createLabel({
           order, pkg: prep.input.pkg, shipFrom: prep.u.shipFrom, returnTo: prep.u.returnTo,
           carrierName: String(payload.carrier || ''), serviceType: String(payload.code || ''),
+          signature: asked.signature, protection: asked.protection,
         });
         let image = '';
         try { image = await client.downloadLabel(bought.carrier || payload.carrier, bought.tracking); } catch { /* Reprint fetches it */ }
         const { pkg } = prep.input;
+        // the label is bought either way, so an extra Walmart left off is
+        // said plainly: its answer is the only proof the extra is on it
+        const got = bought.addOns || {};
+        extras = {
+          signature: asked.signature ? { ok: !!got.signature, price: got.signature ? got.signature.price : null } : null,
+          protection: asked.protection ? { ok: !!got.protection, price: got.protection ? got.protection.price : null, covers: got.protection ? got.protection.covers : 0 } : null,
+        };
+        const base = Number.isFinite(Number(payload.price)) ? Number(payload.price) : null;
+        const extraCost = (got.signature ? got.signature.price : 0) + (got.protection ? got.protection.price : 0);
         label = db.shipLabelAdd({
           kind: 'ship', reference: row.order_number, fromPo: true, source: row.channel,
           accountId: 'wm', accountName: 'Walmart', serviceCode: String(payload.code || ''),
           serviceName: String(payload.name || bought.service || ''), tracking: bought.tracking, carrier: bought.carrier || String(payload.carrier || ''),
-          cost: Number.isFinite(Number(payload.price)) ? Number(payload.price) : null, value: 0, weight: pkg.weight,
+          cost: base === null ? null : Math.round((base + extraCost) * 100) / 100,
+          value: got.protection ? got.protection.covers : 0, signature: !!got.signature, weight: pkg.weight,
           dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
           partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
           labelGif: image, rowId: row.id,
@@ -8005,7 +8024,7 @@ exit 1
       if (currentRowId === row.id) currentRowId = null;
       pushState();
       const { label_gif: gif, ...rec } = label;
-      return { ok: true, label: rec, gif, size: ups.imageInfo(gif) };
+      return { ok: true, label: rec, gif, size: ups.imageInfo(gif), extras };
     } catch (e) {
       return { ok: false, error: e.message };
     }

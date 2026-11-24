@@ -76,6 +76,31 @@ function parseOrder(body) {
   };
 }
 
+// What Walmart sells on top of a rate (owner 2026-11-24): a signature on
+// delivery, and protection above the $100 every Ship with Walmart label
+// carries. An estimate lists the ones its service offers with their price;
+// a label answers with the ones it was bought with. Walmart sets the covered
+// amount itself, from the order's items. Walmart sometimes marks a listed
+// add-on `isApplicable: false` while Seller Center sells it on the same
+// order, so a listed price counts as offered and the label's own answer has
+// the last word.
+function parseAddOns(list) {
+  const out = { signature: null, protection: null };
+  for (const a of arr(list)) {
+    const name = String((a && a.name) || '').toUpperCase();
+    const raw = a && a.charge && a.charge.amount;
+    const price = raw === undefined || raw === null || raw === '' ? NaN : Number(raw);
+    if (!Number.isFinite(price)) continue;
+    const status = clip(a.status, 30);
+    if (name === 'SIGNATURE') out.signature = { price: Math.round(price * 100) / 100, status };
+    if (name === 'INSURANCE') {
+      const covers = Number(a.declaredValue && a.declaredValue.amount);
+      out.protection = { price: Math.round(price * 100) / 100, covers: Number.isFinite(covers) && covers > 0 ? Math.round(covers * 100) / 100 : 0, status };
+    }
+  }
+  return out;
+}
+
 function parseEstimates(body) {
   const out = [];
   for (const e of arr(body && body.data && body.data.estimates)) {
@@ -85,6 +110,7 @@ function parseEstimates(body) {
     if (EXCLUDED.test(`${name} ${label} ${carrier}`)) continue;
     const price = Number(e.estimatedRate && e.estimatedRate.amount);
     if (!Number.isFinite(price)) continue;
+    const addOns = parseAddOns(e.addOns);
     out.push({
       code: name, // the carrierServiceType the label is bought with
       name: label,
@@ -92,6 +118,9 @@ function parseEstimates(body) {
       price: Math.round(price * 100) / 100,
       arrival: String(e.deliveryDate || '').slice(0, 10),
       days: null,
+      // null = this service does not offer it (or Walmart quoted no price)
+      signature: addOns.signature ? addOns.signature.price : null,
+      protection: addOns.protection ? { price: addOns.protection.price, covers: addOns.protection.covers } : null,
     });
   }
   return out.sort((a, b) => a.price - b.price);
@@ -126,10 +155,11 @@ function buildEstimateRequest({ order, pkg, shipFrom }) {
     fromAddress: walmartAddress(shipFrom),
     toAddress: walmartAddress(order.shipTo),
     includeServicesNotMeetingDeliveryPromise: true,
+    addOns: true, // each service's signature / protection price comes back with its rate
   };
 }
 
-function buildLabelRequest({ order, pkg, shipFrom, returnTo, carrierName, serviceType }) {
+function buildLabelRequest({ order, pkg, shipFrom, returnTo, carrierName, serviceType, signature, protection }) {
   const from = {
     contactName: clip(shipFrom.name || shipFrom.company, 60),
     companyName: clip(shipFrom.company || shipFrom.name, 60),
@@ -152,6 +182,8 @@ function buildLabelRequest({ order, pkg, shipFrom, returnTo, carrierName, servic
     carrierName,
     carrierServiceType: serviceType,
   };
+  const addOns = [signature ? 'SIGNATURE' : '', protection ? 'INSURANCE' : ''].filter(Boolean);
+  if (addOns.length) req.addOns = addOns;
   if (returnTo && returnTo.line1 && returnTo.zip) {
     req.returnAddress = {
       contactName: clip(returnTo.name || returnTo.company, 60),
@@ -174,6 +206,8 @@ function parseLabel(body) {
     carrier: String(d.carrierName || ''),
     service: String(d.carrierServiceType || ''),
     trackingUrl: String(d.trackingUrl || ''),
+    // what the label was really bought with, and what each cost
+    addOns: parseAddOns(d.addOns),
   };
 }
 
@@ -1695,7 +1729,7 @@ module.exports = {
   quoteProblems, buildInboundPreview, parseInboundPreview, buildCarrierQuote, parseCarrierQuote, buildCarrierBooking,
   buildConvertFeed, convertProblems, parseItemFacts, OMNI_WFS_VERSION, WFS_PRODUCT_TYPES, WFS_CONDITIONS,
   parseInboundShipments, parseInboundItems,
-  parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
+  parseOrder, parseEstimates, parseAddOns, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
   parseItemStatus, parseProductPage, parseOffers, parseVariants, parseVariantSet,
   parseInsight, insightRows, parseRepricerReport, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY, addOrderSales,

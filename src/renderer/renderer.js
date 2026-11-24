@@ -16168,6 +16168,7 @@ function spSetKind(kind) {
   if (sp.kind === kind) return;
   sp.kind = kind;
   sp.done = null;
+  $('spSigWrap').hidden = kind === 'return';
   spRenderSource();
   spRenderAddrs();
   spScheduleRates(0);
@@ -16212,6 +16213,10 @@ async function spLookup() {
   $('spWt').select();
 }
 
+// a signature on delivery (owner 2026-11-24): the customer signs, so a
+// return label, which comes back to us, never carries one
+const spSig = () => sp.kind !== 'return' && $('spSig').checked;
+
 function spScheduleRates(delay = 500) {
   clearTimeout(sp.ratesTimer);
   sp.ratesTimer = setTimeout(spFetchRates, delay);
@@ -16238,7 +16243,7 @@ async function spFetchRates() {
   sp.ratesLoading = true;
   sp.ratesErr = '';
   spRenderRates();
-  const res = await api.shipRates({ kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0 });
+  const res = await api.shipRates({ kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0, signature: spSig() });
   if (seq !== sp.ratesSeq) return; // something changed while UPS answered
   sp.ratesLoading = false;
   if (!res.ok) {
@@ -16372,7 +16377,7 @@ async function spCreate(sel) {
   spRenderRates();
   const res = await api.shipCreate({
     accountId: sel.acct.id, serviceCode: sel.code, serviceName: sel.name, price: sel.price,
-    kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0,
+    kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0, signature: spSig(),
     reference: ref, reference2: $('spRef2').value.trim(), fromPo: sp.src === 'po' && !!sp.order, source: sp.mkt || '',
     saveAddress: sp.src === 'man' && $('spMSave').checked, addressId: sp.src === 'man' ? sp.addressId : null,
     second: have.length > 0,
@@ -16401,7 +16406,7 @@ function spRenderDone() {
   const { label: l, gif, size } = sp.done;
   const wide = size && size.width > size.height;
   $('spRates').innerHTML = `<div class="sp-done">
-    <div class="sp-done-h"><span class="ok">✓</span><b>Label created</b>${l.test ? ' <span class="sp-test">Test</span>' : ''}<span class="trk">${esc(l.tracking)}</span></div>
+    <div class="sp-done-h"><span class="ok">✓</span><b>Label created</b>${l.test ? ' <span class="sp-test">Test</span>' : ''}${l.signature ? '<span class="sp-sigtag">Signature</span>' : ''}<span class="trk">${esc(l.tracking)}</span></div>
     <div class="sp-label">${gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/gif;base64,${gif}" alt="UPS label" />` : '<div class="none">UPS sent no label image. The shipment exists; void it from the list below if it is not needed.</div>'}</div>
     <div class="sp-done-acts">
       <button class="btn btn-primary" id="spDonePrint" type="button">Print</button>
@@ -16468,6 +16473,7 @@ function spReset() {
   $('spPo').value = ''; $('spVal').value = ''; $('spWt').value = ''; $('spRefIn').value = ''; $('spRef2').value = ''; $('spPaste').value = '';
   spSetMkt('');
   $('spMSave').checked = false;
+  $('spSig').checked = false;
   for (const id of Object.values(SP_MAN)) $(id).value = '';
   spApplyBox(false);
   spRenderAll();
@@ -16556,7 +16562,7 @@ function spRenderLog() {
     return `<tr class="${l.voided_at ? 'is-void' : ''}${l.id === sp.freshId ? ' is-fresh' : ''}${far ? ' is-far' : ''}${nDupRow ? ' is-dup' : ''}" data-id="${esc(String(l.id))}">`
       + `<td class="sel">${l.voided_at || far ? '' : `<input type="checkbox" data-sel="${l.id}" ${spSel.has(l.id) ? 'checked' : ''} />`}</td>`
       + `<td class="m">${esc(when)}</td><td class="m">${ref}</td><td>${kind}${l.test ? ' <span class="sp-test">Test</span>' : ''}</td>`
-      + `<td>${esc(l.service_name)}</td><td>${esc(l.account_name)}</td>${pc}<td class="m">${esc(l.tracking)}</td>`
+      + `<td>${esc(l.service_name)}${l.signature ? '<span class="sp-sigtag" title="Bought with a signature on delivery">Signature</span>' : ''}</td><td>${esc(l.account_name)}</td>${pc}<td class="m">${esc(l.tracking)}</td>`
       + `<td class="num">${l.value ? spMoney(l.value) : '—'}</td><td class="num">${spMoney(l.cost)}</td>`
       + `<td${far ? ` title="Reprint or void this label on ${esc(l.station)}, the computer that made it"` : ''}><div class="sp-acts">${l.voided_at || far ? '' : `<button class="sp-link" data-act="print" type="button">Reprint</button><button class="sp-link" data-act="pdf" type="button">PDF</button>${spDownloadLink(l)}<button class="sp-link v" data-act="void" type="button">Void</button>`}</div></td></tr>`;
   }).join('');
@@ -16656,6 +16662,7 @@ for (const id of ['spWt', 'spDl', 'spDw', 'spDh']) {
 }
 // the declared value changes the price (UPS charges for coverage over $100)
 $('spVal').addEventListener('input', () => spScheduleRates(700));
+$('spSig').addEventListener('change', () => spScheduleRates(0));
 
 /* Settings › UPS labels */
 function fillUpsSettings(u) {
@@ -17084,6 +17091,10 @@ function osFillDrawer(row) {
   $('osWt').value = '';
   $('osVal').value = '';
   $('osRef2').value = '';
+  // the extras start off on every order: nothing is bought by habit
+  $('osSig').checked = false;
+  $('osProt').checked = false;
+  $('osProtWrap').hidden = true;
   os.ref2Auto = '';
   $('osPkTag').innerHTML = '';
   $('osdSum').innerHTML = '';
@@ -17182,6 +17193,7 @@ async function osPrep() {
   // the shared folder as it is right now: a label another computer made a
   // moment ago shows before anything is bought
   if (res.have !== undefined) { os.have = res.have || null; osRenderHave(); }
+  $('osProtWrap').hidden = !os.walmart;
   osShowDeliver();
   const p = res.party;
   osRenderCustomer({ name: p.name, company: p.company, lines: [[p.line1, p.line2].filter(Boolean).join(', '), `${p.city}, ${p.state} ${p.zip}`], phone: p.phone });
@@ -17216,9 +17228,11 @@ async function osFetch() {
   const seq = ++os.seq;
   os.loading = true; os.err = '';
   osRenderRates();
-  const res = await api.orderShipRates({ rowId: os.rowId, party: os.party, pkg, value: parseFloat($('osVal').value) || 0 });
+  const signature = $('osSig').checked;
+  const res = await api.orderShipRates({ rowId: os.rowId, party: os.party, pkg, value: parseFloat($('osVal').value) || 0, signature });
   if (!os || seq !== os.seq) return;
   os.loading = false;
+  os.ratesSig = signature; // what the UPS prices on screen were asked with
   if (!res.ok) { os.rates = null; os.err = res.error; } else { os.rates = res.sources; if (res.dates) { for (const k of ['orderedOn', 'shipBy', 'deliverBy']) if (res.dates[k]) os[k] = res.dates[k]; osShowDeliver(); } }
   os.pick = '';
   osRenderRates();
@@ -17232,11 +17246,39 @@ function osDaysOut(n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// every rate from every source, tagged with where it comes from, cheapest first
+// The ticked extras on one rate (owner 2026-11-24): what it costs with them,
+// what to say under it, and whether it can carry them at all. A UPS account
+// prices the signature into its rate; Walmart lists it beside the rate, per
+// service, and sets the protection's price itself (it may quote none).
+function osExtras(r) {
+  const sig = $('osSig').checked;
+  const prot = $('osProt').checked && !$('osProtWrap').hidden;
+  let total = r.price;
+  const notes = [];
+  let off = '';
+  if (r.via === 'wm') {
+    if (sig) {
+      if (r.signature === null || r.signature === undefined) off = 'No signature on this service';
+      else { total += r.signature; notes.push(`Signature ${spMoney(r.signature)}`); }
+    }
+    if (prot) {
+      if (r.protection) { total += r.protection.price; notes.push(`Protection ${spMoney(r.protection.price)}${r.protection.covers ? `, covers ${spMoney(r.protection.covers)}` : ''}`); }
+      else notes.push('Protection: Walmart prices it on the label');
+    }
+  } else if (sig && os.ratesSig) notes.push('Signature included');
+  return { total: Math.round(total * 100) / 100, notes, off };
+}
+
+// every rate from every source, tagged with where it comes from, cheapest
+// first by what it costs with the ticked extras; a rate that cannot carry
+// them sinks to the end
 function osAllRates() {
   const out = [];
-  for (const s of os.rates || []) if (s.ok) for (const r of s.rates) out.push({ ...r, arrival: r.arrival || (r.days ? osDaysOut(r.days) : ''), via: s.id, viaName: s.name, key: `${s.id}:${r.code}` });
-  return out.sort((a, b) => a.price - b.price);
+  for (const s of os.rates || []) if (s.ok) for (const r of s.rates) {
+    const row = { ...r, arrival: r.arrival || (r.days ? osDaysOut(r.days) : ''), via: s.id, viaName: s.name, key: `${s.id}:${r.code}` };
+    out.push({ ...row, ...osExtras(row) });
+  }
+  return out.sort((a, b) => (a.off ? 1 : 0) - (b.off ? 1 : 0) || a.total - b.total);
 }
 
 function osRenderRates() {
@@ -17269,24 +17311,31 @@ function osRenderRates() {
   // a rate arriving after the promised delivery date is late; the star and
   // the first pick go to the cheapest one that makes it
   const late = (r) => !!(os.deliverBy && r.arrival && r.arrival > os.deliverBy);
-  const best = list.find(r => !late(r)) || list[0];
-  if (!os.pick || !list.some(r => r.key === os.pick)) os.pick = best ? best.key : '';
+  const can = list.filter(r => !r.off);
+  const best = can.find(r => !late(r)) || can[0];
+  if (!os.pick || !can.some(r => r.key === os.pick)) os.pick = best ? best.key : '';
   const day = (iso) => (iso ? spDayLabel(iso) : '');
-  box.innerHTML = list.length ? list.map(r => `<div class="sp-rate${r.key === os.pick ? ' is-on' : ''}${late(r) ? ' is-late' : ''}" data-k="${esc(r.key)}"><span class="rd"></span>
-      <div><div class="sv">${r === best ? SP_STAR : ''}${esc(r.name)}<span class="os-via os-via-${esc(r.via)}">${esc(r.viaName)}</span></div><div class="eta">${esc(day(r.arrival) || (r.days ? `${r.days} business day${r.days === 1 ? '' : 's'}` : ''))}</div></div>
-      <span class="pr">${spMoney(r.price)}</span></div>`).join('')
+  const under = (r) => [esc(day(r.arrival) || (r.days ? `${r.days} business day${r.days === 1 ? '' : 's'}` : '')), ...(r.off ? [`<span class="x">${esc(r.off)}</span>`] : r.notes.map(n => `<span class="x">${esc(n)}</span>`))].filter(Boolean).join(' · ');
+  box.innerHTML = list.length ? list.map(r => `<div class="sp-rate${r.key === os.pick ? ' is-on' : ''}${late(r) ? ' is-late' : ''}${r.off ? ' is-off' : ''}" data-k="${esc(r.key)}"><span class="rd"></span>
+      <div><div class="sv">${r === best ? SP_STAR : ''}${esc(r.name)}<span class="os-via os-via-${esc(r.via)}">${esc(r.viaName)}</span></div><div class="eta">${under(r)}</div></div>
+      <span class="pr">${spMoney(r.total)}</span></div>`).join('')
     : '<div class="os-empty">No rates</div>';
-  const sel = list.find(r => r.key === os.pick);
+  const sel = can.find(r => r.key === os.pick);
   btn.disabled = !sel || os.creating;
   btn.textContent = os.creating ? 'Creating label…' : buyText;
-  $('osdSum').innerHTML = sel ? `<b>${esc(sel.name)}</b> · ${esc(sel.viaName)}<span class="mono">${spMoney(sel.price)}</span>` : '';
+  $('osdSum').innerHTML = sel ? `<b>${esc(sel.name)}</b> · ${esc(sel.viaName)}<span class="mono">${spMoney(sel.total)}</span>` : '';
 }
 
 async function osCreate() {
   if (!os || os.creating) return;
   const sel = osAllRates().find(r => r.key === os.pick);
-  if (!sel) return;
+  if (!sel || sel.off) return;
   const rowId = os.rowId;
+  // read before anything is awaited: the label is bought with what the
+  // person saw ticked, and price is the rate alone (Walmart's extras are
+  // added from its own answer)
+  const signature = $('osSig').checked;
+  const protection = sel.via === 'wm' && $('osProt').checked && !$('osProtWrap').hidden;
   // the order already has a label: a second one takes a deliberate yes
   const second = !!os.have;
   if (second) {
@@ -17298,6 +17347,7 @@ async function osCreate() {
   const res = await api.orderShipCreate({
     rowId, via: sel.via, code: sel.code, name: sel.name, carrier: sel.carrier || '', price: sel.price,
     party: os.party, pkg: osPkg(), value: parseFloat($('osVal').value) || 0, reference2: $('osRef2').value.trim(), second,
+    signature, protection,
   });
   const mine = os && os.rowId === rowId;
   if (!res.ok) {
@@ -17327,6 +17377,10 @@ for (const id of ['osWt', 'osVal', 'osDl', 'osDw', 'osDh']) {
     osPkgTag(); osSchedule(700);
   });
 }
+// a signature changes what UPS charges, so the rates are asked for again;
+// Walmart's protection is priced on its own rows and needs no new rates
+$('osSig').addEventListener('change', () => { if (os) { clearTimeout(os.timer); osFetch(); } });
+$('osProt').addEventListener('change', () => { if (os) osRenderRates(); });
 $('osChips').addEventListener('click', (e) => {
   const b = e.target.closest('[data-via]');
   if (!b || !os) return;
@@ -17335,7 +17389,7 @@ $('osChips').addEventListener('click', (e) => {
 });
 $('osRates').addEventListener('click', (e) => {
   const r = e.target.closest('[data-k]');
-  if (!r || !os) return;
+  if (!r || !os || r.classList.contains('is-off')) return;
   os.pick = r.dataset.k;
   osRenderRates();
 });
@@ -17358,6 +17412,25 @@ $('osdClose').addEventListener('click', () => { if (os && !os.creating) { osClos
 $('osScrim').addEventListener('click', () => { if (os && !os.creating) { osClose(); focusScan(); } });
 $('osCreate').addEventListener('click', osCreate);
 
+// Under the popup's title: the paid extras this label carries (owner
+// 2026-11-24). A Walmart label is bought before its extras are known, so one
+// Walmart left off is said in red, with what the label has instead.
+function osShowExtras(l, extras) {
+  const el = $('osLabelExtras');
+  const lines = [];
+  const x = extras || {};
+  if (x.signature) {
+    lines.push(x.signature.ok ? `<span class="ok">✓ Signature required${x.signature.price !== null ? ` · ${spMoney(x.signature.price)}` : ''}</span>`
+      : '<span class="bad">Walmart did not add the signature. This label needs no signature.</span>');
+  } else if (l && l.signature) lines.push('<span class="ok">✓ Signature required</span>');
+  if (x.protection) {
+    lines.push(x.protection.ok ? `<span class="ok">✓ Walmart protection${x.protection.covers ? ` · covers ${spMoney(x.protection.covers)}` : ''}${x.protection.price !== null ? ` · ${spMoney(x.protection.price)}` : ''}</span>`
+      : '<span class="bad">Walmart did not add the protection. This label has the standard $100 cover.</span>');
+  }
+  el.hidden = !lines.length;
+  el.innerHTML = lines.join('');
+}
+
 // the print popup: the label, Print ready under Enter
 function osShowLabel(res, { reprint = false, ids = null } = {}) {
   const { label: l, gif, size } = res;
@@ -17370,6 +17443,7 @@ function osShowLabel(res, { reprint = false, ids = null } = {}) {
   const type = size && size.type === 'png' ? 'png' : 'gif';
   $('osLabelImg').innerHTML = gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/${type};base64,${gif}" alt="Label" />` : '<div class="none">The label image is on its way — Print fetches it.</div>';
   $('osLabelTrk').textContent = ids && ids.length > 1 ? `${l.tracking} +${ids.length - 1}` : l.tracking;
+  osShowExtras(ids && ids.length > 1 ? null : l, res.extras);
   $('osLabelDlg').dataset.id = l.id;
   $('osLabelDlg').showModal();
   $('osLabelPrint').focus();
