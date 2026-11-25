@@ -9462,8 +9462,11 @@ function chsSummary() {
 
 async function openChannelSkus(sku, stockItemId) {
   // design B (owner 2026-10-30): one table - marketplace, channel SKU,
-  // price, the quantity the listing is told. No stock-sync column: on a
-  // WFS listing "off" is correct and only read as a false warning
+  // price, the quantity the listing is told. No stock-sync column — but a
+  // sync-off pill on NON-WFS rows only (owner 2026-11-25: a seller-fulfilled
+  // listing silently not syncing hid behind a bare 0). On a WFS listing
+  // "off" is correct and would only read as a false warning, so WFS rows
+  // stay clean.
   $('chsTitle').innerHTML = `Channel SKUs <span class="mono chs-tsku">${esc(sku)}</span>`;
   $('chsSum').textContent = '';
   $('chsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
@@ -9487,7 +9490,9 @@ async function openChannelSkus(sku, stockItemId) {
           <td class="r mono">${c.price != null
             ? `<span title="${c.priceKind === 'default' ? 'Channel default price stored in Linnworks (no listing-specific price)' : 'Listing price stored in Linnworks'}">$${Number(c.price).toFixed(2)}${c.priceKind === 'default' ? '<span class="chs-price-def">def</span>' : ''}</span>`
             : '<span class="chs-none" title="No price stored in Linnworks for this listing">—</span>'}</td>
-          <td class="r mono">${c.listedQuantity != null ? esc(String(c.listedQuantity)) : '<span class="chs-none">—</span>'}</td>
+          <td class="r mono">${c.ignoreSync && !c.wfs
+            ? '<span class="chs-syncoff" title="Linnworks is not pushing stock to this listing — Ignore Sync is ticked on its Channel Mapping row">sync off</span>'
+            : ''}${c.listedQuantity != null ? esc(String(c.listedQuantity)) : '<span class="chs-none">—</span>'}</td>
         </tr>`).join('')}</tbody></table>`;
   chsSummary();
   // A SKU renamed or ended ON the channel leaves its old link record behind

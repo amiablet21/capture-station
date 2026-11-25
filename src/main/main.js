@@ -8567,18 +8567,27 @@ exit 1
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
-      const channels = await client.getChannelSkus(stockItemId);
+      // WFS truth rides along so the popup can tell a deliberate sync-off
+      // (WFS: Walmart holds the stock, Linnworks must not push) from a
+      // seller-fulfilled listing that is silently not syncing
+      const [channels, wfsItems] = await Promise.all([
+        client.getChannelSkus(stockItemId),
+        walmartWfsByItem(cfg).catch(() => null),
+      ]);
       // best effort: stored channel prices ride along; a listing-specific
       // (Source+SubSource) row wins over the channel's default row
       let prices = [];
       try { prices = await client.getChannelPrices(stockItemId); } catch { /* dialog still works without prices */ }
       const norm = (s) => String(s || '').trim().toLowerCase();
+      const wfsHere = wfsItems && wfsItems.get(String(stockItemId).toLowerCase());
+      const wfsSkus = new Set(((wfsHere && wfsHere.listings) || []).map(l => String(l.sku).toUpperCase()));
       for (const c of channels) {
         const exact = prices.find(p => norm(p.source) === norm(c.source) && norm(p.subSource) === norm(c.subSource));
         const def = prices.find(p => norm(p.source) === norm(c.source) && !norm(p.subSource));
         const hit = exact || def;
         c.price = hit ? hit.price : null;
         c.priceKind = exact ? 'channel' : def ? 'default' : null;
+        c.wfs = /walmart/i.test(c.source) && wfsSkus.has(String(c.sku).toUpperCase());
       }
       return { ok: true, channels };
     } catch (e) {

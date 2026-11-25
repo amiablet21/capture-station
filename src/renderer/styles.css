@@ -6488,6 +6488,8 @@ tr.os-open > td { background: var(--accent-soft); }
 .chs-table .chs-sku-link::after { content: " ↗"; color: var(--faint); font-weight: 400; }
 .chs-table .chs-sku-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .chs-none { color: var(--faint); }
+/* Linnworks isn't pushing stock to this (non-WFS) listing */
+.chs-syncoff { display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 999px; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); font-family: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
 .chs-hint { margin-right: auto; align-self: center; color: var(--muted); font-size: 12px; }
 
 /* ---------- Send to WFS from a Stock row (owner 2026-11-07; approved
