@@ -3,7 +3,7 @@
 // "too plain" — a CSV carries no formatting, so the export writes a real
 // workbook). One sheet, inline strings, a handful of cell styles, column
 // widths, a frozen header row and an autofilter. Dependency-free: the zip
-// container is built here with zlib, like temuxlsx.js reads one.
+// container is built here with zlib.
 
 const zlib = require('zlib');
 

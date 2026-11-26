@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Ship drawer — Package container, four layouts</title>
+<!--
+  Owner 2026-11-24: "we need to organize how this looks" then "make
+  different versions of how the ship container can look". The Package box
+  of the Orders Ship drawer, at the drawer's real width, four ways. Every
+  version holds the same things: box, size, weight, the two references,
+  declared value, Signature required, Walmart protection, "saved for this
+  item" and Save as a box. Sample data only.
+  Owner 2026-11-24 picked B, with one change: the size is a single list of
+  the saved sizes whose last line adds a new one, not three boxes. That is
+  what v1.32.148 ships.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: var(--canvas); height: auto; }
+  .pg { width: 1120px; margin: 0 auto; padding: 26px 24px 50px; }
+  .pg h1 { font-size: 17px; font-weight: 650; margin-bottom: 2px; }
+  .pg .lead { font-size: 12.5px; color: var(--muted); margin-bottom: 22px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 34px 40px; align-items: start; }
+  .v-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 3px; }
+  .v-l { font-family: var(--mono); font-size: 13px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 6px; padding: 1px 8px; }
+  .v-n { font-size: 14px; font-weight: 650; }
+  .v-now { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--badge-green-text); background: var(--badge-green-bg); border-radius: 999px; padding: 1px 8px; }
+  .v-s { font-size: 12px; color: var(--muted); margin-bottom: 10px; min-height: 38px; line-height: 1.5; }
+
+  /* shared pieces, as in the drawer */
+  .bx { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+  .t { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); margin-bottom: 10px; display: flex; align-items: center; min-height: 22px; }
+  .t .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 11.5px; font-weight: 600; color: var(--pos-text); }
+  .f { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .f > span { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .f .input { width: 100%; }
+  .dims { display: flex; align-items: center; gap: 4px; }
+  .dims .input { text-align: center; padding-left: 4px; padding-right: 4px; }
+  .dims b { color: var(--faint); font-weight: 400; font-size: 11px; }
+  .lock { display: flex; align-items: center; font-size: 12.5px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface-2); min-height: 33px; }
+  .lnk { font-size: 11.5px; font-weight: 600; color: var(--accent-soft-text); white-space: nowrap; }
+  .ck { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+  .ck input { width: 15px; height: 15px; accent-color: var(--accent); }
+
+  /* A: three groups under small headings */
+  .a-r1 { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; }
+  .a-r2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; align-items: end; }
+  .a-r2 .lnk { padding-bottom: 8px; }
+  .a-g { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .a-gt { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+  .a-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .a-x { display: grid; grid-template-columns: 110px 1fr; gap: 18px; align-items: end; }
+  .a-x .cks { display: flex; flex-direction: column; gap: 7px; padding-bottom: 2px; }
+
+  /* B: one thing per row, name on the left */
+  .b-row { display: grid; grid-template-columns: 118px minmax(0, 1fr); align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid #F0EFED; }
+  .t + .b-row { border-top: none; padding-top: 0; }
+  .b-row > span { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .b-row .input { width: 100%; }
+  .b-in { display: flex; align-items: center; gap: 10px; }
+  .b-in .dims { width: 190px; flex: none; }
+  .b-in .w { width: 90px; flex: none; }
+  .b-in small { font-size: 11.5px; color: var(--faint); }
+  .b-cks { display: flex; gap: 18px; padding: 3px 0; }
+
+  /* C: boxes as buttons */
+  .c-boxes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .c-b { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: var(--surface); }
+  .c-b b { display: block; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c-b span { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .c-b.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+  .c-b.on b { color: var(--accent-soft-text); }
+  .c-b.add { border-style: dashed; color: var(--muted); display: flex; flex-direction: column; justify-content: center; }
+  .c-b.add b { color: var(--muted); }
+  .c-r2 { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 12px; }
+  .c-wt { position: relative; }
+  .c-wt .input { font-size: 15px; font-weight: 600; height: 33px; padding-right: 26px; }
+  .c-wt i { position: absolute; right: 9px; top: 7px; font-style: normal; font-size: 11.5px; color: var(--faint); }
+  .c-x { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; color: var(--muted); background: var(--surface); }
+  .pill.on { background: var(--accent-soft); border-color: transparent; color: var(--accent-soft-text); }
+  .pill .input { width: 44px; height: 22px; border: none; background: transparent; padding: 0; font-size: 12px; }
+  .pill.val { padding: 3px 12px; }
+
+  /* D: the saved package as one line, everything else behind Change */
+  .d-sum { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+  .d-ic { width: 34px; height: 34px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); display: grid; place-items: center; color: var(--muted); flex: none; }
+  .d-ic svg { width: 18px; height: 18px; }
+  .d-sum b { font-size: 13.5px; font-weight: 600; display: block; }
+  .d-sum span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .d-sum .lnk { margin-left: auto; }
+  .d-x { display: grid; grid-template-columns: 110px 1fr; gap: 18px; align-items: end; margin-top: 12px; }
+  .d-x .cks { display: flex; flex-direction: column; gap: 7px; padding-bottom: 2px; }
+  .d-ref { font-size: 11.5px; color: var(--muted); margin-top: 10px; display: flex; gap: 6px; align-items: baseline; }
+  .d-ref .mono { color: var(--text); }
+  .d-open { margin-top: 14px; }
+  .d-open .cap { font-size: 11px; color: var(--faint); margin-bottom: 6px; }
+</style></head>
+<body>
+<div class="pg">
+  <h1>Ship drawer · Package container</h1>
+  <div class="lead">Four ways to lay out the same fields. Pick a letter, or mix: "C's box buttons with A's extras".</div>
+  <div class="grid">
+
+    <!-- A -->
+    <div>
+      <div class="v-h"><span class="v-l">A</span><span class="v-n">Three groups</span><span class="v-now">Built now</span></div>
+      <div class="v-s">The box and its weight, what prints on the label, then the paid extras, each under a small heading. Closest to today.</div>
+      <div class="bx">
+        <div class="t">Package <span class="r">✓ Saved for this item</span></div>
+        <div class="a-r1">
+          <label class="f"><span>Box</span><select class="input"><option>Phone box · 8 × 6 × 4</option></select></label>
+          <label class="f"><span>Weight (lb)</span><input class="input mono" value="1.3" /></label>
+        </div>
+        <div class="a-r2">
+          <div class="f"><span>Dimensions (in)</span><div class="dims"><input class="input mono" value="8" /><b>×</b><input class="input mono" value="6" /><b>×</b><input class="input mono" value="4" /></div></div>
+          <span class="lnk">Save as a box</span>
+        </div>
+        <div class="a-g"><div class="a-gt">On the label</div>
+          <div class="a-2">
+            <div class="f"><span>Reference #1</span><div class="lock mono">108829451230774</div></div>
+            <label class="f"><span>Reference #2</span><input class="input mono" value="X133-128GB-GRAY | 1 unit sold" /></label>
+          </div>
+        </div>
+        <div class="a-g"><div class="a-gt">Extras</div>
+          <div class="a-x">
+            <label class="f"><span>Declared value</span><input class="input mono" placeholder="0.00" /></label>
+            <div class="cks"><label class="ck"><input type="checkbox" checked /> Signature required</label><label class="ck"><input type="checkbox" /> Walmart protection, up to $500</label></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div>
+      <div class="v-h"><span class="v-l">B</span><span class="v-n">One thing per row</span></div>
+      <div class="v-s">Names down the left, boxes down the right, like a settings page. Nothing sits beside anything unrelated; it is the tallest of the four.</div>
+      <div class="bx">
+        <div class="t">Package <span class="r">✓ Saved for this item</span></div>
+        <div class="b-row"><span>Box</span><select class="input"><option>Phone box · 8 × 6 × 4</option></select></div>
+        <div class="b-row"><span>Size (in)</span><div class="b-in"><div class="dims"><input class="input mono" value="8" /><b>×</b><input class="input mono" value="6" /><b>×</b><input class="input mono" value="4" /></div><span class="lnk">Save as a box</span></div></div>
+        <div class="b-row"><span>Weight</span><div class="b-in"><input class="input mono w" value="1.3" /><small>lb</small></div></div>
+        <div class="b-row"><span>Reference #1</span><div class="lock mono">108829451230774</div></div>
+        <div class="b-row"><span>Reference #2</span><input class="input mono" value="X133-128GB-GRAY | 1 unit sold" /></div>
+        <div class="b-row"><span>Declared value</span><div class="b-in"><input class="input mono w" placeholder="0.00" /></div></div>
+        <div class="b-row"><span>Extras</span><div class="b-cks"><label class="ck"><input type="checkbox" checked /> Signature</label><label class="ck"><input type="checkbox" /> Walmart protection, up to $500</label></div></div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div>
+      <div class="v-h"><span class="v-l">C</span><span class="v-n">Boxes as buttons</span></div>
+      <div class="v-s">Every saved box is one click, with its size on it; ＋ New size opens the three dimension boxes and a name. The weight is the big field, since it is the one typed on every order. Extras are switches on one line.</div>
+      <div class="bx">
+        <div class="t">Package <span class="r">✓ Saved for this item</span></div>
+        <div class="c-boxes">
+          <div class="c-b on"><b>Phone box</b><span>8 × 6 × 4</span></div>
+          <div class="c-b"><b>Tablet box</b><span>13 × 10 × 4</span></div>
+          <div class="c-b"><b>2-phone box</b><span>10 × 8 × 5</span></div>
+          <div class="c-b add"><b>＋ New size</b></div>
+        </div>
+        <div class="c-r2">
+          <label class="f"><span>Weight</span><div class="c-wt"><input class="input mono" value="1.3" /><i>lb</i></div></label>
+          <div class="f"><span>Reference #1</span><div class="lock mono">108829451230774</div></div>
+          <label class="f"><span>Reference #2</span><input class="input mono" value="X133-128GB-GRAY | 1 unit" /></label>
+        </div>
+        <div class="c-x">
+          <span class="pill on">✓ Signature</span>
+          <span class="pill">Walmart protection, up to $500</span>
+          <span class="pill val">Value $<input class="input mono" placeholder="0.00" /></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- D -->
+    <div>
+      <div class="v-h"><span class="v-l">D</span><span class="v-n">Saved package on one line</span></div>
+      <div class="v-s">When the item already has a saved package, the container is one line and the extras. Change opens the full fields (as in A). An item with nothing saved opens with the fields showing.</div>
+      <div class="bx">
+        <div class="t">Package <span class="r">✓ Saved for this item</span></div>
+        <div class="d-sum">
+          <div class="d-ic"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg></div>
+          <div><b>Phone box</b><span>8 × 6 × 4 in · 1.3 lb</span></div>
+          <span class="lnk">Change</span>
+        </div>
+        <div class="d-ref">Label references: <span class="mono">108829451230774</span> · <span class="mono">X133-128GB-GRAY | 1 unit sold</span></div>
+        <div class="d-x">
+          <label class="f"><span>Declared value</span><input class="input mono" placeholder="0.00" /></label>
+          <div class="cks"><label class="ck"><input type="checkbox" checked /> Signature required</label><label class="ck"><input type="checkbox" /> Walmart protection, up to $500</label></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

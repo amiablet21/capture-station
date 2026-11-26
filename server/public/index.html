@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DWS Server</title>
+<style>
+  /* The look of DWS Stock itself (src/renderer/styles.css): warm monochrome
+     canvas, one navy accent, hairlines not shadows, compact density, Geist
+     and Geist Mono. Light only, like the app. Owner 2026-11-20: "It doesnt
+     look like the native software". */
+  @font-face { font-family: 'Geist'; src: url('/assets/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: 'Geist Mono'; src: url('/assets/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; font-display: swap; }
+  :root {
+    color-scheme: light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8; --border: #EAEAEA; --border-soft: rgba(0, 0, 0, 0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #1E3A66; --accent-hover: #152B4E; --accent-soft: #E4EAF4;
+    --pos-bg: #EDF3EC; --pos-text: #346538; --neg-bg: #FDEBEC; --neg-text: #9F2F2D; --warn-bg: #FBF3DB; --warn-text: #956400;
+    --r-card: 8px; --r-ctl: 6px; --r-modal: 12px;
+    --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--canvas); color: var(--text); font: 13px/1.6 var(--font); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .hide { display: none !important; }
+
+  /* controls: the app's .btn and .input */
+  button { font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: var(--r-ctl); border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap;
+    transition: background 150ms var(--ease), color 150ms var(--ease), transform 100ms var(--ease); }
+  button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.04); }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+  button.danger { color: var(--neg-text); }
+  input, select, textarea { font-size: 13px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); width: 100%;
+    transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease); }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input::placeholder { color: var(--faint); }
+  label { display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin: 12px 0 4px; }
+
+  /* sign-in */
+  .gate { max-width: 380px; margin: 10vh auto; padding: 0 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-modal); padding: 22px 24px 24px; }
+  .gate-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .gate h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  .gate p { color: var(--muted); margin: 0 0 4px; font-size: 12.5px; }
+  .msg { margin-top: 12px; padding: 7px 10px; border-radius: var(--r-ctl); background: var(--neg-bg); color: var(--neg-text); font-size: 12.5px; }
+
+  /* The frame the owner kept from the first build (2026-11-20: "I like this
+     structure"): the name left and the person right on one strip, the
+     sections as a row of underlined tabs beneath it. */
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent); white-space: nowrap; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(30, 58, 102, .12); box-shadow: 0 1px 2px rgba(47, 52, 55, .08); display: block; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .who { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); display: inline-block; flex: 0 0 auto; }
+  .dot.on { background: var(--pos-text); }
+  .tabs { display: flex; gap: 2px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tabs button { font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 10px 8px; }
+  .tabs button:hover { color: var(--text); background: none; }
+  .tabs button:active { transform: none; }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  /* a section's lists: the app's own switcher */
+  .seg { display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; max-width: 100%; overflow-x: auto; }
+  .seg button { font-size: 12.5px; font-weight: 500; color: var(--muted); background: none; border: none; border-radius: 8px; padding: 5px 14px; }
+  .seg button:hover { color: var(--text); background: none; }
+  .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+  .seg button small { font-family: var(--mono); font-size: 11px; font-weight: 400; color: var(--faint); margin-left: 5px; }
+
+  main { padding: 14px 24px 40px; }
+  .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; min-height: 34px; }
+  .sec-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .bar .grow { flex: 1; }
+  .bar input[type=search] { width: 280px; max-width: 100%; }
+  .note { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+
+  /* the sheet: the app's spreadsheet tables (gutter, gridlines, mono cells) */
+  .tablewrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--surface-2); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 7px 10px;
+    border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  th:last-child, td:last-child { border-right: none; }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); height: 34px; vertical-align: middle; font-size: 12.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+  td.mono { font-family: var(--mono); font-size: 12px; }
+  th.gutter, td.gutter { width: 44px; text-align: center; border-right: 1px solid var(--border); }
+  td.gutter { font-family: var(--mono); font-size: 11px; color: var(--faint); background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover td:not(.gutter) { background: var(--surface-2); }
+  .empty { padding: 26px; text-align: center; color: var(--muted); }
+  .more { margin: 10px auto 0; display: block; }
+  .pill { display: inline-block; border-radius: 4px; padding: 1px 7px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; background: #EFEEEA; color: var(--muted); white-space: nowrap; }
+  .pill.create { background: var(--pos-bg); color: var(--pos-text); } .pill.delete { background: var(--neg-bg); color: var(--neg-text); } .pill.edit { background: var(--warn-bg); color: var(--warn-text); }
+
+  /* the side panel */
+  .drawer { position: fixed; inset: 0 0 0 auto; width: min(520px, 100%); background: var(--surface); border-left: 1px solid var(--border); box-shadow: -12px 0 32px rgba(47, 52, 55, 0.08); padding: 18px 22px 28px; overflow-y: auto; z-index: 5; }
+  .drawer h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin: 0 36px 2px 0; }
+  .drawer .x { position: absolute; top: 12px; right: 12px; border: 0; font-size: 18px; line-height: 1; padding: 4px 9px; color: var(--muted); }
+  .kv { display: grid; grid-template-columns: 124px 1fr; gap: 5px 12px; margin: 12px 0; font-size: 12.5px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  h3 { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); margin: 20px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .hist { border-top: 1px solid var(--border-soft); padding: 7px 0; font-size: 12.5px; }
+  .hist:first-of-type { border-top: 0; }
+  .hist small { color: var(--muted); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .items { display: grid; grid-template-columns: 1fr 64px 110px 32px; gap: 6px; margin-bottom: 6px; }
+  .items input:first-child { font-family: var(--mono); font-size: 12px; }
+  .items button { padding: 4px 0; }
+  .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .conflict { background: var(--warn-bg); color: var(--warn-text); border-radius: var(--r-card); padding: 10px 12px; margin: 12px 0; font-size: 12.5px; }
+  .conflict .kv dt { color: inherit; opacity: 0.8; }
+  .conflict .actions { margin-top: 8px; }
+  .conflict button:not(.primary) { background: var(--surface); color: var(--text); }
+  .stmt-top { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 4px; }
+  .stmt-top div { border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 9px 12px; background: var(--surface-2); }
+  .stmt-top small { display: block; color: var(--muted); font-size: 11px; }
+  .stmt-top b { font-family: var(--mono); font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .stmt { font-size: 12.5px; }
+  .stmt .ln { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
+  .stmt .ln span:last-child { font-family: var(--mono); white-space: nowrap; }
+  .stmt .ln.sum { font-weight: 600; border-bottom: 0; }
+  .stmt .ln.sub { color: var(--muted); font-size: 11.5px; border-bottom: 0; padding: 1px 0 1px 14px; }
+  .stmt small { color: var(--faint); }
+  .diff { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 10px; }
+  .checks label { display: inline; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 400; color: var(--text); margin: 0 12px 0 4px; }
+
+  @media (max-width: 720px) {
+    .topbar { padding: 10px 12px; }
+    .tabs { padding: 0 6px; }
+    main { padding: 12px 12px 40px; }
+    .bar input[type=search] { width: 100%; }
+    /* on a phone each row becomes a card: label on the left, value on the right */
+    .tablewrap { background: none; border: 0; overflow: visible; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    thead { display: none; }
+    tbody tr { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); margin-bottom: 8px; padding: 6px 0; }
+    td, td.mono { border: 0; height: auto; padding: 3px 12px; max-width: none; white-space: normal; overflow: visible; display: grid; grid-template-columns: 104px 1fr; gap: 10px; overflow-wrap: anywhere; }
+    td::before { content: attr(data-label); color: var(--muted); font-family: var(--font); font-size: 11.5px; padding-top: 1px; }
+    td.gutter, td.blank { display: none; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .kv { grid-template-columns: 105px 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate hide">
+  <div class="card">
+    <div class="gate-brand"><img class="brand-mark" src="/assets/icon.png" alt="" width="30" height="30"><h1 id="gateTitle">DWS Server</h1></div>
+    <p id="gateSub"></p>
+    <form id="gateForm" autocomplete="on">
+      <div id="nameRow" class="hide"><label for="gName">Your name</label><input id="gName" autocomplete="name"></div>
+      <label for="gUser">Username</label><input id="gUser" autocomplete="username" autocapitalize="none" required>
+      <label for="gPass">Password</label><input id="gPass" type="password" autocomplete="current-password" required>
+      <div class="actions"><button class="primary" id="gateGo" type="submit">Sign in</button></div>
+      <div id="gateMsg" class="msg hide"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="hide">
+  <header class="topbar">
+    <span class="brand">DWS Server</span>
+    <div class="topbar-right">
+      <span class="who"><span class="dot" id="live" title="Live updates"></span><span id="whoName"></span></span>
+      <button id="signOut">Sign out</button>
+    </div>
+  </header>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+  <main>
+    <div class="bar">
+      <span class="sec-label" id="secLabel"></span>
+      <div class="seg" id="chips"></div>
+      <span class="grow"></span>
+      <span id="barTools"></span>
+      <input type="search" id="q" placeholder="Search" aria-label="Search">
+    </div>
+    <p class="note" id="note"></p>
+    <div id="view"></div>
+  </main>
+</div>
+
+<aside class="drawer hide" id="drawer" aria-label="Details"></aside>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, kids = []) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== undefined && v !== null && v !== false) n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of [].concat(kids)) if (kid !== null && kid !== undefined && kid !== false) n.append(kid);
+    return n;
+  };
+  const api = async (method, url, body) => {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'X-DWS': '1' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    let json = {};
+    try { json = await res.json(); } catch { /* empty answer */ }
+    return { status: res.status, ok: res.ok, ...json };
+  };
+
+  // times are shown in US Eastern, the business's clock
+  const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+  // MM/DD/YYYY like the app's own sheets, with the time beside it
+  const fmtDay = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: 'numeric' });
+  const fmtTime = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  const when = (v) => { if (!v) return ''; const d = new Date(v); return Number.isNaN(d.getTime()) ? String(v) : `${fmtDay.format(d)} ${fmtTime.format(d)}`; };
+  const cell = (v) => (ISO.test(v) ? when(v) : v);
+  // codes and numbers read in the mono face, like the app's sheets; a cell
+  // that is cut short says the whole thing on hover
+  const MONO = /^(Date|When|Imported|Changed|Payable|Paid to bank|Order #|PO #|PO # \/ reference|Tracking|SKU|Items|Lines|Listing|Grouped under|Cost|Amount|Change|Level after|Paid out|Case ID|Weight \(lb\)|Size \(in\)|Refunds|Seller-fulfilled|WFS|Username|Period|File)$/;
+  const td = (text, label, kids) => el('td', { class: `${MONO.test(label) && !kids ? 'mono' : ''}${text || kids ? '' : ' blank'}`, 'data-label': label, title: kids ? undefined : (String(text || '').length > 24 ? text : undefined), text: kids ? undefined : text }, kids || []);
+  const gutter = (n) => el('td', { class: 'gutter', text: String(n) });
+  const gutterHead = () => el('th', { class: 'gutter', text: '#' });
+
+  let me = null;          // { user, areas, roles, perms, backup }
+  let tab = '';           // an area id, 'history' or 'logins'
+  let kind = '';
+  let rows = []; let total = 0;
+  let setupMode = false;
+
+  /* ---------- sign in / first run ---------- */
+  async function boot() {
+    const st = await api('GET', '/api/state');
+    setupMode = !!st.needsSetup;
+    const m = setupMode ? null : await api('GET', '/api/me');
+    if (m && m.ok) return enter(m);
+    $('app').classList.add('hide'); $('gate').classList.remove('hide');
+    $('gateTitle').textContent = setupMode ? 'Create the owner login' : 'DWS Server';
+    $('gateSub').textContent = setupMode ? 'This server has no logins yet. The first one is the owner, who can add everyone else.' : 'Sign in with your own username and password.';
+    $('nameRow').classList.toggle('hide', !setupMode);
+    $('gateGo').textContent = setupMode ? 'Create owner login' : 'Sign in';
+    $('gPass').autocomplete = setupMode ? 'new-password' : 'current-password';
+    $('gUser').focus();
+  }
+  $('gateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('gateMsg'); msg.classList.add('hide');
+    const username = $('gUser').value; const password = $('gPass').value;
+    if (setupMode) {
+      const r = await api('POST', '/api/setup', { username, password, name: $('gName').value });
+      if (!r.ok) { msg.textContent = r.error || 'That did not work.'; msg.classList.remove('hide'); return; }
+    }
+    const r = await api('POST', '/api/login', { username, password, station: 'BROWSER' });
+    if (!r.ok) { msg.textContent = r.error || 'That did not work.'; msg.classList.remove('hide'); return; }
+    $('gPass').value = '';
+    boot();
+  });
+  $('signOut').addEventListener('click', async () => { await api('POST', '/api/logout'); if (stream) stream.close(); location.reload(); });
+
+  /* ---------- the app ---------- */
+  let stream = null;
+  function enter(m) {
+    me = m;
+    $('gate').classList.add('hide'); $('app').classList.remove('hide');
+    $('whoName').textContent = `${me.user.name} · ${me.user.roleLabel}`;
+    if (!tab) tab = me.areas.length ? me.areas[0].area : 'history';
+    drawTabs(); openTab(tab);
+    if (!stream) {
+      stream = new EventSource('/api/events');
+      stream.onopen = () => $('live').classList.add('on');
+      stream.onerror = () => $('live').classList.remove('on');
+      let timer = null;
+      stream.onmessage = () => { clearTimeout(timer); timer = setTimeout(refresh, 400); };
+    }
+  }
+  async function refresh() {
+    const m = await api('GET', '/api/me');
+    if (!m.ok) return boot();
+    me = m; drawTabs(); drawChips();
+    if (!$('drawer').classList.contains('hide') && $('drawer').dataset.busy === '1') return; // someone is typing in a form
+    load(true);
+  }
+  function drawTabs() {
+    const tabs = [...me.areas.map((a) => [a.area, a.label]), ['history', 'History']];
+    if (me.user.perms.includes('admin')) tabs.push(['logins', 'Logins']);
+    $('tabs').replaceChildren(...tabs.map(([id, label]) => el('button', { class: id === tab ? 'on' : '', text: label, onclick: () => openTab(id) })));
+  }
+  function openTab(id) {
+    tab = id; closeDrawer(); $('q').value = '';
+    const area = me.areas.find((a) => a.area === id);
+    kind = area ? area.kinds[0].kind : '';
+    drawTabs(); drawChips(); load();
+  }
+  const areaNow = () => me.areas.find((a) => a.area === tab);
+  const kindNow = () => { const a = areaNow(); return a && a.kinds.find((k) => k.kind === kind); };
+  function drawChips() {
+    const a = areaNow();
+    $('chips').replaceChildren(...(a ? a.kinds.map((k) => el('button', { class: `chip${k.kind === kind ? ' on' : ''}`, onclick: () => { kind = k.kind; closeDrawer(); drawChips(); load(); } },
+      [k.label, el('small', { text: String(k.count) })])) : []));
+    $('q').classList.toggle('hide', tab === 'logins');
+    $('chips').classList.toggle('hide', !a || a.kinds.length < 2);
+    $('secLabel').textContent = a ? (a.kinds.length < 2 ? a.kinds[0].label : a.label) : tab === 'history' ? 'History' : 'Logins';
+    $('barTools').replaceChildren();
+    const k = kindNow();
+    $('note').textContent = tab === 'history' ? 'Every change made on this server, newest first. Click a line to see the record before and after.'
+      : tab === 'logins' ? 'Each person signs in with their own login. A role decides what they can change.'
+      : !k ? '' : k.fixed ? 'This is a log. Lines are added by the app and never changed.' : k.canWrite ? '' : 'You can look at these but not change them.';
+  }
+  let qTimer = null;
+  $('q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(() => load(), 250); });
+
+  async function load(keep) {
+    if (tab === 'logins') return drawLogins();
+    if (tab === 'history') {
+      const r = await api('GET', `/api/history?limit=200&q=${encodeURIComponent($('q').value)}`);
+      return drawHistory(r.rows || []);
+    }
+    const want = keep ? Math.max(100, rows.length) : 100;
+    const r = await api('GET', `/api/records/${kind}?limit=${want}&q=${encodeURIComponent($('q').value)}`);
+    rows = r.rows || []; total = r.total || 0;
+    drawTable();
+  }
+  async function loadMore() {
+    const r = await api('GET', `/api/records/${kind}?limit=100&offset=${rows.length}&q=${encodeURIComponent($('q').value)}`);
+    rows = rows.concat(r.rows || []); total = r.total || total;
+    drawTable();
+  }
+  function drawTable() {
+    const k = kindNow();
+    const head = el('tr', {}, [gutterHead(), ...k.cols.map((c) => el('th', { text: c }))]);
+    const body = rows.map((r, i) => el('tr', { class: 'click', onclick: () => openRecord(r.id) }, [gutter(total - i), ...r.cells.map((c, j) => td(cell(c), k.cols[j]))]));
+    const top = [];
+    $('barTools').replaceChildren(...(k.kind === 'return' && k.canWrite ? [el('button', { class: 'primary', text: 'Add a return', onclick: () => editReturn(null) })] : []));
+    // replaceChildren would print a missing piece as the word "null": leave it out
+    const foot = rows.length < total ? el('button', { class: 'more', text: `Show more (${rows.length} of ${total})`, onclick: loadMore })
+      : rows.length ? el('p', { class: 'note', text: `${total} in all` }) : null;
+    $('view').replaceChildren(...[...top,
+      el('div', { class: 'tablewrap' }, rows.length ? el('table', {}, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: $('q').value ? 'Nothing matches that search.' : `No ${k.label.toLowerCase()} yet.` })),
+      foot].filter(Boolean));
+  }
+
+  /* ---------- history ---------- */
+  const ACTION = { create: 'added', edit: 'edited', delete: 'deleted', import: 'imported', user: 'login' };
+  function drawHistory(list) {
+    const head = el('tr', {}, [gutterHead(), ...['When', 'Who', 'Computer', 'What', 'Changed'].map((c) => el('th', { text: c }))]);
+    const body = list.map((h, i) => el('tr', { class: 'click', onclick: () => openHistory(h.seq) }, [
+      gutter(list.length - i),
+      td(when(h.ts), 'When'), td(h.user || '—', 'Who'), td(h.station || '—', 'Computer'),
+      td('', 'What', [el('span', {}, [el('span', { class: `pill ${h.action}`, text: ACTION[h.action] || h.action }), ' ', h.summary])]),
+      td(h.changed, 'Fields'),
+    ]));
+    $('view').replaceChildren(el('div', { class: 'tablewrap' }, list.length ? el('table', {}, [el('thead', {}, head), el('tbody', {}, body)]) : el('div', { class: 'empty', text: 'No changes recorded yet.' })));
+  }
+  const pretty = (o) => (o === null || o === undefined ? '(nothing)' : Object.entries(o).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n'));
+  async function openHistory(seq) {
+    const h = await api('GET', `/api/history/${seq}`);
+    if (!h.ok) return;
+    showDrawer([
+      el('h2', { text: h.summary }),
+      el('div', { class: 'note', text: `${when(h.ts)} · ${h.user || 'no login (from the shared folder)'}${h.station ? ` · ${h.station}` : ''}` }),
+      h.changed ? el('p', {}, ['Changed: ', el('b', { text: h.changed })]) : null,
+      h.before ? el('h3', { text: 'Before' }) : null, h.before ? el('div', { class: 'diff', text: pretty(h.before) }) : null,
+      h.after ? el('h3', { text: 'After' }) : null, h.after ? el('div', { class: 'diff', text: pretty(h.after) }) : null,
+    ]);
+  }
+
+  /* ---------- one record ---------- */
+  function showDrawer(kids) {
+    const d = $('drawer'); d.dataset.busy = '0';
+    d.replaceChildren(el('button', { class: 'x', 'aria-label': 'Close', text: '×', onclick: closeDrawer }), ...kids.filter(Boolean));
+    d.classList.remove('hide'); d.scrollTop = 0;
+  }
+  function closeDrawer() { $('drawer').classList.add('hide'); $('drawer').dataset.busy = '0'; }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+  // A payment period opened up, laid out as DWS Stock's Recovery page lays
+  // it out: what Walmart says is payable, what went to the bank, then each
+  // section of the statement with its lines.
+  const usd = (n) => { const v = Number(n) || 0; return `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
+  const stmtDay = (d) => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[2]}/${m[3]}/${m[1]}` : String(d || ''); };
+  function statementView(st) {
+    if (!st || !st.ok) return [];
+    if (!st.hasLines) return [el('h3', { text: 'Statement' }), el('p', { class: 'note', text: 'This period was brought in without its statement lines, so only the summary above is here. Importing the report again in DWS Stock adds them.' })];
+    const line = (label, amount, cls, count) => el('div', { class: `ln ${cls || ''}` }, [
+      el('span', {}, [label, count > 1 ? el('small', { text: `  ${Number(count).toLocaleString('en-US')} lines` }) : null].filter(Boolean)), el('span', { text: usd(amount) })]);
+    const out = [
+      el('div', { class: 'stmt-top' }, [
+        el('div', {}, [el('small', { text: 'Payable for this period' }), el('b', { text: st.payable === null ? '—' : usd(st.payable) })]),
+        el('div', {}, [el('small', { text: 'Paid to the bank' }), el('b', { text: st.paid.length ? usd(st.paidTotal) : '—' })]),
+      ]),
+    ];
+    if (st.paid.length) {
+      out.push(el('h3', { text: 'Paid to the bank, by day' }),
+        el('div', { class: 'stmt' }, st.paid.map((p) => line(stmtDay(p.date) || 'No date', p.amount))));
+    }
+    for (const sec of st.sections) {
+      out.push(el('h3', { text: sec.name }), el('div', { class: 'stmt' }, [
+        ...sec.lines.flatMap((l) => [line(l.label, l.amount, '', l.count), ...(l.by || []).map((b) => line(b.label, b.amount, 'sub', 0))]),
+        line(`${sec.name} total`, sec.total, 'sum'),
+      ]));
+    }
+    out.push(el('div', { class: 'stmt', style: 'margin-top:14px' }, [line('All activity in this period', st.activity, 'sum')]));
+    out.push(el('p', { class: 'note', style: 'margin-top:8px', text: 'These are the amounts on Walmart\'s own statement for the period. Your own expenses are not taken off here; they are in the Expenses list.' }));
+    return out;
+  }
+
+  async function openRecord(id) {
+    const k = kindNow();
+    const r = await api('GET', `/api/records/${k.kind}/${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const st = k.kind === 'wm_run' ? await api('GET', `/api/records/wm_run/${encodeURIComponent(id)}/statement`) : null;
+    const h = await api('GET', `/api/history?kind=${k.kind}&id=${encodeURIComponent(id)}&limit=50`);
+    const editable = k.kind === 'return' && k.canWrite;
+    showDrawer([
+      el('h2', { text: k.one }),
+      el('div', { class: 'note', text: `Last changed ${when(r.updated_at)} by ${r.updated_by || '—'}` }),
+      el('dl', { class: 'kv' }, k.cols.flatMap((c, i) => [el('dt', { text: c }), el('dd', { text: cell(r.cells[i]) || '—' })])),
+      editable ? el('div', { class: 'actions' }, [
+        el('button', { class: 'primary', text: 'Edit', onclick: () => editReturn(r) }),
+        el('button', { class: 'danger', text: 'Delete', onclick: () => deleteRecord(k, r) }),
+      ]) : (k.fixed ? null : el('p', { class: 'note', text: k.canWrite ? 'Changes to this are made in DWS Stock.' : '' })),
+      ...statementView(st),
+      el('h3', { text: 'History of this record' }),
+      ...((h.rows || []).length ? h.rows.map((x) => el('div', { class: 'hist' }, [
+        el('span', { class: `pill ${x.action}`, text: ACTION[x.action] || x.action }), ` ${x.changed || ''} `,
+        el('small', { text: `${when(x.ts)} · ${x.user || x.station || '—'}${x.user && x.station ? ` · ${x.station}` : ''}` }),
+      ])) : [el('p', { class: 'note', text: 'No changes recorded since it was brought in.' })]),
+    ]);
+  }
+  async function deleteRecord(k, r) {
+    if (!confirm(`Delete this ${k.one.toLowerCase()}? It stays in the history.`)) return;
+    const out = await api('DELETE', `/api/records/${k.kind}/${encodeURIComponent(r.id)}?version=${r.version}`);
+    if (out.status === 409) { alert('Someone changed this while you were looking at it. Open it again to see the latest.'); }
+    closeDrawer(); refresh();
+  }
+
+  /* ---------- add / edit a return ---------- */
+  const CONDS = [['new', 'New'], ['openbox', 'Open box'], ['used', 'Used'], ['scrap', 'Scrap']];
+  const SOURCES = { WALMART: 'Walmart', EBAY: 'eBay', TEMU: 'Temu', 'TEMU US': 'Temu', '': 'Other' };
+  // `base` is the return as it was when this person opened it: after a
+  // clash, only the fields they changed since then go on top of the other
+  // person's version, so both people's changes are kept
+  function editReturn(rec, theirs, base) {
+    base = base || (rec ? rec.data : null);
+    const d = rec ? rec.data : { order_number: '', source: 'WALMART', customer: '', tracking: '', received_by: '', note: '', items: [{ sku: '', qty: 1, condition: 'new' }] };
+    const f = {
+      order: el('input', { value: d.order_number || '' }), source: el('select', {}, [...new Set(['WALMART', 'EBAY', 'TEMU', '', d.source || ''])].map((s) => el('option', { value: s, text: SOURCES[s] || s, selected: (d.source || '') === s }))),
+      customer: el('input', { value: d.customer || '' }), tracking: el('input', { value: d.tracking || '' }),
+      by: el('input', { value: d.received_by || '', maxlength: 12 }), note: el('textarea', { rows: 2 }),
+    };
+    f.note.value = d.note || '';
+    const itemsBox = el('div');
+    const addItem = (it = { sku: '', qty: 1, condition: 'new' }) => {
+      const row = el('div', { class: 'items' }, [
+        el('input', { placeholder: 'SKU', value: it.sku || '', 'aria-label': 'SKU' }),
+        el('input', { type: 'number', min: 1, value: it.qty ?? 1, 'aria-label': 'Quantity' }),
+        el('select', { 'aria-label': 'Condition' }, CONDS.map(([v, t]) => el('option', { value: v, text: t, selected: it.condition === v }))),
+        el('button', { type: 'button', text: '×', 'aria-label': 'Remove line', onclick: () => row.remove() }),
+      ]);
+      row._orig = it;
+      itemsBox.append(row);
+    };
+    (d.items && d.items.length ? d.items : [{ sku: '', qty: 1, condition: 'new' }]).forEach(addItem);
+    const read = () => ({
+      ...d, order_number: f.order.value.trim(), source: f.source.value, customer: f.customer.value.trim(), tracking: f.tracking.value.trim(),
+      received_by: f.by.value.trim(), note: f.note.value.trim(), created_at: d.created_at || new Date().toISOString(), unmatched: !!d.unmatched,
+      items: [...itemsBox.children].map((row) => { const [sku, qty, cond] = row.querySelectorAll('input, select'); return { ...row._orig, sku: sku.value.trim(), qty: Number(qty.value) || 1, condition: cond.value, targetSku: row._orig.targetSku || sku.value.trim() }; }).filter((it) => it.sku),
+    });
+    const msg = el('div', { class: 'msg hide' });
+    const mineOnTop = () => {
+      const typed = read(); const merged = { ...theirs.data };
+      for (const key of Object.keys(typed)) if (JSON.stringify(typed[key]) !== JSON.stringify((base || {})[key])) merged[key] = typed[key];
+      return merged;
+    };
+    const save = async (version, onTop) => {
+      const data = onTop ? mineOnTop() : read();
+      if (!data.order_number && !data.items.length) { msg.textContent = 'Type an order number or at least one SKU.'; msg.classList.remove('hide'); return; }
+      const out = rec ? await api('PUT', `/api/records/return/${encodeURIComponent(rec.id)}`, { data, version }) : await api('POST', '/api/records/return', { data });
+      if (out.ok) { closeDrawer(); return refresh(); }
+      if (out.status === 409 && out.current) return editReturn({ ...rec, data: read() }, out.current, base); // keep what was typed, show theirs
+      msg.textContent = out.error || 'That could not be saved.'; msg.classList.remove('hide');
+    };
+    const k = me.areas.flatMap((a) => a.kinds).find((x) => x.kind === 'return');
+    showDrawer([
+      el('h2', { text: rec ? 'Edit return' : 'Add a return' }),
+      theirs ? el('div', { class: 'conflict' }, [
+        el('b', { text: theirs.deleted ? `${theirs.updated_by || 'Someone'} deleted this return while you were editing.` : `${theirs.updated_by || 'Someone'} changed this return at ${when(theirs.updated_at)}, after you opened it.` }),
+        theirs.deleted ? null : el('div', {}, 'Nothing was overwritten. What you typed is still in the form below. Their version:'),
+        theirs.deleted ? null : el('dl', { class: 'kv' }, k.cols.flatMap((c, i) => [el('dt', { text: c }), el('dd', { text: cell(theirs.cells[i]) || '—' })])),
+        el('div', { class: 'actions' }, [
+          theirs.deleted ? null : el('button', { text: 'Use their version', onclick: () => editReturn(theirs) }),
+          theirs.deleted ? null : el('button', { class: 'primary', text: 'Keep both: add my changes to theirs', onclick: () => save(theirs.version, true) }),
+        ]),
+      ]) : null,
+      el('div', { class: 'row2' }, [el('div', {}, [el('label', { text: 'Order #' }), f.order]), el('div', {}, [el('label', { text: 'Channel' }), f.source])]),
+      el('div', { class: 'row2' }, [el('div', {}, [el('label', { text: 'Customer' }), f.customer]), el('div', {}, [el('label', { text: 'Return tracking' }), f.tracking])]),
+      el('label', { text: 'Items returned (SKU, quantity, condition)' }), itemsBox,
+      el('button', { type: 'button', text: 'Add a line', onclick: () => addItem() }),
+      el('div', { class: 'row2' }, [el('div', {}, [el('label', { text: 'Received by (initials)' }), f.by]), el('div', {}, [el('label', { text: 'Note' }), f.note])]),
+      el('div', { class: 'actions' }, [el('button', { class: 'primary', text: 'Save', onclick: () => save(rec ? rec.version : undefined) }), el('button', { text: 'Cancel', onclick: closeDrawer })]),
+      msg,
+    ]);
+    $('drawer').dataset.busy = '1';
+  }
+
+  /* ---------- logins (owner) ---------- */
+  const PERM_LABEL = { returns: 'Returns', stock: 'Stock', costs: 'Costs', orders: 'Orders', pricing: 'Pricing', recovery: 'Recovery', admin: 'Logins' };
+  async function drawLogins() {
+    const r = await api('GET', '/api/users');
+    const head = el('tr', {}, ['Username', 'Name', 'Role', 'Can change', 'State'].map((c) => el('th', { text: c })));
+    const body = (r.users || []).map((u) => el('tr', { class: 'click', onclick: () => editLogin(u) }, [
+      td(u.username, 'Username'), td(u.name, 'Name'), td(u.roleLabel, 'Role'),
+      td(u.perms.length ? u.perms.map((p) => PERM_LABEL[p]).join(', ') : 'Nothing (view only)', 'Can change'), td(u.active ? 'On' : 'Switched off', 'State'),
+    ]));
+    const b = me.backup || {};
+    $('barTools').replaceChildren(el('button', { class: 'primary', text: 'Add a login', onclick: () => editLogin(null) }));
+    $('view').replaceChildren(
+      el('div', { class: 'tablewrap' }, el('table', {}, [el('thead', {}, head), el('tbody', {}, body)])),
+      el('h3', { text: 'Backup' }),
+      el('p', { class: 'note', text: `${b.last ? `Last backup: ${when(b.last)}.` : 'No backup has run yet.'} ${b.second ? 'A second copy goes to the backup folder you set.' : 'There is no second copy outside this computer yet.'}${b.error ? ` Last problem: ${b.error}` : ''}` }),
+      el('button', { text: 'Back up now', onclick: async () => { await api('POST', '/api/backup'); refresh(); } }));
+  }
+  function editLogin(u) {
+    const f = {
+      username: el('input', { value: u ? u.username : '', disabled: !!u, autocapitalize: 'none' }), name: el('input', { value: u ? u.name : '' }),
+      role: el('select', {}, me.roles.map((r) => el('option', { value: r.id, text: r.label, selected: u ? u.role === r.id : r.id === 'viewer' }))),
+      password: el('input', { type: 'password', autocomplete: 'new-password', placeholder: u ? 'Leave empty to keep the current one' : 'At least 8 characters' }),
+      active: el('input', { type: 'checkbox', checked: !u || u.active, style: 'width:auto' }),
+    };
+    const extras = me.perms.filter((p) => p !== 'admin').map((p) => { const c = el('input', { type: 'checkbox', value: p, checked: !!(u && u.extra.includes(p)), style: 'width:auto' }); return [c, el('label', {}, [PERM_LABEL[p]])]; });
+    const msg = el('div', { class: 'msg hide' });
+    const save = async () => {
+      const body = { name: f.name.value, role: f.role.value, extra: extras.map(([c]) => c).filter((c) => c.checked).map((c) => c.value), active: f.active.checked };
+      if (f.password.value) body.password = f.password.value;
+      const out = u ? await api('PUT', `/api/users/${u.id}`, body) : await api('POST', '/api/users', { ...body, username: f.username.value, password: f.password.value });
+      if (out.ok) { closeDrawer(); return drawLogins(); }
+      msg.textContent = out.error || 'That could not be saved.'; msg.classList.remove('hide');
+    };
+    showDrawer([
+      el('h2', { text: u ? `Login: ${u.username}` : 'Add a login' }),
+      el('label', { text: 'Username' }), f.username, el('label', { text: 'Name' }), f.name,
+      el('label', { text: 'Role' }), f.role,
+      el('label', { text: 'Also allowed to change (on top of the role)' }), el('div', { class: 'checks' }, extras.flat()),
+      el('label', { text: u ? 'New password' : 'Password' }), f.password,
+      u ? el('div', { class: 'checks', style: 'margin-top:12px' }, [f.active, el('label', {}, ['This login can sign in'])]) : null,
+      el('div', { class: 'actions' }, [el('button', { class: 'primary', text: 'Save', onclick: save }), el('button', { text: 'Cancel', onclick: closeDrawer })]),
+      msg,
+    ]);
+    $('drawer').dataset.busy = '1';
+  }
+
+  // without the app beside it (the server run on its own) there is no icon: show none, not a broken one
+  for (const img of document.querySelectorAll('.brand-mark')) {
+    const drop = () => img.remove();
+    if (img.complete && !img.naturalWidth) drop(); else img.addEventListener('error', drop);
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WFS via Walmart API</title>
+<!--
+  Owner 2026-11-07: "is it possible to create a WFS shipment from the API
+  instead of needing to log into Walmart?" + "show me how it would work
+  within the software". Mockup only, nothing here talks to Walmart.
+  The real WFS Shipments dialog (Stock › Actions) grows into a five-step
+  flow on Walmart's Marketplace API:
+    1 Fill in          - the sheet as today + units per box / boxes, arrive-by date
+    2 Convert listing  - a line not set up for WFS converts from the dialog (OMNI_WFS feed)
+    3 Walmart's plan   - Walmart answers with one or more shipments, each to a warehouse it picks
+    4 Boxes & carrier  - Walmart's discounted FedEx (quote → book → labels) or your own tracking #
+    5 Live status      - the past-shipments column reads Walmart's receiving counts;
+                         no more marking Received by hand
+  Sample data only (SKUs from the demo set; GTINs, IDs, prices, addresses invented).
+-->
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06);
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#1E3A66; --accent-hover:#152B4E; --accent-soft:#E4EAF4; --accent-soft-text:#1E3A66;
+    --pos-bg:#EDF3EC; --pos-text:#346538; --neg-bg:#FDEBEC; --neg-text:#9F2F2D;
+    --blue-bg:#E1F3FE; --blue:#1F6C9F; --yellow-bg:#FBF3DB; --yellow:#956400;
+    --sheet:#1f9d5b; --wm:#2E86D9;
+    --r-modal:12px; --r-ctl:6px;
+    --font:'Geist','Segoe UI Variable','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:24px 32px 60px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  button { font-family:inherit; }
+
+  /* ---------- page chrome (not part of the app) ---------- */
+  .pg-h { font-size:16px; font-weight:600; letter-spacing:-0.02em; }
+  .pg-sub { font-size:12px; color:var(--muted); margin:2px 0 16px; max-width:1040px; }
+  .steps { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .step { display:flex; align-items:center; gap:7px; border:1px solid var(--border); background:var(--surface); color:var(--muted); border-radius:999px; padding:5px 13px 5px 6px; font-size:12px; font-weight:500; cursor:pointer; }
+  .step i { font-style:normal; width:20px; height:20px; border-radius:50%; display:grid; place-items:center; background:var(--surface-2); border:1px solid var(--border); font-size:11px; font-weight:600; font-family:var(--mono); }
+  .step.on { color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .step.on i { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .why { max-width:1040px; margin-top:12px; font-size:12px; color:var(--muted); background:var(--surface); border:1px dashed #D9D6CF; border-radius:8px; padding:10px 14px; }
+  .why b { color:var(--text); font-weight:600; }
+  .why code { font-family:var(--mono); font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:0 5px; color:var(--blue); }
+
+  /* ---------- the dialog (mirrors .dlg-wfs) ---------- */
+  .dlg { width:1040px; max-width:100%; background:var(--surface); border-radius:var(--r-modal); box-shadow:0 16px 48px rgba(47,52,55,0.10), 0 0 0 1px rgba(47,52,55,0.06); overflow:hidden; }
+  .cols { display:grid; grid-template-columns:1fr 320px; min-height:560px; }
+  .left { padding:20px; display:flex; flex-direction:column; min-width:0; }
+  .right { border-left:1px solid var(--border); background:var(--surface-2); padding:14px 16px; }
+  .title-row { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .dlg-title { font-size:16px; font-weight:600; letter-spacing:-0.02em; }
+  .wm-pill { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-weight:600; color:var(--blue); background:var(--blue-bg); border-radius:999px; padding:2px 9px 2px 7px; }
+  .wm-pill::before { content:''; width:6px; height:6px; border-radius:50%; background:#2FA36B; }
+  .back { border:none; background:none; color:var(--accent); font-size:12px; font-weight:600; cursor:pointer; padding:0; margin-bottom:10px; align-self:flex-start; }
+  .back:hover { text-decoration:underline; }
+
+  .btn { font-size:13px; font-weight:500; padding:7px 14px; border-radius:var(--r-ctl); border:1px solid transparent; cursor:pointer; white-space:nowrap; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover:not(:disabled) { background:var(--accent-hover); }
+  .btn-primary:disabled { opacity:.45; cursor:default; }
+  .btn-ghost { background:var(--surface); color:var(--muted); border-color:var(--border); }
+  .btn-ghost:hover { color:var(--text); }
+  .btn-sm { font-size:12px; padding:5px 11px; }
+  .input { font-family:var(--font); font-size:13px; padding:6px 10px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface); color:var(--text); min-width:0; }
+  .input.mono { font-family:var(--mono); font-size:12px; }
+  .lbl { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--faint); }
+
+  /* the green-headed sheet, two new columns: per box / boxes, and a status chip */
+  .sheet { border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .sh-h, .sh-l { display:grid; grid-template-columns:1fr 1.15fr 108px 58px 52px 44px 128px; }
+  .sh-h { background:var(--sheet); color:#fff; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; }
+  .sh-h span { padding:7px 8px; white-space:nowrap; }
+  .sh-h .r, .sh-l .r { text-align:right; }
+  .sh-l { border-top:1px solid var(--border-soft); align-items:center; font-size:12px; }
+  .sh-l:first-child { border-top:none; }
+  .sh-l > span { padding:7px 8px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sh-l .mono { font-size:11.5px; }
+  .sh-l .ch { color:var(--blue); }
+  .sh-l .q { font-weight:600; }
+  .sh-l.blocked { background:#FFFCF3; }
+  .sh-new { border-top:1px solid var(--border-soft); background:var(--surface-2); color:var(--accent-soft-text); font-size:12px; font-weight:600; padding:7px 10px; }
+  .chip { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; border-radius:999px; padding:1px 8px; white-space:nowrap; border:none; }
+  .chip-ok { background:var(--pos-bg); color:var(--pos-text); }
+  .chip-warn { background:var(--yellow-bg); color:var(--yellow); cursor:pointer; }
+  .chip-warn:hover { filter:brightness(0.95); }
+  .chip-wait { background:var(--blue-bg); color:var(--blue); }
+
+  .fields { display:grid; grid-template-columns:auto 1fr; gap:9px 14px; align-items:center; margin-top:14px; }
+  .fields .ro { font-size:12.5px; }
+  .fields .ro small { color:var(--faint); font-size:11px; margin-left:6px; }
+  .hint { font-size:11.5px; color:var(--yellow); background:var(--yellow-bg); border-radius:6px; padding:6px 10px; margin-top:12px; }
+  .hint.ok { color:var(--pos-text); background:var(--pos-bg); }
+  .hint.info { color:var(--blue); background:var(--blue-bg); }
+  .foot { display:flex; align-items:center; gap:10px; margin:auto -20px -20px; padding:14px 20px 12px; background:var(--surface-2); border-top:1px solid var(--border); }
+  .tot { margin-right:auto; font-size:12px; color:var(--muted); }
+  .tot b { color:var(--text); font-family:var(--mono); }
+
+  /* convert form */
+  .cv-item { display:flex; align-items:center; gap:10px; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:14px; }
+  .cv-thumb { width:36px; height:36px; border-radius:6px; background:linear-gradient(135deg,#3a3f44,#15181b); flex:none; }
+  .cv-item b { font-family:var(--mono); font-size:12.5px; }
+  .cv-item div div { font-size:11.5px; color:var(--muted); }
+  .cv-grid { display:grid; grid-template-columns:150px 1fr; gap:10px 14px; align-items:center; }
+  .dims { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--faint); }
+  .dims .input { width:62px; text-align:right; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:var(--r-ctl); overflow:hidden; }
+  .seg span { font-size:12px; padding:5px 11px; color:var(--muted); cursor:pointer; }
+  .seg span + span { border-left:1px solid var(--border); }
+  .seg span.on { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .cv-status { display:flex; align-items:center; gap:10px; margin-top:16px; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12.5px; }
+  .cv-status .dot { width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
+  .cv-status.wait .dot { background:var(--wm); animation:pulse 1.2s infinite; }
+  .cv-status.ok .dot { background:#2FA36B; }
+  @keyframes pulse { 50% { opacity:.3; } }
+  .todo { margin-top:10px; font-size:12px; border-radius:8px; padding:9px 12px; background:var(--yellow-bg); color:var(--yellow); display:flex; gap:10px; align-items:flex-start; }
+  .todo input { margin-top:3px; accent-color:var(--accent); }
+
+  /* Walmart's plan */
+  .plan-h { font-size:12.5px; color:var(--muted); margin-bottom:12px; }
+  .plan-h b { color:var(--text); }
+  .shp { border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden; }
+  .shp-h { display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--surface-2); border-bottom:1px solid var(--border); }
+  .shp-n { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; background:var(--wm); color:#fff; font-size:11px; font-weight:700; font-family:var(--mono); flex:none; }
+  .shp-to { font-size:13px; font-weight:600; }
+  .shp-to small { display:block; font-size:11px; font-weight:400; color:var(--muted); }
+  .shp-id { margin-left:auto; text-align:right; font-size:10.5px; color:var(--faint); }
+  .shp-id b { display:block; font-family:var(--mono); font-size:12px; color:var(--text); font-weight:600; }
+  .shp-row { display:grid; grid-template-columns:1fr 1fr 70px 60px; gap:8px; padding:6px 12px; font-size:12px; border-top:1px solid var(--border-soft); }
+  .shp-row:first-of-type { border-top:none; }
+  .shp-row .ch { color:var(--blue); font-family:var(--mono); font-size:11.5px; }
+  .shp-row .r { text-align:right; font-family:var(--mono); }
+
+  /* boxes & carrier */
+  .car { border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden; }
+  .car-body { padding:10px 12px 12px; }
+  .opts { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .opt { border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer; font-size:12px; color:var(--muted); }
+  .opt b { display:block; font-size:12.5px; color:var(--text); font-weight:600; }
+  .opt.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; background:#FAFBFD; }
+  .boxes { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:10px; }
+  .boxes th { text-align:left; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); padding:0 6px 4px 0; }
+  .boxes td { padding:3px 6px 3px 0; }
+  .boxes .input { width:100%; padding:4px 7px; font-size:12px; }
+  .quote { display:flex; align-items:center; gap:12px; border-radius:8px; padding:8px 12px; background:var(--blue-bg); color:var(--blue); font-size:12.5px; margin-bottom:10px; }
+  .quote b { font-family:var(--mono); font-size:15px; color:var(--text); }
+  .quote .btn { margin-left:auto; }
+  .booked { display:flex; align-items:center; gap:8px; border-radius:8px; padding:8px 12px; background:var(--pos-bg); color:var(--pos-text); font-size:12.5px; font-weight:500; margin-bottom:10px; }
+  .prints { display:flex; gap:8px; flex-wrap:wrap; }
+  .own { display:grid; grid-template-columns:140px 1fr; gap:8px; margin-bottom:10px; }
+
+  /* past shipments, now live from Walmart */
+  .right-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .right-sub { font-size:10.5px; color:var(--faint); margin-bottom:10px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+  .card:hover { border-color:#D6D3CC; }
+  .card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .card-h { display:flex; align-items:baseline; gap:8px; font-size:12px; }
+  .card-h b { font-weight:600; }
+  .card-u { margin-left:auto; font-family:var(--mono); font-weight:600; color:var(--accent-soft-text); }
+  .card-to { font-size:11px; color:var(--muted); margin-top:1px; }
+  .card-tags { display:flex; gap:4px; flex-wrap:wrap; margin-top:5px; }
+  .bar { height:4px; border-radius:2px; background:#EEECE8; margin-top:7px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--wm); }
+  .bar.done i { background:#2FA36B; }
+  .card-old { opacity:.75; }
+  .st-tag { font-family:var(--mono); font-size:10px; padding:1px 7px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); color:var(--muted); }
+  .chip-red { background:var(--neg-bg); color:var(--neg-text); }
+  .chip-grey { background:var(--surface-2); color:var(--muted); border:1px solid var(--border); }
+
+  /* detail */
+  .tl { display:flex; margin:4px 0 16px; }
+  .tl div { flex:1; position:relative; font-size:11px; color:var(--faint); padding-top:16px; }
+  .tl div::before { content:''; position:absolute; top:4px; left:0; width:9px; height:9px; border-radius:50%; background:#DDDAD4; }
+  .tl div::after { content:''; position:absolute; top:8px; left:12px; right:4px; height:1px; background:#DDDAD4; }
+  .tl div:last-child::after { display:none; }
+  .tl div.d { color:var(--text); }
+  .tl div.d::before { background:#2FA36B; }
+  .tl div.now::before { background:var(--wm); box-shadow:0 0 0 3px var(--blue-bg); }
+  .tl div b { display:block; font-weight:600; font-size:11.5px; }
+  .rx { width:100%; border-collapse:collapse; font-size:12px; }
+  .rx th { text-align:left; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--sheet); padding:6px 8px; }
+  .rx td { padding:7px 8px; border-top:1px solid var(--border-soft); }
+  .rx .r { text-align:right; font-family:var(--mono); }
+  .rx .ch { color:var(--blue); font-family:var(--mono); font-size:11.5px; }
+  .meta { display:grid; grid-template-columns:auto 1fr auto 1fr; gap:4px 12px; font-size:12px; margin-bottom:12px; }
+  .meta span:nth-child(odd) { color:var(--faint); }
+  .fade { animation:fadein 220ms ease; }
+  @keyframes fadein { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body>
+
+<div class="pg-h">WFS Shipments, sent through Walmart's API</div>
+<p class="pg-sub">A mockup of the Stock › Actions › WFS Shipments dialog if the app talked to Walmart directly. Click through the steps, or use the buttons inside the dialog. Sample data only. Nothing here connects to Walmart.</p>
+
+<div class="steps" id="steps"></div>
+<div class="dlg"><div class="cols"><div class="left" id="left"></div><div class="right" id="right"></div></div></div>
+<div class="why" id="why"></div>
+
+<script>
+const S = { step: 1, converted: false, converting: false, quoted: false, booked: false, carrierA: 'wm', carrierB: 'own', sel: null };
+
+const LINES = [
+  { sku: 'X110-64GB-GRAY', ch: 'X110GRAY-WFS', gtin: '195949183522', per: 10, boxes: 3, title: 'Galaxy Tab A9 64GB Gray' },
+  { sku: 'X230-128GB-GRAY', ch: 'X230-128GB-GRAY-WFS', gtin: '195949776408', per: 5, boxes: 4, title: 'Galaxy Tab A11+ 128GB Gray' },
+  { sku: 'X400-64GB-BLACK', ch: 'X400-64GB-BLACK', gtin: '195949775120', per: 10, boxes: 1, title: 'X400 64GB', needsConvert: true },
+];
+
+const STEPS = [
+  [1, 'Fill in'], [2, 'Convert a listing'], [3, "Walmart's plan"], [4, 'Boxes & carrier'], [5, 'Live status'],
+];
+
+const WHY = {
+  1: `<b>Same sheet as today</b>, plus <b>units per box</b>, <b>boxes</b> and an <b>arrive-by date</b>, which Walmart requires. The ship-from address is set once in Settings. Each line checks with Walmart that the listing is set up for WFS. <b>Log only</b> keeps today's behaviour (deduct from Linnworks, no Walmart call). <b>Send to Walmart</b> creates the shipment at Walmart. <br><span style="color:var(--faint)">Behind the scenes: <code>POST /v3/fulfillment/inbound-shipments</code></span>`,
+  2: `<b>Converting a listing to WFS without leaving the app.</b> Walmart needs the unit's size and weight, battery details (tablets and phones carry lithium-ion) and any sale restrictions. It checks the request, then the line turns green. The app then reminds you to tick <b>Ignore</b> on the listing's Linnworks link, so Linnworks stops overwriting the WFS count with the warehouse count. You do that by hand today. <br><span style="color:var(--faint)">Behind the scenes: <code>POST /v3/feeds?feedType=OMNI_WFS</code>, then the feed status is checked until Walmart answers</span>`,
+  3: `<b>Walmart decides where the stock goes.</b> One request can come back as several shipments, each to a different Walmart warehouse with its own shipment ID. The app shows them as one record with two parts. The units come off Digital World Shop in Linnworks the same way they do today. <br><span style="color:var(--faint)">Behind the scenes: the create call's reply, plus <code>GET /v3/fulfillment/inbound-shipment-errors</code> if any line is rejected</span>`,
+  4: `<b>Each shipment picks a carrier.</b> <b>Walmart's carrier</b>: Walmart prices it from the box sizes, you click Book and the charge goes on your Walmart account, then the FedEx labels print. <b>My own carrier</b>: type the tracking number. Either way, <b>Box labels</b> prints Walmart's carton label for each box. <br><span style="color:var(--faint)">Behind the scenes: Walmart's preferred-carrier calls (quote → booking → label) or <code>POST /v3/fulfillment/shipment-tracking</code>, and <code>POST /v3/fulfillment/shipment-label</code></span>`,
+  5: `<b>The Past shipments column reads Walmart's own status</b>: in transit, receiving with counts, closed, short. You no longer mark Received on the Overview, and the 14-day "Check" badge is replaced by Walmart's actual counts. Shipments logged before this change keep their manual badge. <br><span style="color:var(--faint)">Behind the scenes: <code>GET /v3/fulfillment/inbound-shipments</code> and the per-item receiving counts, checked every few minutes while a shipment is open</span>`,
+};
+
+const $ = (id) => document.getElementById(id);
+function go(n) { S.step = n; render(); }
+
+function renderSteps() {
+  $('steps').innerHTML = STEPS.map(([n, t]) => `<button class="step${S.step === n ? ' on' : ''}" onclick="go(${n})"><i>${n}</i>${t}</button>`).join('');
+}
+
+function units() { return LINES.reduce((a, l) => a + l.per * l.boxes, 0); }
+function boxes() { return LINES.reduce((a, l) => a + l.boxes, 0); }
+
+/* ---------- 1 · Fill in ---------- */
+function stepFill() {
+  const blocked = !S.converted;
+  const rows = LINES.map(l => {
+    let chip = '<span class="chip chip-ok">✓ WFS</span>';
+    if (l.needsConvert && !S.converted) chip = S.converting ? '<span class="chip chip-wait">Walmart checking…</span>' : '<button class="chip chip-warn" onclick="go(2)">Not WFS · Convert</button>';
+    return `<div class="sh-l${l.needsConvert && !S.converted ? ' blocked' : ''}">
+      <span class="mono">${l.sku}</span><span class="mono ch">${l.ch}</span><span class="mono">${l.gtin}</span>
+      <span class="mono r">${l.per}</span><span class="mono r">${l.boxes}</span><span class="mono r q">${l.per * l.boxes}</span><span>${chip}</span></div>`;
+  }).join('');
+  return `
+    <div class="title-row"><span class="dlg-title">WFS Shipments</span><span class="wm-pill">Walmart API connected</span></div>
+    <div class="sheet">
+      <div class="sh-h"><span>SKU</span><span>Channel SKU</span><span>GTIN</span><span class="r">Per box</span><span class="r">Boxes</span><span class="r">Qty</span><span>Walmart</span></div>
+      ${rows}
+      <div class="sh-new">＋ Add line</div>
+    </div>
+    <div class="fields">
+      <span class="lbl">Arrive by</span><span><input class="input mono" value="11/18/2026" style="width:130px" /></span>
+      <span class="lbl">Ship from</span><span class="ro">Digital World Shop · warehouse <small>from Settings</small></span>
+      <span class="lbl">Note</span><input class="input" placeholder="Anything for your own records" />
+    </div>
+    ${blocked
+      ? `<div class="hint">X400-64GB-BLACK isn't set up for WFS yet. Convert it, or remove the line and send the rest.</div>`
+      : `<div class="hint ok">All 3 listings are set up for WFS. Ready to send.</div>`}
+    <div class="foot">
+      <span class="tot"><b>${LINES.length}</b> SKUs · <b>${boxes()}</b> boxes · <b>${units()}</b> units leave the warehouse</span>
+      <button class="btn btn-ghost" title="Today's behaviour: deduct from Linnworks, nothing sent to Walmart">Log only</button>
+      <button class="btn btn-primary" ${blocked ? 'disabled' : ''} onclick="go(3)">Send to Walmart</button>
+    </div>`;
+}
+
+/* ---------- 2 · Convert ---------- */
+function stepConvert() {
+  const status = S.converted
+    ? `<div class="cv-status ok fade"><span class="dot"></span><span><b>Approved.</b> X400-64GB-BLACK is now a WFS listing.</span></div>
+       <label class="todo fade"><input type="checkbox" /><span><b>Linnworks:</b> tick <b>Ignore</b> on this Walmart link (My Inventory › X400-64GB-BLACK › Channel SKU) so Linnworks stops overwriting the WFS quantity.</span></label>`
+    : S.converting
+      ? `<div class="cv-status wait"><span class="dot"></span><span><b>Walmart is checking it.</b> Usually a few minutes. You can close this; the line updates on its own.</span></div>`
+      : '';
+  return `
+    <button class="back" onclick="go(1)">← Back to the shipment</button>
+    <div class="title-row"><span class="dlg-title">Convert to WFS</span></div>
+    <div class="cv-item"><span class="cv-thumb"></span><div><b>X400-64GB-BLACK</b><div>X400 64GB · Walmart listing, fulfilled by you today</div></div></div>
+    <div class="cv-grid">
+      <span class="lbl">One unit, boxed</span>
+      <span class="dims"><input class="input mono" value="11.2" /> × <input class="input mono" value="7.4" /> × <input class="input mono" value="2.1" /> in</span>
+      <span class="lbl">Weight</span>
+      <span class="dims"><input class="input mono" value="1.6" /> lb</span>
+      <span class="lbl">Battery</span>
+      <span class="seg"><span>None</span><span class="on">Lithium-ion, in the device</span><span>Packed with it</span></span>
+      <span class="lbl">Watt-hours</span>
+      <span class="dims"><input class="input mono" value="27" /> Wh</span>
+      <span class="lbl">Sale restrictions</span>
+      <span class="seg"><span class="on">None</span><span>Some states / ZIPs</span></span>
+    </div>
+    <p style="font-size:11.5px;color:var(--faint);margin-top:12px">The next time you convert a similar listing, these fields fill in from the same model.</p>
+    ${status}
+    <div class="foot">
+      <span class="tot">Walmart reviews every conversion</span>
+      ${S.converted
+        ? `<button class="btn btn-primary" onclick="go(1)">Back to the shipment</button>`
+        : `<button class="btn btn-primary" ${S.converting ? 'disabled' : ''} onclick="convert()">${S.converting ? 'Sent…' : 'Send to Walmart'}</button>`}
+    </div>`;
+}
+function convert() {
+  S.converting = true; render();
+  setTimeout(() => { S.converting = false; S.converted = true; render(); }, 1600);
+}
+
+/* ---------- 3 · Walmart's plan ---------- */
+const PLAN = [
+  { n: 1, to: 'Walmart FC · Joliet, IL', addr: '2500 Example Pkwy, Joliet IL 60436', id: '4417201', items: [LINES[0], LINES[2]] },
+  { n: 2, to: 'Walmart FC · Bethlehem, PA', addr: '100 Sample Rd, Bethlehem PA 18017', id: '4417202', items: [LINES[1]] },
+];
+function shpHead(p) {
+  return `<div class="shp-h"><span class="shp-n">${p.n}</span><span class="shp-to">${p.to}<small>${p.addr}</small></span>
+    <span class="shp-id">Walmart shipment<b>${p.id}</b></span></div>`;
+}
+function stepPlan() {
+  const ok = S.converted;
+  return `
+    <div class="title-row"><span class="dlg-title">Walmart's plan</span><span class="wm-pill">Created 11/7 · 2:14 PM</span></div>
+    ${ok ? '' : '<div class="hint" style="margin:0 0 12px">Convert X400-64GB-BLACK first (step 2). This is what comes back once it\'s sent.</div>'}
+    <p class="plan-h">Walmart split your <b>${units()} units</b> into <b>2 shipments</b> to two of its warehouses. Each one gets its own boxes and labels.</p>
+    ${PLAN.map(p => `<div class="shp fade">${shpHead(p)}
+      ${p.items.map(l => `<div class="shp-row"><span class="mono">${l.sku}</span><span class="ch">${l.ch}</span><span class="r">${l.boxes} box${l.boxes > 1 ? 'es' : ''}</span><span class="r"><b>${l.per * l.boxes}</b></span></div>`).join('')}
+    </div>`).join('')}
+    <div class="hint info">${units()} units came off Digital World Shop in Linnworks, logged in each SKU's Stock history as WFS.</div>
+    <div class="foot">
+      <span class="tot"><b>2</b> shipments · <b>${boxes()}</b> boxes</span>
+      <button class="btn btn-ghost">Cancel at Walmart</button>
+      <button class="btn btn-primary" onclick="go(4)">Next: boxes &amp; carrier</button>
+    </div>`;
+}
+
+/* ---------- 4 · Boxes & carrier ---------- */
+function carrierBlock(p, key) {
+  const mode = S[key];
+  const nBoxes = p.items.reduce((a, l) => a + l.boxes, 0);
+  const opts = `<div class="opts">
+      <div class="opt${mode === 'wm' ? ' on' : ''}" onclick="S.${key}='wm';render()"><b>Walmart's carrier</b>FedEx at Walmart's rate, billed to your Walmart account</div>
+      <div class="opt${mode === 'own' ? ' on' : ''}" onclick="S.${key}='own';render()"><b>My own carrier</b>UPS, FedEx or USPS on your own account</div>
+    </div>`;
+  let body;
+  if (mode === 'wm') {
+    const rows = p.items.map(l => `<tr><td class="mono">${l.sku}</td><td>${l.boxes}</td><td><input class="input mono" value="${l.per === 10 ? '18.5' : '9.0'}" /></td><td><input class="input mono" value="${l.per === 10 ? '16 × 12 × 10' : '12 × 10 × 8'}" /></td></tr>`).join('');
+    body = `<table class="boxes"><tr><th>Box contents</th><th>Boxes</th><th>lb each</th><th>Size (in)</th></tr>${rows}</table>
+      ${S.booked
+        ? `<div class="booked fade">✓ Booked · FedEx Ground · $41.27 on your Walmart account</div>
+           <div class="prints"><button class="btn btn-primary btn-sm">Print FedEx labels (${nBoxes})</button><button class="btn btn-ghost btn-sm">Print box labels (${nBoxes})</button></div>`
+        : S.quoted
+          ? `<div class="quote fade">FedEx Ground · <b>$41.27</b> · pickup or drop-off<button class="btn btn-primary btn-sm" onclick="S.booked=true;render()">Book · $41.27</button></div>`
+          : `<button class="btn btn-ghost btn-sm" onclick="S.quoted=true;render()">Get Walmart's price</button>`}`;
+  } else {
+    body = `<div class="own"><select class="input"><option>UPS</option><option>FedEx</option><option>USPS</option></select><input class="input mono" placeholder="Tracking number" value="${key === 'carrierB' ? '1Z 9X4 7F0 03 4412 8835' : ''}" /></div>
+      <div class="prints"><button class="btn btn-ghost btn-sm">Print box labels (${nBoxes})</button><button class="btn btn-ghost btn-sm">Send tracking to Walmart</button></div>`;
+  }
+  return `<div class="car">${shpHead(p)}<div class="car-body">${opts}${body}</div></div>`;
+}
+function stepCarrier() {
+  return `
+    <div class="title-row"><span class="dlg-title">Boxes &amp; carrier</span></div>
+    ${carrierBlock(PLAN[0], 'carrierA')}
+    ${carrierBlock(PLAN[1], 'carrierB')}
+    <div class="foot">
+      <span class="tot">Box labels go on every box, next to the carrier's label</span>
+      <button class="btn btn-primary" onclick="S.sel='new';go(5)">Done</button>
+    </div>`;
+}
+
+/* ---------- 5 · Live status (detail of a past shipment) ---------- */
+function stepStatus() {
+  if (S.sel === 'new') {
+    return `
+      <div class="title-row"><span class="dlg-title">11/7 · 2 shipments</span><span class="wm-pill">Updated 3 min ago</span></div>
+      ${PLAN.map((p, i) => `<div class="shp">${shpHead(p)}<div class="car-body" style="font-size:12px;color:var(--muted)">
+        ${i === 0 ? (S.booked ? 'FedEx Ground booked · labels printed · <b style="color:var(--text)">Waiting for pickup</b>' : 'Carrier not booked yet') : 'UPS · 1Z 9X4 7F0 03 4412 8835 · <b style="color:var(--text)">Label created</b>'}
+      </div></div>`).join('')}
+      <p style="font-size:11.5px;color:var(--faint)">Pick an older shipment on the right to see Walmart's receiving counts.</p>`;
+  }
+  return `
+    <div class="title-row"><span class="dlg-title">10/28 shipment</span><span class="wm-pill">Updated 4 min ago</span></div>
+    <div class="meta">
+      <span>Walmart shipment</span><span class="mono">4398815</span><span>Warehouse</span><span>Walmart FC · Bethlehem, PA</span>
+      <span>Carrier</span><span>FedEx Ground (Walmart's)</span><span>Tracking</span><span class="mono">7781 2290 4416</span>
+    </div>
+    <div class="tl">
+      <div class="d"><b>Created</b>10/28</div><div class="d"><b>Picked up</b>10/29</div><div class="d"><b>Delivered</b>11/3</div><div class="d now"><b>Receiving</b>31 of 45</div><div><b>Closed</b>—</div>
+    </div>
+    <table class="rx">
+      <tr><th>SKU</th><th>Channel SKU</th><th class="r">Sent</th><th class="r">Received</th><th class="r">Damaged</th></tr>
+      <tr><td class="mono">X110-64GB-GRAY</td><td class="ch">X110GRAY-WFS</td><td class="r">20</td><td class="r">20</td><td class="r">0</td></tr>
+      <tr><td class="mono">X230-128GB-GRAY</td><td class="ch">X230-128GB-GRAY-WFS</td><td class="r">15</td><td class="r">11</td><td class="r">0</td></tr>
+      <tr><td class="mono">X230-128GB-SILVER</td><td class="ch">X230-128GB-SLV-WFS</td><td class="r">10</td><td class="r">0</td><td class="r">0</td></tr>
+    </table>
+    <div class="hint info" style="margin-top:14px">Walmart is still checking boxes in. If the counts are short when it closes, this card turns red with the difference.</div>`;
+}
+
+/* ---------- right column: past shipments, live ---------- */
+function renderRight() {
+  const newCard = (S.step >= 4 || S.booked) ? `
+    <div class="card fade${S.step === 5 && S.sel === 'new' ? ' sel' : ''}" onclick="S.sel='new';go(5)">
+      <div class="card-h"><b>Nov 7, 2026</b><span class="card-u">${units()} units</span></div>
+      <div class="card-to">2 shipments · Joliet IL, Bethlehem PA</div>
+      <div class="card-tags"><span class="st-tag">IMRAN-MACBOOK-PRO</span><span class="chip chip-wait">Ready to ship</span></div>
+    </div>` : '';
+  $('right').innerHTML = `
+    <div class="right-h"><span class="lbl">Past shipments</span><span style="color:var(--faint);font-size:13px">✕</span></div>
+    <div class="right-sub">Status from Walmart · updated 4 min ago</div>
+    ${newCard}
+    <div class="card${S.step === 5 && S.sel !== 'new' ? ' sel' : ''}" onclick="S.sel='oct28';go(5)">
+      <div class="card-h"><b>Oct 28, 2026</b><span class="card-u">45 units</span></div>
+      <div class="card-to">Bethlehem PA · FedEx (Walmart's)</div>
+      <div class="card-tags"><span class="chip chip-wait">Receiving 31 / 45</span></div>
+      <div class="bar"><i style="width:69%"></i></div>
+    </div>
+    <div class="card" onclick="S.sel='oct28';go(5)">
+      <div class="card-h"><b>Oct 14, 2026</b><span class="card-u">40 units</span></div>
+      <div class="card-to">Joliet IL · UPS</div>
+      <div class="card-tags"><span class="chip chip-wait">In transit · due 11/9</span></div>
+      <div class="bar"><i style="width:35%"></i></div>
+    </div>
+    <div class="card" onclick="S.sel='oct28';go(5)">
+      <div class="card-h"><b>Sep 30, 2026</b><span class="card-u">25 units</span></div>
+      <div class="card-to">Joliet IL · FedEx (Walmart's)</div>
+      <div class="card-tags"><span class="chip chip-red">Closed · 1 short</span></div>
+      <div class="bar done"><i style="width:96%"></i></div>
+    </div>
+    <div class="card card-old">
+      <div class="card-h"><b>Sep 12, 2026</b><span class="card-u">30 units</span></div>
+      <div class="card-to">Logged by hand, before the API</div>
+      <div class="card-tags"><span class="st-tag">IMRAN-MACBOOK-PRO</span><span class="chip chip-ok">Received</span></div>
+    </div>`;
+}
+
+function render() {
+  renderSteps();
+  const f = { 1: stepFill, 2: stepConvert, 3: stepPlan, 4: stepCarrier, 5: stepStatus }[S.step];
+  $('left').innerHTML = f();
+  renderRight();
+  $('why').innerHTML = WHY[S.step];
+}
+// ?step=N&done=1 opens a step directly (used for screenshots)
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('done')) { S.converted = true; }
+  if (q.get('booked')) { S.quoted = true; S.booked = true; }
+  if (q.get('sel')) S.sel = q.get('sel');
+  if (q.get('step')) S.step = Number(q.get('step')) || 1;
+})();
+render();
+</script>
+</body>
+</html>

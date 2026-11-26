@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · Pricing, incentive filter — mockup</title>
+<!--
+  Owner 2026-10-23: "I want to see which items they have given an
+  incentive for". Layer 3 on walmart-pricing-2.html: filter chips above the
+  table (All / Incentive offered / Enrolled), a one-line summary per
+  program, and each incentive chip carries its terms (what Walmart gives,
+  the price condition, the end date). Shown with "Incentive offered" on.
+  Built on the real styles.css. Mockup only — nothing here is wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 1280px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 1000px; line-height: 1.5; }
+  .win { width: 1280px; margin: 8px auto 26px; background: var(--canvas); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); }
+  .win .topbar { padding: 14px 24px 6px; }
+  .win .wlp { padding: 8px 24px 18px; }
+  .win .wlp-card { max-width: none; }
+
+  .pb-bar { display: flex; align-items: center; gap: 10px; padding: 0 20px 12px; }
+  .pb-bar .input { width: 300px; }
+  .pb-bar .cnt { font-size: 12px; color: var(--muted); }
+  .pb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pb-table th { text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .pb-table td { padding: 10px 20px; border-bottom: 1px solid var(--border-soft, #EEEDE9); vertical-align: middle; }
+  .pb-table .sku { display: block; font-family: var(--mono); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .pb-table .ttl { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+  .pb-table .w-price { width: 160px; }
+  .pb-table .w-bb { width: 260px; }
+  .pb-price { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+  .pb-price.is-chg { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pb-was { display: block; font-size: 10.5px; color: var(--faint); margin-top: 3px; }
+  .bb { font-size: 12.5px; }
+  .bb-pill { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; margin-right: 8px; }
+  .bb-pill.is-win { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .bb-pill.is-lose { background: var(--badge-red-bg); color: var(--badge-red-text); }
+  .bb .p { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bb .p b { color: var(--text); }
+  .pb-foot { display: flex; align-items: center; gap: 10px; padding: 12px 20px; font-size: 12.5px; }
+  .pb-foot .btn:first-of-type { margin-left: auto; }
+
+  .pb-table .w-rp { width: 330px; }
+  .pb-table .w-inc { width: 220px; }
+  .pb-table .w-price { width: 140px; }
+  .pb-table .w-bb { width: 190px; }
+  .rp { display: flex; align-items: center; gap: 6px; }
+  .rp select { width: 150px; font-size: 12px; padding-top: 5px; padding-bottom: 5px; }
+  .rp .mm { width: 70px; font-size: 12px; text-align: right; padding: 5px 7px; }
+  .rp .dash { color: var(--faint); font-size: 11px; }
+  .rp select.is-none { color: var(--faint); }
+  .rp select.is-chg, .rp .mm.is-chg { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .inc { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .inc .on { font-size: 11px; font-weight: 600; background: var(--badge-blue-bg); color: var(--badge-blue-text); border-radius: 999px; padding: 2px 9px; }
+  .inc .can { font: inherit; font-size: 11px; font-weight: 600; color: var(--badge-blue-text); background: none; border: 1px dashed var(--badge-blue-text); border-radius: 999px; padding: 1px 9px; cursor: pointer; }
+  .inc .can.is-chg { background: var(--accent); color: #fff; border-style: solid; border-color: var(--accent); }
+  .inc .none { color: var(--faint); font-size: 12px; }
+  .pb-key { display: flex; gap: 16px; margin-left: auto; font-size: 11px; color: var(--muted); align-items: center; }
+  .pb-key .on, .pb-key .can { font-size: 10.5px; }
+  .rp-menu { position: absolute; z-index: 5; top: 100%; left: 0; margin-top: 4px; width: 230px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 24px rgba(47,52,55,.14); padding: 5px; font-size: 12.5px; }
+  .rp-menu div { padding: 7px 10px; border-radius: 7px; }
+  .rp-menu div small { display: block; color: var(--muted); font-size: 11px; }
+  .rp-menu div.sel { background: var(--accent-soft); font-weight: 600; }
+  .rp-menu .mg { border-top: 1px solid var(--border); margin-top: 4px; border-radius: 0; color: var(--accent); font-weight: 600; }
+  .rp-wrap { position: relative; }
+
+  .pb-chips { display: flex; gap: 8px; padding: 0 20px 10px; align-items: center; }
+  .pb-chips .chip-filter.is-active { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .pb-chips .n { font-weight: 700; margin-left: 4px; }
+  .pb-sum { margin: 0 20px 12px; padding: 10px 14px; border-radius: 10px; background: var(--badge-blue-bg); color: var(--badge-blue-text); font-size: 12.5px; display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  .pb-sum b { font-weight: 700; }
+  .pb-sum span { color: var(--text); }
+  .inc-d { display: block; font-size: 10.5px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+  .inc-i + .inc-i { margin-top: 7px; }
+  .pb-table .w-inc { width: 280px; }
+  .inc-d .over { display: block; color: var(--badge-red-text); font-weight: 600; }
+</style></head>
+<body>
+
+<div class="note">
+  <h2>Walmart → Pricing · which items have an incentive</h2>
+  <p>The same table with three chips on top: <b>All</b>, <b>Incentive offered</b> (Walmart offers it, you haven't joined) and <b>Enrolled</b>. Shown here with "Incentive offered" on: only those items are listed, a line sums them up per program, and each chip says what Walmart gives and the condition (price cap, end date); red when your price is over the cap. Click a dashed chip to join; it goes out with Save like everything else.</p>
+</div>
+<div class="win">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs"><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab is-active">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Ship</button></nav>
+  </header>
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab is-on">Pricing</button></div>
+    </div>
+    <div class="pb-bar">
+      <input class="input" placeholder="Filter by SKU or title…" />
+      <span class="cnt">showing 6 of 52 listings</span>
+      <span class="pb-key"><span class="inc"><span class="on">Enrolled</span></span><span class="inc"><button class="can">Can join</button></span></span>
+    </div>
+    <div class="pb-chips">
+      <button class="chip-filter">All<span class="n">52</span></button>
+      <button class="chip-filter is-active">Incentive offered<span class="n">6</span></button>
+      <button class="chip-filter">Enrolled<span class="n">5</span></button>
+    </div>
+    <div class="pb-sum"><b>Walmart offers incentives on 6 items you haven't joined</b><span>Reduced referral fee · 4 items</span><span>Walmart-funded discount · 2 items</span></div>
+    <table class="pb-table">
+      <thead><tr><th>Item</th><th class="w-price">Price</th><th class="w-bb">Buy Box</th><th class="w-rp">Repricer · min – max</th><th class="w-inc">Incentives</th></tr></thead>
+      <tbody>
+        <tr><td><span class="sku">S25-128GB-NAVY</span><span class="ttl">Samsung Galaxy S25 128GB Unlocked, Navy</span></td><td><input class="input mono pb-price" value="699.00" /></td><td class="bb"><span class="bb-pill is-lose">Losing</span><span class="p">to <b>$684.99</b></span></td><td><div class="rp"><select class="input"><option>Beat Buy Box by $1</option></select><input class="input mono mm" value="640.00" /><span class="dash">–</span><input class="input mono mm" value="720.00" /></div></td><td><div class="inc-i"><div class="inc"><button class=can>+ Reduced fee</button></div><span class="inc-d">Fee 8% → 6% while price ≤ $689.00 · until 11/30<span class="over">Your $699.00 is over the cap</span></span></div></td></tr>
+        <tr><td><span class="sku">A15-128GB-BLACK</span><span class="ttl">Samsung Galaxy A15 128GB Unlocked, Black</span></td><td><input class="input mono pb-price" value="142.00" /></td><td class="bb"><span class="bb-pill is-win">Winning</span></td><td><div class="rp"><select class="input is-none"><option>None</option></select><span class="dash">fixed price</span></div></td><td><div class="inc-i"><div class="inc"><button class=can>+ Reduced fee</button></div><span class="inc-d">Fee 8% → 5% while price ≤ $145.00 · until 11/30</span></div></td></tr>
+        <tr><td><span class="sku">S24FE-128GB-MINT</span><span class="ttl">Samsung Galaxy S24 FE 128GB Unlocked, Mint</span></td><td><input class="input mono pb-price" value="409.00" /></td><td class="bb"><span class="bb-pill is-win">Winning</span></td><td><div class="rp"><select class="input"><option>Beat Buy Box by $1</option></select><input class="input mono mm" value="380.00" /><span class="dash">–</span><input class="input mono mm" value="450.00" /></div></td><td><div class="inc-i"><div class="inc"><span class=on>Reduced fee</span></div><span class="inc-d">Enrolled · fee 8% → 6% · until 11/30</span></div><div class="inc-i"><div class="inc"><button class=can>+ Walmart-funded −5%</button></div><span class="inc-d">Walmart pays 5% off the shopper price · until 11/15</span></div></td></tr>
+        <tr><td><span class="sku">X210-128GB-SILVER</span><span class="ttl">Samsung Galaxy Tab A9+ 11" 128GB Wi-Fi, Silver</span></td><td><input class="input mono pb-price" value="219.00" /></td><td class="bb"><span class="bb-pill is-lose">Losing</span><span class="p">to <b>$214.00</b></span></td><td><div class="rp"><select class="input is-none"><option>None</option></select><span class="dash">fixed price</span></div></td><td><div class="inc-i"><div class="inc"><button class=can>+ Reduced fee</button></div><span class="inc-d">Fee 15% → 12% while price ≤ $215.00 · until 12/15<span class="over">Your $219.00 is over the cap</span></span></div></td></tr>
+        <tr><td><span class="sku">OPEN-BOX-S23-256GB-BLACK</span><span class="ttl">Samsung Galaxy S23 256GB Unlocked, Phantom Black</span></td><td><input class="input mono pb-price" value="419.00" /></td><td class="bb"><span class="bb-pill is-win">Winning</span></td><td><div class="rp"><select class="input"><option>Open box: beat by 2%</option></select><input class="input mono mm" value="395.00" /><span class="dash">–</span><input class="input mono mm" value="460.00" /></div></td><td><div class="inc-i"><div class="inc"><button class=can>+ Reduced fee</button></div><span class="inc-d">Fee 8% → 6% while price ≤ $425.00 · until 11/30</span></div></td></tr>
+        <tr><td><span class="sku">BUDS3-PRO-SILVER</span><span class="ttl">Samsung Galaxy Buds3 Pro, Silver</span></td><td><input class="input mono pb-price" value="189.00" /></td><td class="bb"><span class="bb-pill is-lose">Losing</span><span class="p">to <b>$182.50</b></span></td><td><div class="rp"><select class="input is-none"><option>None</option></select><span class="dash">fixed price</span></div></td><td><div class="inc-i"><div class="inc"><button class=can>+ Walmart-funded −5%</button></div><span class="inc-d">Walmart pays 5% off the shopper price · until 11/15</span></div></td></tr>
+      </tbody>
+    </table>
+    <div class="pb-foot">
+      <span>No changes yet</span>
+      <button class="btn btn-ghost" disabled>Undo</button><button class="btn btn-primary" disabled>Save to Walmart</button>
+    </div>
+  </div></section>
+</div>
+
+</body>
+</html>

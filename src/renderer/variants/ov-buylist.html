@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview — What to buy like the Black Friday PDF (mock-up on v1.32.124, 2026-10-28)</title>
+<style>
+  /* Mock-up only: the Overview's "Needs attention" card redrawn as the buy-list
+     PDF the owner liked (Buy now / Buy next / Then, # SKU Sold/week Left Buy).
+     Numbers are the real buy list of Oct 26 (tools/linnworks/lw.js buylist
+     --min-week 5, A15/T220/Silver Shadow left out). App tokens from styles.css. */
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #1E3A66; --accent-soft: #E4EAF4;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --sec-now: #B00020; --sec-next: #333333; --sec-then: #5A6B7D;
+    --r-card: 8px; --r-ctl: 6px;
+    --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.5; background: var(--canvas); color: var(--text); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .tabs { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; }
+  .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+
+  .rc-head { display: flex; align-items: flex-end; gap: 22px; border-bottom: 1px solid #EAEAEA; padding-bottom: 10px; margin-bottom: 4px; }
+  .rc-h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; }
+  .rc-subtabs { display: flex; gap: 22px; margin-left: 18px; align-items: flex-end; }
+  .rc-subtab { font-size: 12.5px; font-weight: 500; color: #787774; display: flex; align-items: center; gap: 8px; line-height: 1.55; }
+  .rc-subtab.is-active { font-weight: 600; color: #2F3437; padding-bottom: 10px; margin-bottom: -11px; border-bottom: 2px solid #1E3A66; }
+  .rc-subtab-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: #9F2F2D; }
+  .ov-headright { margin-left: auto; align-self: center; display: flex; align-items: center; gap: 10px; }
+  .ov-updated { font-size: 12px; color: var(--faint); }
+  .ov-refresh { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 16px 22px 30px; display: flex; flex-direction: column; gap: 14px; }
+  .head { display: flex; align-items: center; gap: 12px; }
+  .head h1 { font-size: 15px; font-weight: 600; }
+  .head .d { font-size: 11.5px; color: var(--faint); }
+  .refresh { margin-left: auto; font: inherit; font-size: 12px; border: 1px solid var(--border); background: #fff; border-radius: var(--r-ctl); padding: 4px 12px; color: var(--muted); }
+
+
+  .body { display: block; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
+  .card-h { display: flex; align-items: center; gap: 10px; padding: 13px 18px; flex-wrap: wrap; }
+  .card-h .lbl { font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .card-h .sub { margin-left: auto; font-size: 11px; color: var(--faint); }
+
+  .sec { padding: 4px 18px 16px; }
+  .sec h2 { font-size: 15px; font-weight: 600; margin-top: 8px; }
+  .sec .why { font-size: 12px; color: var(--muted); margin: 1px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  col.c-rank { width: 48px; } col.c-num { width: 110px; } col.c-buy { width: 100px; }
+  td.sku { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  thead th { background: var(--sec-now); color: #fff; font-weight: 600; font-size: 12px; text-align: right; padding: 7px 10px; }
+  thead th:first-child { border-radius: 6px 0 0 0; } thead th:last-child { border-radius: 0 6px 0 0; }
+  .s-next thead th { background: var(--sec-next); } .s-then thead th { background: var(--sec-then); }
+  th.l, td.l { text-align: left; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; }
+  td.rank { color: var(--muted); width: 38px; }
+  td.sku { font-family: var(--mono); font-size: 12.5px; }
+  td.sku .ds { font-family: var(--font); font-size: 10.5px; color: var(--badge-blue-text); background: var(--badge-blue-bg); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  td.left0 { color: var(--neg-text); font-weight: 700; }
+  td.buy { font-weight: 700; background: #F2F4F7; }
+  tfoot td { padding: 7px 10px; text-align: right; font-weight: 700; border-top: 1.5px solid var(--text); font-variant-numeric: tabular-nums; }
+  tfoot td.buy { background: #F2F4F7; }
+
+
+  .foot { display: flex; align-items: center; gap: 12px; padding: 12px 18px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .foot .link { color: var(--accent); }
+  .foot .tot { margin-left: auto; color: var(--text); }
+  .foot .tot b { font-family: var(--mono); }
+  .how { padding: 0 18px 16px; font-size: 11.5px; color: var(--faint); max-width: 95ch; }
+
+  .sold { padding: 14px 18px; }
+  .sold .ph { margin-top: 10px; border: 1.5px dashed var(--border); border-radius: 8px; padding: 22px 14px; text-align: center; color: var(--faint); font-size: 12px; }
+
+  .note { font-size: 12px; color: var(--muted); background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 14px; }
+  .note b { color: var(--text); }
+  @media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { .rc-head { flex-wrap: wrap; gap: 10px; } .rc-subtabs { margin-left: 0; gap: 14px; } col.c-rank { width: 30px; } col.c-num { width: 70px; } col.c-buy { width: 62px; } .wrap { padding: 12px 12px 24px; } .sec { padding: 4px 10px 14px; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="note"><b>Mock-up, on the current build (v1.32.124).</b> The Overview's <b>What to buy</b> tab redrawn like the Black Friday buy-list PDF. Real numbers from Oct 26. No counts row, no header, rows don't open: a SKU drops off the list once it's stocked enough. Needs attention and Sent to WFS stay as they are.</div>
+
+    <div class="rc-head">
+      <h1 class="rc-h1">Overview</h1>
+      <nav class="rc-subtabs"><span class="rc-subtab">Needs attention</span><span class="rc-subtab">Sent to WFS</span><span class="rc-subtab is-active">What to buy <span class="rc-subtab-count" id="nbuy"></span></span></nav>
+      <span class="ov-headright"><span class="ov-updated">Updated 9:41 AM</span><span class="ov-refresh"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></span></span>
+    </div>
+
+    <div class="body">
+      <div class="card">
+        <div id="sections"></div>
+        <div class="foot">
+          <span class="link">Download this list as Excel</span><span class="link">Slow sellers (under 5 a week) →</span>
+          <span class="tot" id="grand"></span>
+        </div>
+        <p class="how">Sold / week: the best of the last 14, 30 and 60 days' averages. Left: Digital World Shop + WFS (dropship pad not counted). Buy: enough to sell at normal pace until Nov 19, then 10× through Cyber Monday, less what's left and on order, rounded up to 5. A SKU leaves this list by itself as soon as what's left and on order covers it through Black Friday week (Buy reaches 0). A15, T220 and Silver Shadow left out (Settings → Stock).</p>
+      </div>
+
+  </div>
+
+<script>
+  // [sku, dropship, sold/week, left, group, buy] — tools/linnworks/lw.js buylist, Oct 26
+  const ROWS = [["X230-256GB-GRAY",0,23,0,"Out of stock now",435],["S26-ULTRA-512GB-VIOLET",1,14,0,"Out of stock now",260],["X620-128GB-GRAY",0,12,0,"Out of stock now",230],["S26-ULTRA-512GB-BLACK",1,11,0,"Out of stock now",205],["S26-ULTRA-512GB-BLUE",1,19,2,"Runs out within 2 weeks",355],["IPAD-11-128GB-PINK-LTE",0,8.5,1,"Runs out within 2 weeks",165],["S26-256GB-BLACK",1,16,17,"Runs out within 2 weeks",290],["S25-256GB-NAVY",1,5.5,6,"Runs out within 2 weeks",100],["S26-512GB-BLACK",1,6,7,"Runs out within 2 weeks",110],["S26-256GB-BLUE",1,17,25,"Runs out within 2 weeks",295],["S25-ULTRA-512GB-SILVERBLUE",1,8.5,13,"Runs out within 2 weeks",150],["X930-256GB-GRAY",0,5.5,10,"Runs out within 2 weeks",100],["S26-ULTRA-256GB-VIOLET",1,21,43,"Runs out before 2026-11-20",360],["S26-ULTRA-256GB-BLUE",1,6.5,14,"Runs out before 2026-11-20",115],["X230-256GB-SILVER",0,16,39,"Runs out before 2026-11-20",265],["X520-256GB-GRAY",0,9,23,"Runs out before 2026-11-20",150],["X133-128GB-GRAY",0,35,92,"Runs out before 2026-11-20",585],["S26-ULTRA-256GB-BLACK",1,19,63,"Runs out before 2026-11-20",305],["X520-128GB-SILVER",0,18,61,"Runs out before 2026-11-20",285],["X230-128GB-SILVER",0,16,75,"Has stock, short for the peak",230],["X620-128GB-SILVER",0,5,24,"Has stock, short for the peak",75],["X210-64GB-GRAY",0,78,471,"Has stock, short for the peak",1025],["X400-128GB-GRAY",0,75,558,"Has stock, short for the peak",870],["X133-128GB-SILVER",0,8.9,67,"Has stock, short for the peak",105],["X230-128GB-GRAY",0,105,843,"Has stock, short for the peak",1170],["X133-64GB-GRAY",0,161,1515,"Has stock, short for the peak",1560],["X610-128GB-BLACK",0,14,151,"Has stock, short for the peak",120],["X135-128GB-SILVER",0,5.6,71,"Has stock, short for the peak",40],["X236-128GB-GRAY",0,23,310,"Has stock, short for the peak",135],["X135-64GB-GRAY",0,24,331,"Has stock, short for the peak",135],["X620-128GB-BLUE",0,8,134,"Has stock, short for the peak",20],["X135-64GB-SILVER",0,8.6,145,"Has stock, short for the peak",25],["X356-128GB-GREEN",0,5,90,"Has stock, short for the peak",10]];
+  const SECTIONS = [
+    { cls: 's-now', title: 'Buy now', why: 'Out of stock, or out within 2 weeks', groups: ['Out of stock now', 'Runs out within 2 weeks'] },
+    { cls: 's-next', title: 'Buy next', why: 'Runs out before Black Friday week starts (Nov 20)', groups: ['Runs out before 2026-11-20'] },
+    { cls: 's-then', title: 'Then', why: 'Has stock today, but not enough for Black Friday week', groups: ['Has stock, short for the peak'] },
+  ];
+  const fmt = (n) => Number(n).toLocaleString('en-US');
+  function draw() {
+    let rank = 0, grand = 0;
+    const html = SECTIONS.map((s) => {
+      const rs = ROWS.filter((r) => s.groups.includes(r[4]));
+      const total = rs.reduce((t, r) => t + r[5], 0);
+      grand += total;
+      const body = rs.map((r) => {
+        rank++;
+        const row = `<tr><td class="rank">${rank}</td><td class="l sku">${r[0]}${r[1] ? '<span class="ds">Dropship</span>' : ''}</td><td>${r[2]}</td><td class="${r[3] === 0 ? 'left0' : ''}">${fmt(r[3])}</td><td class="buy">${fmt(r[5])}</td></tr>`;
+        return row;
+      }).join('');
+      return `<div class="sec ${s.cls}"><h2>${s.title}</h2><p class="why">${s.why}</p>
+        <table><colgroup><col class="c-rank"><col><col class="c-num"><col class="c-num"><col class="c-buy"></colgroup><thead><tr><th>#</th><th class="l">SKU</th><th>Sold / week</th><th>Left</th><th>Buy</th></tr></thead>
+        <tbody>${body}</tbody><tfoot><tr><td></td><td class="l">Total</td><td></td><td></td><td class="buy">${fmt(total)}</td></tr></tfoot></table></div>`;
+    }).join('');
+    document.getElementById('sections').innerHTML = html;
+    document.getElementById('nbuy').textContent = ROWS.length;
+    document.getElementById('grand').innerHTML = `All ${ROWS.length} SKUs: <b>${fmt(grand)}</b> units`;
+  }
+  draw();
+</script>
+</body>
+</html>

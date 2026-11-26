@@ -1,0 +1,383 @@
+<title>WFS Tab Variations</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a jump bar, then four stacked "app frames" — each a full WFS tab drawn in DWS Stock's own tokens */
+:root {
+  --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8; --border: #EAEAEA;
+  --text: #2F3437; --muted: #787774; --faint: #A5A29C; --ghost: #D6D4CF;
+  --accent: #1E3A66; --accent-soft: #E4EAF4; --on-accent: #FFFFFF;
+  --red: #9F2F2D; --red-bg: #FDEBEC; --amber: #956400; --amber-bg: #FBF3DB;
+  --green: #346538; --green-bg: #EDF3EC; --blue: #1F6C9F; --blue-bg: #E1F3FE;
+  --page: #EFEDE8;
+  --font: 'Geist', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas: #1C1D1F; --surface: #242528; --surface-2: #2A2B2E; --border: #36383C;
+  --text: #E6E5E2; --muted: #A09E99; --faint: #77756F; --ghost: #4A4B4F;
+  --accent: #8FB0E3; --accent-soft: #273550; --on-accent: #14161A;
+  --red: #F08C88; --red-bg: #3A2324; --amber: #E2BC62; --amber-bg: #372F1C;
+  --green: #8CC492; --green-bg: #213025; --blue: #7CC0EA; --blue-bg: #1D3140;
+  --page: #151618; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --canvas: #1C1D1F; --surface: #242528; --surface-2: #2A2B2E; --border: #36383C;
+  --text: #E6E5E2; --muted: #A09E99; --faint: #77756F; --ghost: #4A4B4F;
+  --accent: #8FB0E3; --accent-soft: #273550; --on-accent: #14161A;
+  --red: #F08C88; --red-bg: #3A2324; --amber: #E2BC62; --amber-bg: #372F1C;
+  --green: #8CC492; --green-bg: #213025; --blue: #7CC0EA; --blue-bg: #1D3140;
+  --page: #151618; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 36px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 44px; }
+h1 { font-size: 28px; line-height: 1.15; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 70ch; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); font-size: 15px; }
+.top { display: flex; flex-direction: column; gap: 10px; }
+.jump { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.jump a { font-size: 13px; font-weight: 500; color: var(--text); text-decoration: none; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 5px 12px; }
+.jump a:hover { border-color: var(--accent); color: var(--accent); }
+.jump a b { font-family: var(--mono); color: var(--accent); margin-right: 4px; }
+.num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); } .small { font-size: 12px; }
+
+section.v { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 16px; }
+.v-head { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.tag { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px; }
+.notes { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; color: var(--muted); }
+.notes span::before { content: "·"; margin-right: 8px; color: var(--faint); }
+.notes span:first-child::before { content: none; }
+
+/* ---- frame ---- */
+.frame { background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bar .h { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.bar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.pill { font: inherit; font-size: 12.5px; font-weight: 600; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.icon-btn { font: inherit; width: 32px; height: 30px; display: grid; place-items: center; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.icon-btn svg { width: 15px; height: 15px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.scroll-x { overflow-x: auto; }
+button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* tabs: underline, segmented, pills */
+.utabs { display: flex; gap: 22px; padding: 0 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.utabs button { font: inherit; font-size: 12.5px; font-weight: 500; color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 11px 0 9px; cursor: pointer; display: inline-flex; gap: 7px; align-items: baseline; }
+.utabs button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 12.5px; font-weight: 500; color: var(--muted); background: none; border: 0; border-radius: 7px; padding: 5px 12px; cursor: pointer; display: inline-flex; gap: 7px; align-items: baseline; white-space: nowrap; }
+.seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.cnt { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--muted); }
+.cnt.red { color: var(--red); }
+
+/* tables */
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-weight: 600; padding: 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+th.r, td.r { text-align: right; }
+td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.z { color: var(--ghost); }
+td.pos { color: var(--green); }
+td.end { font-weight: 600; color: var(--accent); }
+th.endh { color: var(--accent); }
+tfoot td { background: var(--surface-2); font-weight: 600; border-top: 1px solid var(--border); border-bottom: 0; }
+.item b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+.item span { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.grp th { text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--muted); background: var(--surface); padding: 6px 12px; border-bottom: 0; }
+.grp th.lab { border-bottom: 2px solid var(--border); }
+.grp th.lab.in { border-bottom-color: var(--green); color: var(--green); }
+.grp th.lab.out { border-bottom-color: var(--faint); }
+.grp th.lab.left { border-bottom-color: var(--accent); color: var(--accent); }
+.vline { border-left: 1px solid var(--border); }
+
+.st { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 12.5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.g { background: var(--green); } .dot.a { background: var(--amber); } .dot.r { background: var(--red); }
+.st.a { color: var(--amber); } .st.r { color: var(--red); } .st.g { color: var(--green); }
+.foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.link { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; font-weight: 500; }
+.chev { font: inherit; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+.chev:hover { color: var(--text); background: var(--surface-2); }
+tr.det td { background: var(--surface-2); padding: 10px 16px 14px; }
+.dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 22px; font-size: 12.5px; }
+.dl span { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dotted var(--border); padding-bottom: 2px; }
+.dl b { font-family: var(--mono); font-weight: 500; }
+.dl b.zz { color: var(--ghost); }
+
+/* V3 flow */
+.strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.strip > div { padding: 12px 16px; display: flex; flex-direction: column; gap: 1px; }
+.strip > div + div { border-left: 1px solid var(--border); }
+.strip .k { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.strip .big { font-family: var(--mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.strip .big.pos { color: var(--green); } .strip .big.end { color: var(--accent); }
+.strip .d { font-size: 11.5px; color: var(--muted); }
+.eq { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.eq i { font-style: normal; color: var(--faint); padding: 0 4px; }
+.eq .p { color: var(--green); } .eq .e { color: var(--accent); font-weight: 600; }
+.eq small { font-family: var(--font); font-size: 10.5px; color: var(--muted); margin-left: 2px; }
+.mix { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); width: 140px; }
+.mix i { display: block; height: 100%; }
+.mix .k1 { background: var(--accent); opacity: .5; } .mix .k2 { background: var(--green); } .mix .k3 { background: var(--ghost); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+
+/* V4 cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.sk { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.sk-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.sk-name { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
+.sk-id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.sk-end { text-align: right; }
+.sk-end .big { font-family: var(--mono); font-size: 26px; font-weight: 600; color: var(--accent); line-height: 1; font-variant-numeric: tabular-nums; }
+.sk-end .k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.steps div { padding: 6px 8px; display: flex; flex-direction: column; gap: 0; }
+.steps div + div { border-left: 1px solid var(--border); }
+.steps .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.steps .n { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.steps .n.p { color: var(--green); } .steps .n.z { color: var(--ghost); }
+.sk.quiet { background: var(--surface-2); }
+.empties { font-size: 12.5px; color: var(--muted); padding: 10px 2px 0; }
+
+/* shipments */
+.age { font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; display: inline-block; }
+.age.a { background: var(--amber-bg); color: var(--amber); } .age.r { background: var(--red-bg); color: var(--red); }
+.btn { font: inherit; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.btn.navy { border-color: var(--accent); color: var(--accent); }
+.shiplist { list-style: none; margin: 0; padding: 0; }
+.shiplist li { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.shiplist li:last-child { border-bottom: 0; }
+.shiplist .what { display: flex; flex-direction: column; min-width: 0; }
+.shiplist .what b { font-family: var(--mono); font-weight: 500; font-size: 12.5px; }
+.shiplist .what span { font-size: 12px; color: var(--muted); }
+.groupline { padding: 7px 16px; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.ex { font-size: 11.5px; color: var(--muted); font-style: italic; }
+
+@media (max-width: 720px) {
+  .frame { padding: 12px; }
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strip > div + div { border-left: 0; }
+  .strip > div { border-top: 1px solid var(--border); }
+  .shiplist li { grid-template-columns: 70px minmax(0, 1fr); }
+  .shiplist li > :nth-child(n+3) { grid-column: 2; justify-self: start; }
+  .bar .right { margin-left: 0; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">Recovery › WFS Inventory · step 1</span>
+    <h1>Four ways to lay out the WFS tab</h1>
+    <p class="lede">Same report in every version: your Nov 1 – Nov 10 file (7 SKUs, 227 units at WFS) and the shipments still waiting. Each frame's tabs switch between By SKU, Not received and Received.</p>
+    <nav class="jump" aria-label="Jump to a variation">
+      <a href="#v1"><b>1</b>Tidy table</a>
+      <a href="#v2"><b>2</b>Compact ledger</a>
+      <a href="#v3"><b>3</b>Flow</a>
+      <a href="#v4"><b>4</b>SKU cards</a>
+    </nav>
+  </header>
+
+  <section class="v" id="v1">
+    <div class="v-head"><span class="tag">1</span><h2>Tidy table</h2><span class="muted">Today's table, cleaned up</span></div>
+    <div class="notes"><span>Product name first, GTIN underneath</span><span>Columns Walmart left empty are hidden</span><span>SKUs with 0 units fold away</span><span>Every out-flow has a minus</span><span>A Check column says what's off</span></div>
+    <div class="frame" data-v="1"></div>
+  </section>
+
+  <section class="v" id="v2">
+    <div class="v-head"><span class="tag">2</span><h2>Compact ledger</h2><span class="muted">Six number columns, open a row for the rest</span></div>
+    <div class="notes"><span>In · Sold · Other out · Adjust</span><span>Click a row for every Walmart column</span><span>Segmented switch instead of tabs</span><span>Shipments grouped by how late they are</span></div>
+    <div class="frame" data-v="2"></div>
+  </section>
+
+  <section class="v" id="v3">
+    <div class="v-head"><span class="tag">3</span><h2>Flow</h2><span class="muted">Totals on top, each SKU written as a sum</span></div>
+    <div class="notes"><span>The arithmetic is on screen</span><span>Only movements that happened are written</span><span>A bar shows what's old stock vs new</span></div>
+    <div class="frame" data-v="3"></div>
+  </section>
+
+  <section class="v" id="v4">
+    <div class="v-head"><span class="tag">4</span><h2>SKU cards</h2><span class="muted">One card per SKU, problems first</span></div>
+    <div class="notes"><span>Big “at WFS” number per SKU</span><span>Start → In → Sold → Left in four boxes</span><span>Good for scanning on a smaller screen</span></div>
+    <div class="frame" data-v="4"></div>
+  </section>
+
+  <p class="ex">Not-received shipments are drawn from your Send to WFS screenshot (Nov 11 · 120, Nov 10 · 80 and 40, Oct 31 · 40) plus older examples. Pick a number, or mix them (for example “1 for the table, 2's shipments list”).</p>
+</div>
+
+<script>
+// ---- the Nov 1 – Nov 10 report from the screenshot ----
+const REPORT = { from: 'Nov 1', to: 'Nov 10', label: 'Nov 1 – Nov 10, 2026', days: 10 };
+const ROWS = [
+  { name: 'Galaxy Tab A9+ 11" 128GB Gray Wi-Fi', gtin: '00884400936080', start: 75, shipped: 0, recv: 48, cret: 0, sold: 25, lost: 0, found: 0, dmg: 0, removed: 0, rts: 0, moved: 0, end: 98 },
+  { name: 'Galaxy Tab S10 FE+ 128GB 13.1"', gtin: '00356146194333', start: 17, shipped: 0, recv: 0, cret: 0, sold: 3, lost: 0, found: 0, dmg: 0, removed: 0, rts: 0, moved: 0, end: 14 },
+  { name: 'Galaxy Tab S10 Lite 10.9" Widescreen', gtin: '00198957219764', start: 0, shipped: 0, recv: 0, cret: 0, sold: 0, lost: 0, found: 0, dmg: 0, removed: 0, rts: 0, moved: 0, end: 0 },
+  { name: 'Galaxy Tab A11+ 128GB Widescreen', gtin: '00198957270390', start: 0, shipped: 0, recv: 0, cret: 0, sold: 0, lost: 0, found: 0, dmg: 0, removed: 0, rts: 0, moved: 0, end: 0 },
+  { name: 'Galaxy Tab S10 Lite with S-Pen 128GB', gtin: '00731875679328', sku: 'SM-X133-64GB-GREY', start: 68, shipped: 0, recv: 60, cret: 0, sold: 50, lost: 0, found: 1, dmg: 0, removed: 0, rts: 0, moved: 0, end: 79 },
+  { name: 'Galaxy Tab S10 FE 10.9" Widescreen', gtin: '00887276992280', start: 36, shipped: 0, recv: 0, cret: 0, sold: 0, lost: 0, found: 0, dmg: 0, removed: 0, rts: 0, moved: 0, end: 36 },
+  { name: 'Galaxy Tab (no title in the report)', gtin: '00198957270369', start: 0, shipped: 0, recv: 0, cret: 0, sold: 0, lost: 0, found: 0, dmg: 0, removed: 0, rts: 0, moved: 0, end: 0 },
+];
+const PENDING = [
+  { day: 'Nov 11', age: 3, sku: 'SM-X133-64GB-GREY', qty: 120, fc: 'PHL5s · Greencastle, PA', st: 'Awaiting transit' },
+  { day: 'Nov 10', age: 4, sku: 'SM-X133-64GB-GREY', qty: 80, fc: 'PHL5s · Greencastle, PA', st: 'Awaiting transit' },
+  { day: 'Nov 10', age: 4, sku: 'SM-X133-64GB-GREY', qty: 40, fc: 'PHL5s · Greencastle, PA', st: 'Awaiting transit' },
+  { day: 'Oct 31', age: 14, sku: 'SM-X133-64GB-GREY', qty: 40, fc: 'PHL5s · Greencastle, PA', st: 'Awaiting transit' },
+  { day: 'Oct 22', age: 23, sku: 'X210-64GB-GRAY', qty: 48, fc: 'PHL5s · Greencastle, PA', st: 'In transit' },
+  { day: 'Oct 10', age: 35, sku: 'X520-128GB-GRAY', qty: 20, fc: 'DFW5s · Lancaster, TX', st: 'Delivered, not received' },
+];
+const MORE_PENDING = 35; // 41 not received in all
+const RECEIVED = [
+  { day: 'Oct 20', got: 'Oct 27', took: 7, sku: 'SM-X133-64GB-GREY', qty: 60, recv: 60 },
+  { day: 'Oct 14', got: 'Oct 23', took: 9, sku: 'X826-128GB-GRAY', qty: 24, recv: 24 },
+  { day: 'Oct 6', got: 'Oct 17', took: 11, sku: 'X210-64GB-GRAY', qty: 40, recv: 38 },
+];
+
+// ---- derived numbers: every out-flow positive here, written with a minus ----
+const inOf = r => r.recv + r.cret;
+const otherOut = r => r.lost + r.dmg + r.removed + r.rts;
+const adjOf = r => r.found + r.moved;
+const empty = r => [r.start, r.recv, r.cret, r.sold, r.lost, r.found, r.dmg, r.removed, r.rts, r.moved, r.end, r.shipped].every(n => !n);
+function check(r) {
+  const calc = r.start + inOf(r) - r.sold - otherOut(r) + adjOf(r);
+  if (calc !== r.end) return { t: 'r', s: `Off by ${Math.abs(calc - r.end)}` };
+  if (r.lost + r.dmg - r.found > 0) return { t: 'r', s: `${r.lost + r.dmg} lost or damaged` };
+  if (r.recv !== r.shipped) return { t: 'a', s: r.shipped ? `Shipped ${r.shipped}, got ${r.recv}` : `${r.recv} in, no shipment logged` };
+  if (!r.sold && r.end) return { t: '', s: `No sales in ${REPORT.days} days` };
+  return { t: 'g', s: 'Adds up' };
+}
+const sum = k => ROWS.reduce((t, r) => t + (typeof k === 'function' ? k(r) : r[k]), 0);
+const live = ROWS.filter(r => !empty(r));
+const quiet = ROWS.filter(empty);
+// problems first, then most units at WFS
+const rank = r => ({ r: 0, a: 1, '': 2, g: 3 })[check(r).t];
+const ordered = live.slice().sort((a, b) => rank(a) - rank(b) || b.end - a.end);
+const n = v => v.toLocaleString('en-US');
+const cell = (v, sign = '', cls = '') => v ? `<td class="n ${cls}">${sign}${n(v)}</td>` : '<td class="n z">–</td>';
+const itemCell = r => `<td class="item"><b title="${r.name}">${r.name}</b><span>${r.sku || r.gtin}</span></td>`;
+const stCell = r => { const c = check(r); return `<span class="st ${c.t}"><span class="dot ${c.t}"></span>${c.s}</span>`; };
+const quietLine = () => `${quiet.length} SKUs with 0 units all period · <button class="link" type="button" data-showquiet>Show</button>`;
+const IMPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 19h14"/></svg>';
+const late = PENDING.filter(s => s.age >= 20).length + 9;
+
+// ---- By SKU, four ways ----
+function sku1(showQuiet) {
+  const rows = showQuiet ? [...ordered, ...quiet] : ordered;
+  // columns Walmart left at zero for the whole report are hidden
+  const optional = [['cret', 'Cust. returns', '+'], ['lost', 'Lost', '−'], ['found', 'Found', '+'], ['dmg', 'Damaged', '−'], ['removed', 'Removed', '−'], ['rts', 'Returned to you', '−'], ['moved', 'Moved', '']].filter(([k]) => sum(k));
+  const hidden = 7 - optional.length;
+  return `<div class="scroll-x"><table>
+    <thead>
+      <tr class="grp"><th></th><th class="lab vline">Nov 1</th><th class="lab in vline" colspan="2">Came in</th><th class="lab out vline" colspan="${1 + optional.filter(o => o[2] !== '+').length}">Went out</th>${optional.some(o => o[2] === '+') ? `<th class="lab in vline" colspan="${optional.filter(o => o[2] === '+').length}">Found</th>` : ''}<th class="lab left vline">Nov 10</th><th></th></tr>
+      <tr><th>Item</th><th class="r vline">On hand</th><th class="r vline">Shipped</th><th class="r">Received</th><th class="r vline">Sold</th>${optional.filter(o => o[2] !== '+').map(o => `<th class="r">${o[1]}</th>`).join('')}${optional.filter(o => o[2] === '+').map(o => `<th class="r vline">${o[1]}</th>`).join('')}<th class="r vline endh">At WFS</th><th>Check</th></tr>
+    </thead>
+    <tbody>${rows.map(r => `<tr>${itemCell(r)}${cell(r.start)}${cell(r.shipped)}${cell(r.recv, '+', 'pos')}${cell(r.sold, '−')}${optional.filter(o => o[2] !== '+').map(o => cell(r[o[0]], '−')).join('')}${optional.filter(o => o[2] === '+').map(o => cell(r[o[0]], '+', 'pos')).join('')}<td class="n end">${n(r.end)}</td><td>${stCell(r)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total · ${live.length} SKUs</td><td class="n">${sum('start')}</td><td class="n">${sum('shipped') || '–'}</td><td class="n pos">+${sum('recv')}</td><td class="n">−${sum('sold')}</td>${optional.filter(o => o[2] !== '+').map(o => `<td class="n">${sum(o[0]) ? '−' + sum(o[0]) : '–'}</td>`).join('')}${optional.filter(o => o[2] === '+').map(o => `<td class="n pos">+${sum(o[0])}</td>`).join('')}<td class="n end">${sum('end')}</td><td></td></tr></tfoot>
+  </table></div>
+  <div class="foot"><span>${showQuiet ? `${quiet.length} empty SKUs shown · <button class="link" type="button" data-showquiet>Hide</button>` : quietLine()}</span><span>${hidden} columns with no units this period are hidden · <button class="link" type="button">Show all</button></span></div>`;
+}
+function sku2(showQuiet, open) {
+  const rows = showQuiet ? [...ordered, ...quiet] : ordered;
+  const all = [['On hand Nov 1', 'start'], ['Shipped (your log)', 'shipped'], ['Received', 'recv'], ['Customer returns', 'cret'], ['Sold', 'sold'], ['Lost', 'lost'], ['Found', 'found'], ['Damaged', 'dmg'], ['Removed', 'removed'], ['Returned to you', 'rts'], ['Moved', 'moved'], ['At WFS Nov 10', 'end']];
+  return `<div class="scroll-x"><table>
+    <thead><tr><th>Item</th><th class="r">Start</th><th class="r">In</th><th class="r">Sold</th><th class="r">Other out</th><th class="r">Adjust</th><th class="r endh">At WFS</th><th>Check</th><th></th></tr></thead>
+    <tbody>${rows.map((r, i) => `<tr>${itemCell(r)}${cell(r.start)}${cell(inOf(r), '+', 'pos')}${cell(r.sold, '−')}${cell(otherOut(r), '−')}${cell(adjOf(r), '+', 'pos')}<td class="n end">${n(r.end)}</td><td>${stCell(r)}</td><td class="r"><button class="chev" type="button" data-open="${i}" aria-expanded="${open === i}" aria-label="Every column">${open === i ? '▾' : '▸'}</button></td></tr>
+      ${open === i ? `<tr class="det"><td colspan="9"><div class="dl">${all.map(([l, k]) => `<span>${l}<b class="${r[k] ? '' : 'zz'}">${r[k] || '–'}</b></span>`).join('')}<span>GTIN<b>${r.gtin}</b></span></div></td></tr>` : ''}`).join('')}</tbody>
+    <tfoot><tr><td>Total · ${live.length} SKUs</td><td class="n">${sum('start')}</td><td class="n pos">+${sum(inOf)}</td><td class="n">−${sum('sold')}</td><td class="n">${sum(otherOut) ? '−' + sum(otherOut) : '–'}</td><td class="n pos">+${sum(adjOf)}</td><td class="n end">${sum('end')}</td><td></td><td></td></tr></tfoot>
+  </table></div>
+  <div class="foot"><span>${showQuiet ? `<button class="link" type="button" data-showquiet>Hide empty SKUs</button>` : quietLine()}</span><span>In = received + customer returns · Other out = lost + damaged + removed + returned · Adjust = found + moved</span></div>`;
+}
+function eqOf(r) {
+  const parts = [`${r.start}`];
+  if (inOf(r)) parts.push(`<i>+</i><span class="p">${inOf(r)}</span><small>in</small>`);
+  if (r.sold) parts.push(`<i>−</i>${r.sold}<small>sold</small>`);
+  if (otherOut(r)) parts.push(`<i>−</i>${otherOut(r)}<small>lost/out</small>`);
+  if (adjOf(r)) parts.push(`<i>+</i><span class="p">${adjOf(r)}</span><small>found</small>`);
+  return `<span class="eq">${parts.join('')}<i>=</i><span class="e">${r.end}</span></span>`;
+}
+function mixOf(r) {
+  const kept = Math.max(0, r.start - r.sold), total = kept + inOf(r) + adjOf(r) + r.sold || 1;
+  const pc = v => `${(v / total * 100).toFixed(1)}%`;
+  return `<div class="mix" title="${kept} older stock · ${inOf(r) + adjOf(r)} new · ${r.sold} sold"><i class="k1" style="width:${pc(kept)}"></i><i class="k2" style="width:${pc(inOf(r) + adjOf(r))}"></i><i class="k3" style="width:${pc(r.sold)}"></i></div>`;
+}
+function strip() {
+  return `<div class="card strip">
+    <div><span class="k">On hand ${REPORT.from}</span><span class="big">${sum('start')}</span><span class="d">${live.length} SKUs with units</span></div>
+    <div><span class="k">Came in</span><span class="big pos">+${sum(inOf)}</span><span class="d">${sum('shipped')} logged as shipped</span></div>
+    <div><span class="k">Sold</span><span class="big">−${sum('sold')}</span><span class="d">${(sum('sold') / REPORT.days).toFixed(1)} a day</span></div>
+    <div><span class="k">Lost / found</span><span class="big pos">+${sum(adjOf) - sum(otherOut)}</span><span class="d">${sum('found')} found · ${sum('lost')} lost</span></div>
+    <div><span class="k">At WFS ${REPORT.to}</span><span class="big end">${sum('end')}</span><span class="d">${sum('start')} + ${sum(inOf)} − ${sum('sold')} + ${sum(adjOf)} = ${sum('end')}</span></div>
+  </div>`;
+}
+function sku3(showQuiet) {
+  const rows = showQuiet ? [...ordered, ...quiet] : ordered;
+  return `${strip()}<div class="card"><div class="scroll-x"><table>
+    <thead><tr><th>Item</th><th>${REPORT.from} → ${REPORT.to}</th><th>What's at WFS</th><th>Check</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>${itemCell(r)}<td>${eqOf(r)}</td><td>${mixOf(r)}</td><td>${stCell(r)}</td></tr>`).join('')}</tbody>
+  </table></div>
+  <div class="foot"><span>${showQuiet ? `<button class="link" type="button" data-showquiet>Hide empty SKUs</button>` : quietLine()}</span><span class="legend"><span><i style="background:var(--accent);opacity:.5"></i>older stock</span><span><i style="background:var(--green)"></i>came in</span><span><i style="background:var(--ghost)"></i>sold</span></span></div></div>`;
+}
+function sku4(showQuiet) {
+  const card = r => { const c = check(r); return `<div class="card sk ${empty(r) ? 'quiet' : ''}">
+    <div class="sk-top"><div><div class="sk-name">${r.name}</div><div class="sk-id">${r.sku || r.gtin}</div></div><div class="sk-end"><div class="big">${r.end}</div><div class="k">at WFS</div></div></div>
+    <div class="steps"><div><span class="k">Start</span><span class="n ${r.start ? '' : 'z'}">${r.start || '–'}</span></div><div><span class="k">In</span><span class="n ${inOf(r) + adjOf(r) ? 'p' : 'z'}">${inOf(r) + adjOf(r) ? '+' + (inOf(r) + adjOf(r)) : '–'}</span></div><div><span class="k">Sold</span><span class="n ${r.sold ? '' : 'z'}">${r.sold ? '−' + r.sold : '–'}</span></div><div><span class="k">Out</span><span class="n ${otherOut(r) ? '' : 'z'}">${otherOut(r) ? '−' + otherOut(r) : '–'}</span></div></div>
+    <span class="st ${c.t}"><span class="dot ${c.t}"></span>${empty(r) ? 'No units this period' : c.s}</span></div>`; };
+  return `<div class="grid">${ordered.map(card).join('')}${showQuiet ? quiet.map(card).join('') : ''}</div>
+    <div class="empties">${showQuiet ? `<button class="link" type="button" data-showquiet>Hide empty SKUs</button>` : quietLine()} · Total ${sum('end')} units at WFS on ${REPORT.to}</div>`;
+}
+
+// ---- shipments, table style (1) and list styles (2–4) ----
+const ageCls = d => (d >= 30 ? 'r' : d >= 20 ? 'a' : '');
+function shipTable(recv) {
+  if (recv) return `<div class="scroll-x"><table><thead><tr><th>Shipped</th><th>Received</th><th class="r">Took</th><th>Item</th><th class="r">Sent</th><th class="r">Got</th><th></th></tr></thead><tbody>${RECEIVED.map(s => `<tr><td>${s.day}</td><td>${s.got}</td><td class="n">${s.took} days</td><td class="mono">${s.sku}</td><td class="n">${s.qty}</td><td class="n ${s.recv < s.qty ? '' : ''}">${s.recv}${s.recv < s.qty ? ` <span class="st a">· ${s.qty - s.recv} short</span>` : ''}</td><td class="r"><button class="link" type="button">Undo</button></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="scroll-x"><table><thead><tr><th>Shipped</th><th>Waiting</th><th>Item</th><th class="r">Units</th><th>Going to</th><th>Walmart says</th><th></th></tr></thead><tbody>${PENDING.slice().reverse().map(s => `<tr><td>${s.day}</td><td><span class="age ${ageCls(s.age)}">${s.age} days</span></td><td class="mono">${s.sku}</td><td class="n">${s.qty}</td><td class="muted">${s.fc}</td><td class="muted">${s.st}</td><td class="r"><button class="btn navy" type="button">Mark received</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="foot"><span>+ ${MORE_PENDING} more · oldest first</span><span>Amber at 20 days · red at 30</span></div>`;
+}
+function shipList(recv) {
+  if (recv) return `<ul class="shiplist">${RECEIVED.map(s => `<li><span class="age">${s.took} days</span><span class="what"><b>${s.sku} × ${s.qty}</b><span>Shipped ${s.day} · received ${s.got}${s.recv < s.qty ? ` · <span class="st a">${s.qty - s.recv} short</span>` : ''}</span></span><span></span><button class="link" type="button">Undo</button></li>`).join('')}</ul>`;
+  const groups = [['Over 30 days', s => s.age >= 30], ['20 – 30 days', s => s.age >= 20 && s.age < 30], ['Under 20 days', s => s.age < 20]];
+  return groups.map(([label, f]) => { const list = PENDING.filter(f).sort((a, b) => b.age - a.age); return list.length ? `<div class="groupline">${label} · ${list.length}</div><ul class="shiplist">${list.map(s => `<li><span class="age ${ageCls(s.age)}">${s.age} days</span><span class="what"><b>${s.sku} × ${s.qty}</b><span>${s.day} · ${s.fc} · ${s.st}</span></span><button class="btn" type="button">${s.age >= 30 ? 'Open case' : 'Track'}</button><button class="btn navy" type="button">Received</button></li>`).join('')}</ul>` : ''; }).join('')
+    + `<div class="foot"><span>+ ${MORE_PENDING} more under 20 days</span><span></span></div>`;
+}
+
+// ---- frames ----
+const TABS = [['sku', 'By SKU', ''], ['pending', 'Not received', `<span class="cnt red">41</span>`], ['recv', 'Received', `<span class="cnt">${RECEIVED.length}</span>`]];
+const state = { 1: { tab: 'sku', quiet: false }, 2: { tab: 'sku', quiet: false, open: 0 }, 3: { tab: 'sku', quiet: false }, 4: { tab: 'sku', quiet: false } };
+function draw(v) {
+  const s = state[v];
+  const el = document.querySelector(`.frame[data-v="${v}"]`);
+  const title = s.tab === 'sku' ? 'WFS units by SKU' : s.tab === 'pending' ? 'Shipments not received yet' : 'Shipments received';
+  const tabsU = `<nav class="utabs">${TABS.map(([k, l, c]) => `<button type="button" class="${s.tab === k ? 'on' : ''}" data-tab="${k}">${l} ${c}</button>`).join('')}</nav>`;
+  const tabsS = `<nav class="seg">${TABS.map(([k, l, c]) => `<button type="button" class="${s.tab === k ? 'on' : ''}" data-tab="${k}">${l} ${c}</button>`).join('')}</nav>`;
+  const dateCtl = s.tab === 'sku' ? `<button class="pill" type="button">${REPORT.label} ▾</button><button class="icon-btn" type="button" aria-label="Import report" title="Import a report">${IMPORT}</button>` : '';
+  let body;
+  if (s.tab === 'sku') body = v === 1 ? sku1(s.quiet) : v === 2 ? sku2(s.quiet, s.open) : v === 3 ? sku3(s.quiet) : sku4(s.quiet);
+  else body = v === 1 ? shipTable(s.tab === 'recv') : shipList(s.tab === 'recv');
+  if (v === 1) {
+    // today's layout: the tabs sit on the table card
+    el.innerHTML = `<div class="bar"><span class="h">${title}</span><div class="right">${dateCtl}</div></div><div class="card">${tabsU}${body}</div>`;
+  } else if (v === 2) {
+    el.innerHTML = `<div class="bar">${tabsS}<div class="right">${dateCtl}</div></div><div class="card">${body}</div>`;
+  } else if (v === 3) {
+    el.innerHTML = `<div class="bar">${tabsS}<div class="right">${dateCtl}</div></div>${s.tab === 'sku' ? body : `<div class="card">${body}</div>`}`;
+  } else {
+    el.innerHTML = `<div class="bar"><span class="h">${title}</span>${tabsS}<div class="right">${dateCtl}</div></div>${s.tab === 'sku' ? body : `<div class="card">${body}</div>`}`;
+  }
+}
+document.querySelectorAll('.frame').forEach(el => {
+  const v = Number(el.dataset.v);
+  el.addEventListener('click', e => {
+    const t = e.target.closest('[data-tab]'); const q = e.target.closest('[data-showquiet]'); const o = e.target.closest('[data-open]');
+    if (t) state[v].tab = t.dataset.tab;
+    else if (q) state[v].quiet = !state[v].quiet;
+    else if (o) state[v].open = state[v].open === Number(o.dataset.open) ? -1 : Number(o.dataset.open);
+    else return;
+    draw(v);
+  });
+  draw(v);
+});
+</script>

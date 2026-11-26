@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · Pricing — mockup</title>
+<!--
+  Owner 2026-10-22: "I want this under the Walmart tab, can we talk about
+  the pricing thing? Incentives, seeing and setting repricers" -> "show me
+  the mockup first". A third Walmart sub-tab next to List | Uploads:
+    1. one row per Walmart listing: your price, Buy Box (winning / losing,
+       the winning price), Walmart's suggested price, the repricer strategy
+       with its min / max, incentive programs. Filter chips for what needs a
+       look. Buy Box data comes from Walmart at 2 calls a minute, so it is
+       refreshed in the background and shows its age.
+    2. a side drawer per item: price / sale price, repricer + min / max,
+       incentives join / leave.
+    3. repricer strategies: Walmart's own repricer, managed here.
+    4. changes queue up and go in one bulk price feed after a review.
+  Open questions shown as such: whether Linnworks pushes prices to Walmart
+  (it would undo changes made here), and where min / max come from.
+  Built on the real styles.css. Mockup only — nothing here is wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 1280px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 1000px; line-height: 1.5; }
+  .win.tall { height: 1080px; }
+  .pz-hint a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .win { width: 1280px; margin: 8px auto 26px; background: var(--canvas); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); position: relative; }
+  .win .topbar { padding: 14px 24px 6px; }
+  .win .wlp { padding: 8px 24px 18px; }
+  .win .wlp-card { max-width: none; }
+
+  /* summary tiles */
+  .pz-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; padding: 2px 20px 12px; }
+  .pz-tile { border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; background: var(--surface); }
+  .pz-tile .k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+  .pz-tile .v { font-size: 22px; font-weight: 700; color: var(--text); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .pz-tile .v small { font-size: 12px; color: var(--muted); font-weight: 500; margin-left: 4px; }
+  .pz-tile.is-bad .v { color: var(--badge-red-text); }
+  .pz-tile.is-warn .v { color: var(--badge-yellow-text); }
+  .pz-tile.is-good .v { color: var(--badge-green-text); }
+
+  .pz-bar { display: flex; align-items: center; gap: 8px; padding: 0 20px 10px; }
+  .pz-bar .chip-filter.is-active { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .pz-bar .n { font-weight: 700; margin-left: 4px; }
+  .pz-search { margin-left: auto; width: 260px; }
+  .pz-age { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .pz-age button { font: inherit; font-weight: 600; color: var(--accent); background: none; border: none; cursor: pointer; padding: 0; }
+
+  /* table */
+  .pz-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .pz-table th { text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  .pz-table td { padding: 9px 10px; border-bottom: 1px solid var(--border-soft, #EEEDE9); vertical-align: middle; }
+  .pz-table tr:hover td { background: #FAFAF8; }
+  .pz-table tr.is-sel td { background: #F3F6FB; }
+  .pz-table tr.is-sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .pz-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pz-item { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .pz-ph { width: 34px; height: 34px; border-radius: 8px; background: #F1F0EC; flex: none; display: grid; place-items: center; color: var(--faint); font-size: 9px; }
+  .pz-item b { display: inline; font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .pz-item .tl { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+  .pz-cond { font-family: var(--font); font-size: 10px; font-weight: 600; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; }
+  .pz-cond.new { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .pz-cond.ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .pz-cond.used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .pz-price { font-weight: 700; font-size: 13px; }
+  .pz-price s { color: var(--faint); font-weight: 500; font-size: 11px; margin-right: 4px; }
+  .pz-price .new { color: var(--accent); }
+  .pz-pend { display: block; font-size: 10px; color: var(--accent); font-weight: 600; }
+  .bb { display: inline-flex; align-items: center; gap: 6px; }
+  .bb-pill { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  .bb-pill.is-win { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .bb-pill.lose { background: var(--badge-red-bg); color: var(--badge-red-text); }
+  .bb-pill.none { background: #F1F0EC; color: var(--muted); }
+  .bb-sub { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+  .bb-sub b { color: var(--text); }
+  .sug { font-variant-numeric: tabular-nums; }
+  .sug .flag { display: block; font-size: 10px; font-weight: 600; color: var(--badge-yellow-text); }
+  .rp b { display: block; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .rp span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rp .rule { font-size: 9.5px; font-weight: 700; color: var(--badge-purple-text); background: var(--badge-purple-bg); border-radius: 4px; padding: 0 5px; margin-left: 4px; }
+  .rp.is-none b { color: var(--faint); font-weight: 500; }
+  .inc { display: flex; flex-wrap: wrap; gap: 4px; }
+  .inc i { font-style: normal; font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .inc i.on { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .inc i.can { border: 1px dashed var(--badge-blue-text); color: var(--badge-blue-text); }
+  .inc .dim { font-size: 11px; color: var(--faint); }
+  .pz-go { color: var(--faint); font-size: 14px; text-align: center; width: 24px; }
+
+  .pz-foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2); }
+  .pz-foot .t { font-size: 12.5px; }
+  .pz-foot .t b { font-weight: 700; }
+  .pz-foot .sp { margin-left: auto; display: flex; gap: 8px; }
+
+  /* drawer */
+  .pz-scrim { position: absolute; inset: 0; background: rgba(30,35,40,.18); }
+  .pz-dr { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: var(--canvas); box-shadow: -12px 0 30px rgba(47,52,55,.16); display: flex; flex-direction: column; }
+  .pz-dr-h { padding: 16px 18px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .pz-dr-h .sku { font-family: var(--mono); font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .pz-dr-h .sku .x { margin-left: auto; color: var(--faint); font-weight: 400; font-family: var(--font); }
+  .pz-dr-h .t { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .pz-dr-h .t a { display: block; color: var(--accent); text-decoration: none; font-weight: 600; margin-top: 2px; }
+  .pz-dr-b { padding: 14px 14px; display: flex; flex-direction: column; gap: 12px; overflow: auto; flex: 1; }
+  .pz-cmp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .pz-cmp div { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+  .pz-cmp small { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .pz-cmp b { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .pz-cmp .bad b { color: var(--badge-red-text); }
+  .pz-cmp em { display: block; font-style: normal; font-size: 10.5px; color: var(--muted); }
+  .pz-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .pz-f span { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .pz-f .input { width: 100%; }
+  .pz-f .input.is-chg { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pz-hint { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+  .pz-hint b { color: var(--text); }
+  .pz-quick { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .pz-quick button { font: inherit; font-size: 11px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 10px; cursor: pointer; color: var(--text); }
+  .pz-quick button.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .pz-tog { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border-soft, #EEEDE9); }
+  .pz-tog:first-of-type { border-top: none; padding-top: 2px; }
+  .pz-tog .l { flex: 1; min-width: 0; }
+  .pz-tog .l b { display: block; font-size: 12.5px; font-weight: 600; }
+  .pz-tog .l span { display: block; font-size: 11px; color: var(--muted); }
+  .sw { width: 34px; height: 20px; border-radius: 999px; background: #D6D5D0; position: relative; flex: none; }
+  .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .sw.on { background: var(--accent); }
+  .sw.on::after { left: 16px; }
+  .pz-q { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-radius: 10px; padding: 9px 12px; font-size: 11.5px; line-height: 1.45; }
+  .pz-q b { font-weight: 700; }
+  .pz-dr-f { padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface); display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* strategies + review */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 4px 20px 18px; }
+  .pz-card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  .pz-card-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .pz-card-h b { font-size: 13px; }
+  .pz-card-h .btn { margin-left: auto; }
+  .st { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 14px; align-items: center; padding: 11px 14px; border-top: 1px solid var(--border-soft, #EEEDE9); }
+  .st:first-of-type { border-top: none; }
+  .st b { font-size: 12.5px; }
+  .st .d { grid-column: 1; font-size: 11px; color: var(--muted); }
+  .st .c { grid-row: 1 / 3; grid-column: 2; font-size: 11.5px; color: var(--muted); text-align: right; }
+  .st .c b { display: block; font-size: 15px; color: var(--text); }
+  .st .e { grid-row: 1 / 3; grid-column: 3; }
+  .st.is-off b { color: var(--muted); }
+  .rv { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; padding: 9px 14px; border-top: 1px solid var(--border-soft, #EEEDE9); font-size: 12px; }
+  .rv:first-of-type { border-top: none; }
+  .rv .s { font-family: var(--mono); font-weight: 600; }
+  .rv .w { color: var(--muted); }
+  .rv .o { color: var(--faint); text-decoration: line-through; font-variant-numeric: tabular-nums; }
+  .rv .n { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .rv-f { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 12px 12px; font-size: 11.5px; color: var(--muted); }
+  .rv-f .btn { margin-left: auto; }
+</style></head>
+<body>
+
+<!-- ======================= 1. the Pricing tab ======================= -->
+<div class="note">
+  <h2>1 · Walmart → Pricing: every listing at a glance</h2>
+  <p>A third tab beside List and Uploads. One row per Walmart listing: your price, whether you hold the Buy Box (and the winning price when you don't), Walmart's suggested price, the repricer strategy with its min / max, and incentive programs. The tiles and chips filter to what needs a look. Buy Box data is fetched in the background (Walmart allows 2 calls a minute) and shows its age. Edits don't go out one by one; they collect in the bar at the bottom.</p>
+</div>
+<div class="win">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs"><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab is-active">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Ship</button></nav>
+  </header>
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab is-on">Pricing</button></div>
+      <span class="wl-acct"><span class="pz-age">Buy Box data updated 14 min ago · <button>Refresh</button></span></span>
+    </div>
+    <div class="pz-tiles">
+      <div class="pz-tile is-good"><div class="k">Winning Buy Box</div><div class="v">38<small>of 52</small></div></div>
+      <div class="pz-tile is-bad"><div class="k">Losing Buy Box</div><div class="v">9</div></div>
+      <div class="pz-tile is-warn"><div class="k">Priced uncompetitive</div><div class="v">3</div></div>
+      <div class="pz-tile"><div class="k">In a repricer</div><div class="v">31<small>of 52</small></div></div>
+      <div class="pz-tile"><div class="k">Incentives open to you</div><div class="v">6</div></div>
+    </div>
+    <div class="pz-bar">
+      <button class="chip-filter">All<span class="n">52</span></button>
+      <button class="chip-filter is-active">Losing Buy Box<span class="n">9</span></button>
+      <button class="chip-filter">Uncompetitive<span class="n">3</span></button>
+      <button class="chip-filter">No repricer<span class="n">21</span></button>
+      <button class="chip-filter">Incentive available<span class="n">6</span></button>
+      <input class="input pz-search" placeholder="Filter by SKU or title…" />
+    </div>
+    <table class="pz-table">
+      <thead><tr><th>Item</th><th class="num">Your price</th><th>Buy Box</th><th class="num">Walmart suggests</th><th>Repricer</th><th>Incentives</th><th></th></tr></thead>
+      <tbody>
+        <tr class="is-sel">
+          <td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>S25-128GB-NAVY</b><span class="pz-cond new">New</span><span class="tl">Samsung Galaxy S25 128GB Unlocked, Navy</span></div></div></td>
+          <td class="num"><span class="pz-price"><s>$699.00</s><span class="new">$679.00</span></span><span class="pz-pend">pending</span></td>
+          <td><span class="bb"><span class="bb-pill lose">Losing</span></span><span class="bb-sub">Winner <b>$684.99</b> · ships free</span></td>
+          <td class="num sug">$682.00</td>
+          <td class="rp"><b>Beat Buy Box by $1</b><span>$640 – $720</span><span class="rule">rule</span></td>
+          <td><div class="inc"><i class="can">Reduced fee</i></div></td>
+          <td class="pz-go">›</td>
+        </tr>
+        <tr>
+          <td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>X110-64GB-GRAY</b><span class="pz-cond new">New</span><span class="tl">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi, Graphite</span></div></div></td>
+          <td class="num"><span class="pz-price">$124.99</span></td>
+          <td><span class="bb"><span class="bb-pill lose">Losing</span></span><span class="bb-sub">Winner <b>$119.00</b> · Walmart</span></td>
+          <td class="num sug">$118.50<span class="flag">uncompetitive</span></td>
+          <td class="rp is-none"><b>None</b></td>
+          <td><div class="inc"><i class="on">Walmart-funded −5%</i></div></td>
+          <td class="pz-go">›</td>
+        </tr>
+        <tr>
+          <td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>OPEN-BOX-S24-256GB-BLACK</b><span class="pz-cond ob">Open box</span><span class="tl">Samsung Galaxy S24 256GB Unlocked, Onyx Black</span></div></div></td>
+          <td class="num"><span class="pz-price">$529.00</span></td>
+          <td><span class="bb"><span class="bb-pill lose">Losing</span></span><span class="bb-sub">Winner <b>$519.95</b></span></td>
+          <td class="num sug">$521.00</td>
+          <td class="rp"><b>Match Buy Box</b><span>$525 – $600</span><span class="rule">rule</span></td>
+          <td><div class="inc"><span class="dim">—</span></div></td>
+          <td class="pz-go">›</td>
+        </tr>
+        <tr>
+          <td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>A15-128GB-BLACK</b><span class="pz-cond new">New</span><span class="tl">Samsung Galaxy A15 128GB Unlocked, Black</span></div></div></td>
+          <td class="num"><span class="pz-price">$142.00</span></td>
+          <td><span class="bb"><span class="bb-pill lose">Losing</span></span><span class="bb-sub">Winner <b>$139.00</b> · Walmart</span></td>
+          <td class="num sug">$136.00<span class="flag">uncompetitive</span></td>
+          <td class="rp"><b>Beat Buy Box by $1</b><span>$141 – $165</span></td>
+          <td><div class="inc"><i class="can">Reduced fee</i></div></td>
+          <td class="pz-go">›</td>
+        </tr>
+        <tr>
+          <td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>USED-X110-64GB-GRAY</b><span class="pz-cond used">Pre-Owned: Good</span><span class="tl">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi, Graphite</span></div></div></td>
+          <td class="num"><span class="pz-price">$89.00</span></td>
+          <td><span class="bb"><span class="bb-pill lose">Losing</span></span><span class="bb-sub">Winner <b>$84.50</b></span></td>
+          <td class="num sug">$85.00</td>
+          <td class="rp is-none"><b>None</b></td>
+          <td><div class="inc"><span class="dim">—</span></div></td>
+          <td class="pz-go">›</td>
+        </tr>
+        <tr>
+          <td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>S24FE-128GB-MINT</b><span class="pz-cond new">New</span><span class="tl">Samsung Galaxy S24 FE 128GB Unlocked, Mint</span></div></div></td>
+          <td class="num"><span class="pz-price"><s>$409.00</s><span class="new">$399.00</span></span><span class="pz-pend">pending · sale to 11/02</span></td>
+          <td><span class="bb"><span class="bb-pill lose">Losing</span></span><span class="bb-sub">Winner <b>$404.00</b></span></td>
+          <td class="num sug">$403.00</td>
+          <td class="rp"><b>Beat Buy Box by $1</b><span>$380 – $450</span><span class="rule">rule</span></td>
+          <td><div class="inc"><i class="on">Reduced fee</i></div></td>
+          <td class="pz-go">›</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="pz-foot">
+      <span class="t"><b>3 changes</b> waiting · 2 prices, 1 repricer move</span>
+      <span class="sp"><button class="btn btn-ghost">Discard</button><button class="btn btn-primary">Review &amp; send 3 →</button></span>
+    </div>
+  </div></section>
+</div>
+
+<!-- ======================= 2. item drawer ======================= -->
+<div class="note">
+  <h2>2 · Click a row: the item drawer</h2>
+  <p>Opens from the right like the Ship drawer. Price and sale price, the repricer strategy and its min / max, and incentive programs with on / off switches. Quick buttons set the price to the Buy Box or Walmart's suggestion. The yellow boxes are the two questions still open: they decide how this part behaves.</p>
+</div>
+<div class="win tall">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs"><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab is-active">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Ship</button></nav>
+  </header>
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab is-on">Pricing</button></div>
+    </div>
+    <table class="pz-table">
+      <thead><tr><th>Item</th><th class="num">Your price</th><th>Buy Box</th><th class="num">Walmart suggests</th><th>Repricer</th><th>Incentives</th></tr></thead>
+      <tbody>
+        <tr class="is-sel"><td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>S25-128GB-NAVY</b><span class="tl">Samsung Galaxy S25 128GB Unlocked, Navy</span></div></div></td><td class="num"><span class="pz-price">$699.00</span></td><td><span class="bb-pill lose">Losing</span></td><td class="num">$682.00</td><td class="rp"><b>Beat Buy Box by $1</b></td><td></td></tr>
+        <tr><td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>X110-64GB-GRAY</b><span class="tl">Samsung Galaxy Tab A9 8.7" 64GB</span></div></div></td><td class="num"><span class="pz-price">$124.99</span></td><td><span class="bb-pill lose">Losing</span></td><td class="num">$118.50</td><td class="rp is-none"><b>None</b></td><td></td></tr>
+        <tr><td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>OPEN-BOX-S24-256GB-BLACK</b><span class="tl">Samsung Galaxy S24 256GB</span></div></div></td><td class="num"><span class="pz-price">$529.00</span></td><td><span class="bb-pill lose">Losing</span></td><td class="num">$521.00</td><td class="rp"><b>Match Buy Box</b></td><td></td></tr>
+        <tr><td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>A15-128GB-BLACK</b><span class="tl">Samsung Galaxy A15 128GB</span></div></div></td><td class="num"><span class="pz-price">$142.00</span></td><td><span class="bb-pill lose">Losing</span></td><td class="num">$136.00</td><td class="rp"><b>Beat Buy Box by $1</b></td><td></td></tr>
+        <tr><td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>USED-X110-64GB-GRAY</b><span class="tl">Samsung Galaxy Tab A9 8.7" 64GB</span></div></div></td><td class="num"><span class="pz-price">$89.00</span></td><td><span class="bb-pill lose">Losing</span></td><td class="num">$85.00</td><td class="rp is-none"><b>None</b></td><td></td></tr>
+        <tr><td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>S24FE-128GB-MINT</b><span class="tl">Samsung Galaxy S24 FE 128GB</span></div></div></td><td class="num"><span class="pz-price">$409.00</span></td><td><span class="bb-pill lose">Losing</span></td><td class="num">$403.00</td><td class="rp"><b>Beat Buy Box by $1</b></td><td></td></tr>
+        <tr><td><div class="pz-item"><div class="pz-ph">IMG</div><div><b>S23-128GB-CREAM</b><span class="tl">Samsung Galaxy S23 128GB</span></div></div></td><td class="num"><span class="pz-price">$449.00</span></td><td><span class="bb-pill is-win">Winning</span></td><td class="num">$449.00</td><td class="rp"><b>Match Buy Box</b></td><td></td></tr>
+      </tbody>
+    </table>
+  </div></section>
+  <div class="pz-scrim"></div>
+  <aside class="pz-dr">
+    <div class="pz-dr-h">
+      <div class="sku">S25-128GB-NAVY <span class="pz-cond new">New</span><span class="x">✕</span></div>
+      <div class="t">Samsung Galaxy S25 128GB Unlocked, Navy · item 5310492875 <a href="#">View on Walmart ↗</a></div>
+    </div>
+    <div class="pz-dr-b">
+      <section class="osd-bx">
+        <div class="osd-t">Price</div>
+        <div class="pz-cmp">
+          <div><small>You</small><b>$699.00</b><em>since 10/14</em></div>
+          <div class="bad"><small>Buy Box</small><b>$684.99</b><em>another seller</em></div>
+          <div><small>Walmart suggests</small><b>$682.00</b><em>"competitive price"</em></div>
+        </div>
+        <div class="pz-row">
+          <label class="pz-f"><span>New price</span><input class="input mono is-chg" value="679.00" /></label>
+          <label class="pz-f"><span>Sale price (optional)</span><input class="input mono" placeholder="—" /></label>
+        </div>
+        <div class="pz-quick"><button>Match Buy Box $684.99</button><button class="is-on">Beat by $1 → $683.99</button><button>Walmart's $682.00</button></div>
+        <div class="pz-hint">Margin at $679: <b>$96.40</b> after Walmart's 8% fee (cost $528.28 from Linnworks).</div>
+      </section>
+      <section class="osd-bx">
+        <div class="osd-t">Repricer</div>
+        <label class="pz-f"><span>Strategy</span><select class="input"><option>Beat Buy Box by $1</option></select></label>
+        <div class="pz-row">
+          <label class="pz-f"><span>Min (never below)</span><input class="input mono" value="640.00" /></label>
+          <label class="pz-f"><span>Max</span><input class="input mono" value="720.00" /></label>
+        </div>
+        <div class="pz-hint">Walmart's repricer moves the price inside this range on its own. Min from your rule: <b>cost + 8% fee + $50</b>. <a href="#">Change rule</a></div>
+        <div class="pz-q"><b>Open question 2:</b> min / max typed per item, filled by a rule from your Linnworks cost, or the rule with per-item overrides (shown here).</div>
+      </section>
+      <section class="osd-bx">
+        <div class="osd-t">Incentives</div>
+        <div class="pz-tog"><div class="l"><b>Reduced referral fee</b><span>Eligible · 8% → 6% if price ≤ $689.00 until 11/30</span></div><span class="sw"></span></div>
+        <div class="pz-tog"><div class="l"><b>Walmart-funded discount</b><span>Not offered for this item</span></div><span class="sw" style="opacity:.4"></span></div>
+      </section>
+      <div class="pz-q"><b>Open question 1:</b> if Linnworks pushes prices to Walmart, it would undo changes made here on its next sync. Then a price change here also updates the Linnworks price, and items in a repricer have Linnworks' price sync turned off.</div>
+    </div>
+    <div class="pz-dr-f"><button class="btn btn-ghost">Cancel</button><button class="btn btn-primary">Add to changes</button></div>
+  </aside>
+</div>
+
+<!-- ======================= 3 + 4. strategies + review ======================= -->
+<div class="note">
+  <h2>3 · Repricer strategies &nbsp;·&nbsp; 4 · Review &amp; send</h2>
+  <p>Left: Walmart's own repricer strategies, managed here instead of Seller Center: what each does and how many items use it; select several rows in the table to move them at once. Right: what "Review &amp; send" shows before anything reaches Walmart. All price changes go in one bulk upload, then each line reports back like listing uploads do.</p>
+</div>
+<div class="win">
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab is-on">Pricing</button></div>
+    </div>
+    <div class="two">
+      <div class="pz-card">
+        <div class="pz-card-h"><b>Repricer strategies</b><button class="btn btn-secondary">+ New strategy</button></div>
+        <div class="st"><b>Beat Buy Box by $1</b><span class="d">Price $1.00 under the Buy Box, inside each item's min / max</span><span class="c"><b>18</b>items</span><span class="e"><button class="btn btn-ghost">Edit</button></span></div>
+        <div class="st"><b>Match Buy Box</b><span class="d">Same price as the Buy Box, inside min / max</span><span class="c"><b>11</b>items</span><span class="e"><button class="btn btn-ghost">Edit</button></span></div>
+        <div class="st"><b>Open box: beat by 2%</b><span class="d">2% under the Buy Box, inside min / max</span><span class="c"><b>2</b>items</span><span class="e"><button class="btn btn-ghost">Edit</button></span></div>
+        <div class="st is-off"><b>No repricer</b><span class="d">The price stays where you set it</span><span class="c"><b>21</b>items</span><span class="e"></span></div>
+      </div>
+      <div class="pz-card">
+        <div class="pz-card-h"><b>Review 3 changes</b></div>
+        <div class="rv"><span><span class="s">S25-128GB-NAVY</span> <span class="w">price</span></span><span class="o">$699.00</span><span>→</span><span class="n">$679.00</span></div>
+        <div class="rv"><span><span class="s">S24FE-128GB-MINT</span> <span class="w">sale to 11/02</span></span><span class="o">$409.00</span><span>→</span><span class="n">$399.00</span></div>
+        <div class="rv"><span><span class="s">X110-64GB-GRAY</span> <span class="w">repricer</span></span><span class="o">None</span><span>→</span><span class="n">Beat by $1</span></div>
+        <div class="rv-f">Prices also update in Linnworks (if question 1 says so)<button class="btn btn-primary">Send to Walmart</button></div>
+      </div>
+    </div>
+  </div></section>
+</div>
+
+</body>
+</html>

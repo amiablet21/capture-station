@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · Pricing (simple) — mockup</title>
+<!--
+  Owner 2026-10-23: "it still looks complicated ... too many words, not
+  easy to understand". Stripped back: five columns, one or two words each.
+  Buy Box: Yes / No + the price to beat. Repricer: the strategy's short
+  name or a dash. Incentive: the program and a Join button, or Joined.
+  No legends, banners or terms text; details (min / max, terms) go in a
+  click-through later. Built on the real styles.css. Not wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .win { width: 1280px; margin: 26px auto; background: var(--canvas); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); }
+  .win .topbar { padding: 14px 24px 6px; }
+  .win .wlp { padding: 8px 24px 18px; }
+  .win .wlp-card { max-width: none; }
+
+  .ps-bar { display: flex; gap: 8px; align-items: center; padding: 0 20px 14px; }
+  .ps-bar .chip-filter.is-active { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .ps-bar .n { font-weight: 700; margin-left: 5px; }
+  .ps-bar .input { margin-left: auto; width: 240px; }
+
+  .ps { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .ps th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 9px 20px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .ps td { padding: 13px 20px; border-bottom: 1px solid var(--border-soft, #EEEDE9); }
+  .ps .sku { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+  .ps .num { font-variant-numeric: tabular-nums; }
+  .ps .price { width: 100px; text-align: right; }
+  .ps .dash { color: var(--faint); }
+  .yes { color: var(--badge-green-text); font-weight: 700; }
+  .no { color: var(--badge-red-text); font-weight: 700; }
+  .no small { color: var(--muted); font-weight: 500; font-size: 12.5px; margin-left: 6px; }
+  .rp { color: var(--text); }
+  .inc { display: flex; align-items: center; gap: 10px; }
+  .join { font: inherit; font-size: 12px; font-weight: 700; color: #fff; background: var(--accent); border: none; border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+  .joined { font-size: 12px; font-weight: 700; color: var(--badge-green-text); }
+</style></head>
+<body>
+
+<div class="win">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs"><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab is-active">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Ship</button></nav>
+  </header>
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab is-on">Pricing</button></div>
+    </div>
+    <div class="ps-bar">
+      <button class="chip-filter is-active">All<span class="n">52</span></button>
+      <button class="chip-filter">Losing Buy Box<span class="n">9</span></button>
+      <button class="chip-filter">Has incentive<span class="n">6</span></button>
+      <input class="input" placeholder="Search SKU" />
+    </div>
+    <table class="ps">
+      <thead><tr><th>SKU</th><th>Price</th><th>Buy Box</th><th>Repricer</th><th>Incentive</th></tr></thead>
+      <tbody>
+        <tr><td class="sku">S25-128GB-NAVY</td><td><input class="input mono price" value="699.00" /></td><td class="no">No<small>$684.99 wins</small></td><td class="rp">Beat by $1</td><td><div class="inc">Lower fee <button class="join">Join</button></div></td></tr>
+        <tr><td class="sku">S23-128GB-CREAM</td><td><input class="input mono price" value="449.00" /></td><td class="yes">Yes</td><td class="rp">Match</td><td><div class="inc">Lower fee <span class="joined">✓ Joined</span></div></td></tr>
+        <tr><td class="sku">X110-64GB-GRAY</td><td><input class="input mono price" value="124.99" /></td><td class="no">No<small>$119.00 wins</small></td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td class="sku">A15-128GB-BLACK</td><td><input class="input mono price" value="142.00" /></td><td class="yes">Yes</td><td class="dash">—</td><td><div class="inc">Lower fee <button class="join">Join</button></div></td></tr>
+        <tr><td class="sku">OPEN-BOX-S24-256GB-BLACK</td><td><input class="input mono price" value="529.00" /></td><td class="no">No<small>$519.95 wins</small></td><td class="rp">Beat by 2%</td><td class="dash">—</td></tr>
+        <tr><td class="sku">S24FE-128GB-MINT</td><td><input class="input mono price" value="409.00" /></td><td class="yes">Yes</td><td class="rp">Beat by $1</td><td><div class="inc">5% off <button class="join">Join</button></div></td></tr>
+        <tr><td class="sku">USED-X110-64GB-GRAY</td><td><input class="input mono price" value="89.00" /></td><td class="no">No<small>$84.50 wins</small></td><td class="dash">—</td><td class="dash">—</td></tr>
+      </tbody>
+    </table>
+  </div></section>
+</div>
+
+</body>
+</html>

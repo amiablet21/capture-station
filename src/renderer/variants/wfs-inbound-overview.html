@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview with the Recovery-style menu</title>
+<style>
+  @font-face { font-family: 'Geist'; src: url('file:///C:/Users/ndurs/Capture%20Station/src/renderer/fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('file:///C:/Users/ndurs/Capture%20Station/src/renderer/fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #1E3A66; --accent-hover: #152B4E; --accent-soft: #E4EAF4;
+    --pos-bg: #EDF3EC; --pos-text: #346538;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.6; color: var(--text); background: var(--canvas); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px 12px; }
+  .brand { flex: 1; display: flex; align-items: center; gap: 10px; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(30,58,102,.12); box-shadow: 0 1px 2px rgba(47,52,55,.08); background: #1E3A66; color: #fff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .topbar-right { flex: 1; }
+  .tabs { display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; }
+  .tab { font-family: var(--font); font-size: 12.5px; font-weight: 500; color: var(--muted); background: none; border: none; border-radius: 8px; padding: 5px 14px; cursor: pointer; }
+  .tab.is-active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+  .tab-caret { font-size: 9px; margin-left: 2px; color: var(--faint); }
+
+  .ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0 auto; padding: 22px 28px; }
+
+  /* the Recovery-style page head: title, underline menu, action right */
+  .rc-head { display: flex; align-items: flex-end; gap: 22px; border-bottom: 1px solid #EAEAEA; padding-bottom: 10px; margin-bottom: 18px; }
+  .rc-h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; }
+  .rc-subtabs { display: flex; gap: 22px; margin-left: 12px; align-items: flex-end; }
+  .rc-subtab { font-family: inherit; font-size: 12.5px; font-weight: 500; color: #787774; background: none; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; gap: 8px; line-height: 1.55; }
+  .rc-subtab:hover { color: #2F3437; }
+  .rc-subtab.is-active { font-weight: 600; color: #2F3437; padding-bottom: 10px; margin-bottom: -11px; border-bottom: 2px solid #1E3A66; }
+  .rc-subtab-count { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 600; color: #9F2F2D; }
+  .rc-head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; align-self: center; }
+  .ov-updated { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .ov-refresh { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+
+  .ovq-counts { display: flex; align-items: baseline; gap: 44px; margin: 4px 2px 20px; }
+  .ovq-counts > div { display: flex; align-items: baseline; gap: 10px; }
+  .ovq-counts .n { font-size: 38px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+  .ovq-counts .n.r { color: var(--neg-text); } .ovq-counts .n.a { color: var(--badge-yellow-text); }
+  .ovq-counts .n.b { color: var(--badge-blue-text); } .ovq-counts .n.g { color: #346538; }
+  .ovq-counts .l { font-size: 14px; }
+
+  .screen[hidden] { display: none; }
+  .screen { animation: rise 240ms var(--ease); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .ovq-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-width: 0; }
+  .ovq-card-h { display: flex; align-items: center; gap: 18px; padding: 13px 18px; }
+  .ovq-card-h .lbl { font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .ovq-card-h .sub { margin-left: auto; font-size: 11px; color: var(--faint); }
+  .ovq-filter { display: flex; gap: 2px; background: #EFEEEA; border-radius: 9px; padding: 3px; }
+  .ovq-fchip { font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--muted); background: none; border: 0; border-radius: 7px; padding: 3px 12px; cursor: pointer; line-height: 1.5; white-space: nowrap; }
+  .ovq-fchip.is-on { background: var(--surface); color: #1E3A66; font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.1); }
+
+  .ovq-item { border-top: 1px solid var(--border-soft); }
+  .ovq-row { display: grid; grid-template-columns: 52px minmax(0,1fr) minmax(0,1fr) 12px; gap: 16px; align-items: center; padding: 13px 18px; cursor: pointer; }
+  .ovq-row.is-buy { grid-template-columns: 52px minmax(0,1.4fr) minmax(0,1fr) 96px 12px; }
+  .ovq-row:hover, .ovq-row.is-open { background: #FBFBFA; }
+  .ovq-badge { display: inline-block; font-size: 10.5px; font-weight: 500; padding: 2px 7px; border-radius: 4px; }
+  .ovq-badge.out { background: var(--neg-bg); color: var(--neg-text); }
+  .ovq-badge.low { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .ovq-badge.fast { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .ovq-badge.stock { background: #EAF3EA; color: #346538; }
+  .ovq-who { min-width: 0; }
+  .ovq-skuline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ovq-sku { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ovq-hot { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 1px 5px 1px 3px; border-radius: 4px; background: #FCEADF; color: #B4501B; font-size: 10px; font-weight: 500; }
+  .ovq-title { color: var(--muted); font-size: 11.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ovq-l1 { font-size: 13px; min-width: 0; }
+  .ovq-why { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+  .ovq-chev { color: var(--faint); transition: transform 250ms cubic-bezier(.2,.7,.2,1); }
+  .ovq-row.is-open .ovq-chev { transform: rotate(180deg); }
+  .ovq-foot { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--muted); }
+  .ovq-link { border: 0; background: transparent; font-family: var(--font); font-size: 12px; color: var(--accent); cursor: pointer; }
+  .ovq-ign { margin-left: auto; }
+
+  .ovq-buycell { text-align: right; }
+  .ovq-buy { display: inline-block; font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+  .ovq-buy.is-hot { background: var(--neg-bg); color: var(--neg-text); }
+  .ovq-buy.is-warm { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+
+  .ovq-panel { display: grid; grid-template-rows: 1fr; background: #FBFBFA; animation: ovqExpand 280ms cubic-bezier(.2,.7,.2,1) both; }
+  .ovq-panel-clip { overflow: hidden; min-height: 0; }
+  @keyframes ovqExpand { from { grid-template-rows: 0fr; } to { grid-template-rows: 1fr; } }
+  .wfs-panel-in { padding: 6px 18px 16px 86px; animation: rise 320ms cubic-bezier(.2,.7,.2,1) 50ms both; }
+  .wfs-t { display: grid; grid-template-columns: minmax(0,1fr) 70px 80px; gap: 8px; max-width: 560px; }
+  .wfs-t .h { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .wfs-t .h.u { text-align: right; }
+  .wfs-t .c { font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
+  .wfs-t .c.u { text-align: right; font-variant-numeric: tabular-nums; }
+  .wfs-t .c:nth-last-child(-n+3) { border-bottom: none; }
+  .wfs-t .dim { color: var(--faint); }
+
+  /* Sent to WFS — the Walmart Shipping Plans look, in the app's own tokens */
+  .sp-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .sp-search { flex: 0 1 420px; font-family: var(--font); font-size: 12.5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; outline: none; }
+  .sp-search::placeholder { color: var(--faint); }
+  .sp-search:focus { border-color: var(--accent); }
+  .sp-sel { font-family: var(--font); font-size: 12.5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+  .sp-sub { margin-left: auto; font-size: 11px; color: var(--faint); }
+
+  .sp-plan { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px 14px; margin-bottom: 14px; }
+  .sp-head { display: flex; align-items: center; gap: 10px; }
+  .sp-head .pid { font-size: 14px; font-weight: 600; }
+  .sp-head .pid .mono { font-weight: 600; }
+  .sp-view { font-size: 12px; color: var(--accent); text-decoration: underline; cursor: pointer; }
+  .sp-status { margin-left: auto; font-size: 11.5px; font-weight: 500; padding: 3px 10px; border-radius: 5px; border: 1px solid; }
+  .sp-status.transit { color: var(--badge-blue-text); border-color: #BFE2F7; background: #F3FAFF; }
+  .sp-status.receiving { color: #346538; border-color: #CBE2CC; background: #F4FAF4; }
+  .sp-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .sp-meta .dot { color: var(--faint); }
+  .sp-warn { display: flex; align-items: center; gap: 8px; margin-top: 12px; background: #FDF6E3; border: 1px solid #E8D9A8; border-radius: 6px; padding: 8px 12px; font-size: 12px; }
+  .sp-warn a { color: var(--accent); text-decoration: underline; cursor: pointer; }
+  .sp-warn .wi { color: #B4501B; }
+
+  .sp-t { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12.5px; }
+  .sp-t th { background: var(--surface-2); font-size: 11px; font-weight: 600; color: var(--text); text-align: left; padding: 9px 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .sp-t td { padding: 11px 10px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; white-space: nowrap; }
+  .sp-t tr:last-child td { border-bottom: none; }
+  .sp-t .rr { text-align: right; }
+  .sp-t td.mono { font-size: 12px; }
+  .sp-chip { font-size: 11.5px; font-weight: 500; padding: 3px 9px; border-radius: 4px; }
+  .sp-chip.transit { background: #E8F3FC; color: var(--badge-blue-text); }
+  .sp-chip.receiving { background: #EAF3EA; color: #346538; }
+  .sp-track { font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--text); background: var(--surface); border: 1px solid #C9C7C2; border-radius: 999px; padding: 4px 16px; cursor: pointer; }
+  .sp-track:hover { background: var(--surface-2); }
+
+  /* the addition: channel SKUs on the plan */
+  .sp-items { margin-top: 2px; border-top: 1px solid var(--border-soft); padding-top: 10px; }
+  .sp-items .lbl { font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .sp-it { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1.3fr) 90px; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; max-width: 760px; }
+  .sp-it:last-child { border-bottom: none; }
+  .sp-it.h { padding: 8px 0 4px; border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .sp-it .u { text-align: right; font-variant-numeric: tabular-nums; }
+  .sp-it .ch { color: var(--muted); }
+
+  /* sold today as its own screen: summary left, list right */
+  .sold-wrap { display: grid; grid-template-columns: 320px minmax(0, 560px); gap: 16px; align-items: start; }
+  .ovq-sold-top { padding: 14px 18px; }
+  .ovq-sold-top .lbl { font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .ovq-sold-n { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
+  .ovq-sold-n .mono { font-size: 34px; font-weight: 500; line-height: 1; } .ovq-sold-n span:last-child { color: var(--muted); }
+  .ovq-sold-m { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+  .ovq-chip { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 4px; background: var(--pos-bg); color: var(--pos-text); }
+  .ovq-chip.dn { background: var(--neg-bg); color: var(--neg-text); }
+  .ovq-share { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 14px; gap: 2px; }
+  .ovq-share i { display: block; height: 100%; background: currentColor; }
+  .ovq-legend-mk { display: flex; gap: 14px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+  .ovq-legend-mk span { display: flex; align-items: center; gap: 5px; } .ovq-legend-mk i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; } .ovq-legend-mk b { font-weight: 400; color: var(--text); }
+  .cn-walmart { color: #2E86D9; } .cn-ebay { color: #047857; } .cn-temu { color: #C97B12; }
+  .ovq-sold-h, .ovq-sold-row, .ovq-sold-tot { display: grid; grid-template-columns: 26px minmax(0,1fr) 48px; gap: 8px; padding: 5px 18px; }
+  .ovq-sold-h { background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 6px 18px; }
+  .ovq-sold-row { font-size: 12px; }
+  .ovq-sold-row .i { color: var(--faint); font-variant-numeric: tabular-nums; }
+  .ovq-sold-row span[data-sku] { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ovq-sold-row .u, .ovq-sold-tot .u { text-align: right; font-variant-numeric: tabular-nums; }
+  .ovq-sold-tot { border-top: 1px solid var(--border); padding: 8px 18px; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><span class="brand-mark">dws</span></div>
+  <div class="tabs">
+    <button class="tab is-active">Overview</button><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Recovery</button><button class="tab">Ship</button>
+  </div>
+  <div class="topbar-right"></div>
+</div>
+
+<div class="ov-wrap">
+  <!-- the Recovery-style menu, owner request 2026-10-27 -->
+  <div class="rc-head">
+    <h1 class="rc-h1">Overview</h1>
+    <nav class="rc-subtabs">
+      <button class="rc-subtab is-active" data-s="attn">Needs attention <span class="rc-subtab-count">8</span></button>
+      <button class="rc-subtab" data-s="wfs">Sent to WFS <span class="rc-subtab-count">3</span></button>
+      <button class="rc-subtab" data-s="buy">What to buy <span class="rc-subtab-count">10</span></button>
+      <button class="rc-subtab" data-s="sold">Sold today</button>
+    </nav>
+    <div class="rc-head-right"><span class="ov-updated">Updated 2:28 PM</span>
+      <button class="ov-refresh"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Needs attention -->
+  <div class="screen" id="s-attn">
+    <div class="ovq-counts">
+      <div><span class="n mono r">8</span><span class="l">out of stock</span></div>
+      <div><span class="n mono a">0</span><span class="l">running low</span></div>
+      <div><span class="n mono b">22</span><span class="l">selling fast</span></div>
+      <div><span class="n mono g">10</span><span class="l">to buy now</span></div>
+    </div>
+    <div class="ovq-card">
+      <div class="ovq-card-h">
+        <div class="ovq-filter">
+          <button class="ovq-fchip is-on">All</button><button class="ovq-fchip">Out</button><button class="ovq-fchip">Low</button><button class="ovq-fchip">Fast</button><button class="ovq-fchip">Was selling</button>
+        </div>
+        <span class="sub">Lead time 7 days · target 28 days on hand</span></div>
+      <div id="attnRows"></div>
+      <div class="ovq-foot"><button class="ovq-link">9 more under 28 days of cover →</button></div>
+    </div>
+  </div>
+
+  <!-- Sent to WFS — the Walmart Shipping Plans layout, plus the channel SKUs -->
+  <div class="screen" id="s-wfs" hidden>
+    <div class="sp-bar">
+      <input class="sp-search" placeholder="Search by shipment ID or SKU" />
+      <select class="sp-sel"><option>Last 90 days</option></select>
+      <select class="sp-sel"><option>Status</option></select>
+      <span class="sp-sub">3 plans · 48 units on the way · refreshes with the 10-minute sync</span>
+    </div>
+    <div id="wfsPlans"></div>
+  </div>
+
+  <!-- What to buy -->
+  <div class="screen" id="s-buy" hidden>
+    <div class="ovq-card">
+      <div class="ovq-card-h"><span class="lbl">Buy now</span>
+        <span class="sub">1+ a day · under 50 units or 28 days on hand · set in Settings</span></div>
+      <div id="buyRows"></div>
+      <div class="ovq-foot"><button class="ovq-link">Download this list as Excel</button>
+        <span class="ovq-ign">Order quantity = the larger of 50 units and sales per day × 28 days, minus on hand (warehouse + WFS)</span></div>
+    </div>
+  </div>
+
+  <!-- Sold today -->
+  <div class="screen" id="s-sold" hidden>
+    <div class="sold-wrap">
+      <div class="ovq-card">
+        <div class="ovq-sold-top"><div class="lbl">Sold today</div>
+          <div class="ovq-sold-n"><span class="mono">53</span><span>units</span></div>
+          <div class="ovq-sold-m"><span><span class="mono">45</span> orders · <span class="mono">21</span> SKUs</span><span class="ovq-chip dn"><span class="mono">−110</span> vs yesterday</span></div>
+          <div class="ovq-share"><i class="cn-walmart" data-w="98"></i><i class="cn-ebay" data-w="2"></i><i class="cn-temu" data-w="0"></i></div>
+          <div class="ovq-legend-mk"><span><i class="cn-walmart"></i>Walmart <b class="mono">52</b></span><span><i class="cn-ebay"></i>eBay <b class="mono">1</b></span><span><i class="cn-temu"></i>Temu <b class="mono">0</b></span></div>
+        </div>
+      </div>
+      <div class="ovq-card">
+        <div class="ovq-sold-h"><span>#</span><span>SKU</span><span class="u">Units</span></div>
+        <div id="soldRows"></div>
+        <div class="ovq-sold-tot"><span></span><span>Total</span><span class="u mono">53</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CHEV = '<svg class="ovq-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+const FLAME = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 3.5 5 6 5 11a5 5 0 0 1-10 0c0-2.2 1-3.8 2.3-5 .2 1.6 1 2.7 2.2 3.2C11 8.5 11.3 5 12 2z"/></svg>';
+const hot = `<span class="ovq-hot">${FLAME}Hot</span>`;
+
+// the menu switches screens
+document.querySelectorAll('.rc-subtab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.rc-subtab').forEach(x => x.classList.toggle('is-active', x === t));
+  document.querySelectorAll('.screen').forEach(s => { s.hidden = s.id !== `s-${t.dataset.s}`; });
+}));
+
+// Needs attention rows
+const ATTN = [
+  ['out','Out','X230-256GB-GRAY',1,'','Out since Oct 27'],
+  ['out','Out','X230-256GB-GRAY-GLOBAL-CASE-USBC',0,'X230-256GB-GRAY-GLOBAL-CASE-USBC','Out since Oct 24'],
+  ['out','Out','IPAD-11-128GB-PINK-LTE',0,'','Out since Oct 21'],
+  ['out','Out','A15-128GB-BLACK',1,'','Out since Oct 20'],
+  ['out','Out','S25-128GB-SILVER-SHADOW',1,'','Out since Oct 20'],
+  ['out','Out','A15-64GB-BLACK',1,'A15-64GB-BLK','Out since Oct 20'],
+  ['out','Out','X620-128GB-GRAY',1,'','Out since Oct 19'],
+  ['out','Out','T220-32GB-GRAY',1,'','Out since Oct 13'],
+  ['fast','Fast','X133-64GB-GRAY',1,'SM-X133-64GB-GREY','Up 29%'],
+  ['fast','Fast','X210-64GB-GRAY',1,'','Up 57%'],
+  ['fast','Fast','X400-128GB-GRAY',1,'X400-128GB-GRAY','Up 119%'],
+];
+document.getElementById('attnRows').innerHTML = ATTN.map(([k, b, sku, h, t, phrase]) => `
+  <div class="ovq-item"><div class="ovq-row">
+    <div><span class="ovq-badge ${k}">${b}</span></div>
+    <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono">${sku}</span>${h ? hot : ''}</div>${t ? `<div class="ovq-title">${t}</div>` : ''}</div>
+    <div class="ovq-l1">${phrase}</div>
+    ${CHEV}
+  </div></div>`).join('');
+
+// Sent to WFS — the Walmart Shipping Plans layout; live rows come from
+// getInboundShipments, the item SKUs from getInboundShipmentItems
+const PLANS = [
+  { plan: 'HOT-1793127280517', created: 'Oct 27, 2026', from: '324 RINGWOOD AVE, POMPTON LAKES, NJ, 07442-2022',
+    status: ['transit', 'Awaiting transit'], labels: true,
+    ship: { id: '3841479WFB', to: 'PHL5s, Greencastle, US', carrier: 'WFS-FedEx', eta: 'Oct 29, 2026', sent: 16, recv: 0 },
+    items: [['X230-256GB-GRAY', 'X230-256GB-GRAY-WM', 10], ['X133-64GB-GRAY', 'SM-X133-64GB-GREY', 6]] },
+  { plan: 'HOT-1793127111722', created: 'Oct 27, 2026', from: '324 RINGWOOD AVE, POMPTON LAKES, NJ, 07442-2022',
+    status: ['transit', 'Awaiting transit'], labels: true,
+    ship: { id: '3841361WFB', to: 'PHL5s, Greencastle, US', carrier: 'WFS-FedEx', eta: 'Oct 29, 2026', sent: 16, recv: 0 },
+    items: [['X210-64GB-GRAY', 'X210-64GB-GRAY-TAB', 16]] },
+  { plan: 'HOT-1793126974814', created: 'Oct 27, 2026', from: '324 RINGWOOD AVE, POMPTON LAKES, NJ, 07442-2022',
+    status: ['transit', 'Awaiting transit'], labels: true,
+    ship: { id: '3841288WFB', to: 'PHL5s, Greencastle, US', carrier: 'WFS-FedEx', eta: 'Oct 29, 2026', sent: 16, recv: 0 },
+    items: [['X400-128GB-GRAY', 'X400-128GB-GRAY-WM', 9], ['T220-32GB-GRAY', 'SM-T220-32GB-GRY', 7]] },
+];
+document.getElementById('wfsPlans').innerHTML = PLANS.map(p => `
+  <div class="sp-plan">
+    <div class="sp-head"><span class="pid">Plan ID: <span class="mono">${p.plan}</span></span>
+      <span class="sp-view">View plan</span>
+      <span class="sp-status ${p.status[0]}">${p.status[1]}</span></div>
+    <div class="sp-meta"><span>Created: ${p.created}</span><span class="dot">|</span><span>Ship from: ${p.from}</span></div>
+    ${p.labels ? `<div class="sp-warn"><span class="wi">⚠</span>You must download labels and add them to each shipment.<a>Download labels</a></div>` : ''}
+    <table class="sp-t"><thead><tr>
+      <th>Shipment ID</th><th>Ship to</th><th>Carrier</th><th>Estimated delivery</th><th class="rr">Shipped units</th><th class="rr">Received units</th><th>Status</th><th></th>
+    </tr></thead><tbody><tr>
+      <td class="mono">${p.ship.id}</td><td>${p.ship.to}</td><td>${p.ship.carrier}</td><td>${p.ship.eta}</td>
+      <td class="rr mono">${p.ship.sent}</td><td class="rr mono">${p.ship.recv}</td>
+      <td><span class="sp-chip ${p.status[0]}">${p.status[1]}</span></td>
+      <td class="rr"><button class="sp-track">Track</button></td>
+    </tr></tbody></table>
+    <div class="sp-items">
+      <div class="sp-it h"><span>SKU</span><span>Channel SKU</span><span class="u">Units sent</span></div>
+      ${p.items.map(([sku, ch, u]) => `<div class="sp-it"><span class="mono">${sku}</span><span class="mono ch">${ch}</span><span class="u mono">${u}</span></div>`).join('')}
+    </div>
+  </div>`).join('');
+
+// What to buy rows
+const BUY = [
+  ['out','Out','X230-256GB-GRAY','', '2.4/day · 0 on hand', 'Out since Oct 27', 70, 1],
+  ['out','Out','A15-128GB-BLACK','', '1.8/day · 0 on hand', 'Out since Oct 20', 55, 1],
+  ['out','Out','X620-128GB-GRAY','', '1.2/day · 0 on hand', 'Out since Oct 19', 50, 1],
+  ['fast','Fast','X133-64GB-GRAY','SM-X133-64GB-GREY', '3.1/day · 41 on hand', '13 days left', 50, 0],
+  ['fast','Fast','X210-64GB-GRAY','', '2.2/day · 38 on hand', '17 days left', 50, 0],
+  ['fast','Fast','X400-128GB-GRAY','', '1.9/day · 24 on hand', '12 days left', 50, 0],
+];
+document.getElementById('buyRows').innerHTML = BUY.map(([k, b, sku, t, why, phrase, qty, isHot]) => `
+  <div class="ovq-item"><div class="ovq-row is-buy">
+    <div><span class="ovq-badge ${k}">${b}</span></div>
+    <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono">${sku}</span></div>${t ? `<div class="ovq-title">${t}</div>` : ''}</div>
+    <div class="ovq-l1">${phrase}<div class="ovq-why">${why}</div></div>
+    <div class="ovq-buycell"><span class="ovq-buy ${isHot ? 'is-hot' : 'is-warm'}">BUY ${qty}</span></div>
+    ${CHEV}
+  </div></div>`).join('');
+
+// Sold today rows
+const SOLD = [['X230-128GB-SILVER-GLOBAL-…',7],['X133-128GB-GRAY',6],['X133-64GB-GRAY',5],['X230-128GB-GRAY',5],['S26-ULTRA-512GB-BLACK',4],['X400-128GB-GRAY',4],['OPEN-BOX-X133-64GB-GRAY',3],['S26-ULTRA-256GB-VIOLET',3],['X210-64GB-GRAY-CASE-USBC',3],['X236-128GB-GRAY',2],['OPEN-BOX-A23-64GB-BLACK',1],['S26-512GB-BLUE',1],['S26-ULTRA-512GB-VIOLET',1],['X133-128GB-SILVER',1],['X133-64GB-SILVER',1],['X210-64GB-GRAY',1]];
+document.getElementById('soldRows').innerHTML = SOLD.map(([sku, u], i) => `
+  <div class="ovq-sold-row"><span class="i mono">${i + 1}</span><span data-sku>${sku}</span><span class="u mono">${u}</span></div>`).join('');
+document.querySelectorAll('.ovq-share i').forEach(i => { i.style.width = `${i.dataset.w}%`; });
+</script>
+</body>
+</html>

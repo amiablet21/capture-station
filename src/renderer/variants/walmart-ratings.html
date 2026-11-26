@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart search results — rating and reviews</title>
+<!--
+  Owner 2026-10-22: "add the rating and reviews to the search results —
+  show me what it would look like first". Walmart's catalog search already
+  returns customerRating ("4.7") and properties.numReviews for each item,
+  so this costs no extra calls. Two placements on the real result card
+  (Walmart tab → Find on Walmart). Built on the real styles.css.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 980px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; line-height: 1.5; }
+  .frame { width: 980px; margin: 8px auto 26px; background: var(--surface); border: 1px solid #D9D8D3; border-radius: 10px; padding: 16px 20px 10px; box-shadow: 0 10px 30px rgba(47,52,55,.10); }
+  .wl-thumb-none { display: inline-block; }
+
+  /* option A: one gold star + number + count, in the meta line */
+  .rt { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font); color: var(--text); font-weight: 600; }
+  .rt .st { color: #E8A317; font-size: 11.5px; line-height: 1; }
+  .rt .n { color: var(--muted); font-weight: 500; }
+  .rt.is-none { color: var(--faint); font-weight: 500; }
+
+  /* option B: a five-star bar under the title, count beside it */
+  .stars { position: relative; display: inline-block; font-size: 12px; line-height: 1; letter-spacing: 1px; color: #DCDAD4; vertical-align: -1px; }
+  .stars::before { content: '★★★★★'; }
+  .stars i { position: absolute; left: 0; top: 0; overflow: hidden; white-space: nowrap; color: #E8A317; font-style: normal; }
+  .stars i::before { content: '★★★★★'; }
+  .stars i.w92 { width: 92%; } .stars i.w94 { width: 94%; } .stars i.w90 { width: 90%; } .stars i.w0 { width: 0; }
+  .rline { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; color: var(--muted); }
+  .rline b { color: var(--text); font-weight: 600; }
+  .rline .few { font-size: 10px; font-weight: 600; color: var(--badge-yellow-text); background: var(--badge-yellow-bg); border-radius: 999px; padding: 0 7px; line-height: 16px; }
+</style></head>
+<body>
+
+<div class="note">
+  <h2>Option A · compact: in the grey line under the title</h2>
+  <p>One gold star, the average and the review count sit with the brand and item number. No extra height: the cards stay exactly the size they are today.</p>
+</div>
+<div class="frame">
+  <div class="wl-rhead">Walmart's best picks <span>5 results</span></div>
+  <label class="wl-res is-sel"><input type="radio" checked /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite <span class="wl-best">Best match</span></div>
+      <div class="wl-res-m">SAMSUNG · <span class="rt"><span class="st">★</span>4.6 <span class="n">(2,341)</span></span> · item <span class="mono">1735902284</span></div>
+      <div class="wl-chips"><span class="wl-k k-ok">64GB ✓</span><span class="wl-k k-near">Graphite ≈ Gray</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$119.00</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+  <label class="wl-res is-weak"><input type="radio" /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 8.7" 128GB Wi-Fi Android Tablet, Graphite</div>
+      <div class="wl-res-m">SAMSUNG · <span class="rt"><span class="st">★</span>4.7 <span class="n">(1,102)</span></span> · item <span class="mono">1735902291</span></div>
+      <div class="wl-chips"><span class="wl-k k-bad">128GB ≠ your 64GB</span><span class="wl-k k-near">Graphite ≈ Gray</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$149.00</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+  <label class="wl-res is-weak"><input type="radio" /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Silver</div>
+      <div class="wl-res-m">SAMSUNG · <span class="rt"><span class="st">★</span>4.5 <span class="n">(87)</span></span> · item <span class="mono">1735902307</span></div>
+      <div class="wl-chips"><span class="wl-k k-ok">64GB ✓</span><span class="wl-k k-bad">Silver ≠ your Gray</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$121.50</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+  <label class="wl-res"><input type="radio" /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 64GB Wi-Fi Tablet, Gray (2024 bundle)</div>
+      <div class="wl-res-m">SAMSUNG · <span class="rt is-none">No reviews yet</span> · item <span class="mono">5520184477</span></div>
+      <div class="wl-chips"><span class="wl-k k-ok">64GB ✓</span><span class="wl-k k-ok">Gray ✓</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$124.99</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+</div>
+
+<div class="note">
+  <h2>Option B · stars: a line of its own under the title</h2>
+  <p>Five stars filled to the average, the number in bold and the review count spelled out; listings with under 10 reviews get a small “few reviews” tag. Easier to compare at a glance, cards a few pixels taller.</p>
+</div>
+<div class="frame">
+  <div class="wl-rhead">Walmart's best picks <span>5 results</span></div>
+  <label class="wl-res is-sel"><input type="radio" checked /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite <span class="wl-best">Best match</span></div>
+      <div class="rline"><span class="stars"><i class="w92"></i></span><b>4.6</b><span>2,341 reviews</span></div>
+      <div class="wl-res-m">SAMSUNG · item <span class="mono">1735902284</span></div>
+      <div class="wl-chips"><span class="wl-k k-ok">64GB ✓</span><span class="wl-k k-near">Graphite ≈ Gray</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$119.00</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+  <label class="wl-res is-weak"><input type="radio" /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 8.7" 128GB Wi-Fi Android Tablet, Graphite</div>
+      <div class="rline"><span class="stars"><i class="w94"></i></span><b>4.7</b><span>1,102 reviews</span></div>
+      <div class="wl-res-m">SAMSUNG · item <span class="mono">1735902291</span></div>
+      <div class="wl-chips"><span class="wl-k k-bad">128GB ≠ your 64GB</span><span class="wl-k k-near">Graphite ≈ Gray</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$149.00</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+  <label class="wl-res is-weak"><input type="radio" /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Silver</div>
+      <div class="rline"><span class="stars"><i class="w90"></i></span><b>4.5</b><span>87 reviews</span></div>
+      <div class="wl-res-m">SAMSUNG · item <span class="mono">1735902307</span></div>
+      <div class="wl-chips"><span class="wl-k k-ok">64GB ✓</span><span class="wl-k k-bad">Silver ≠ your Gray</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$121.50</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+  <label class="wl-res"><input type="radio" /><span class="wl-thumb wl-thumb-none"></span>
+    <div class="wl-res-b"><div class="wl-res-t">Samsung Galaxy Tab A9 64GB Wi-Fi Tablet, Gray (2024 bundle)</div>
+      <div class="rline"><span class="stars"><i class="w0"></i></span><span>No reviews yet</span><span class="few">few reviews</span></div>
+      <div class="wl-res-m">SAMSUNG · item <span class="mono">5520184477</span></div>
+      <div class="wl-chips"><span class="wl-k k-ok">64GB ✓</span><span class="wl-k k-ok">Gray ✓</span></div></div>
+    <div class="wl-res-side"><span class="wl-res-p"><small>Walmart</small>$124.99</span><a class="wl-link" href="#">View on Walmart ↗</a></div></label>
+</div>
+
+</body>
+</html>

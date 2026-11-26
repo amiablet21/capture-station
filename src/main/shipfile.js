@@ -205,4 +205,4 @@ function applyShipped(db, records) {
   return summary;
 }
 
-module.exports = { extractShipped, applyShipped, recordsFromRows, parseCsv, fileSheets };
+module.exports = { extractShipped, applyShipped, recordsFromRows, parseCsv, fileSheets, readZip };
