@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.149 highlights
+
+- **The Channel SKUs popup says when a listing isn't syncing** (owner: X135-64GB-GRAY-LTE on Walmart showed Listed 0 while the live listing held 100 — Linnworks had Ignore Sync ticked on that mapping and had never pushed to it once). The Listed column now carries an amber **sync off** pill on a row whose mapping has Ignore Sync ticked, so a bare 0 can't hide it again.
+- **WFS listings never wear the pill.** On them "off" is correct — Walmart holds the stock — and the sign-off that dropped the sync column (design B, 2026-10-30) did so because it only read as a false warning there. The popup tells the two apart by Walmart's own fulfillment inventory, from the same cached read the stock counts use (`src/main/wfscount.js`).
+
 ## v1.32.148 highlights
 
 - **Signature required, on any label** (owner: "how does declared value and signature work?"). The Ship drawer on an order and the Ship tab each have a **Signature required** tick box. It starts off on every order. On our own UPS accounts the signature goes to UPS with the rate request, so the price in the list already includes it and the row says *Signature included*. On a Walmart rate the row adds Walmart's own price for that service (*Signature $5.90*) and the price beside it is the total. A service Walmart sells no signature on (UPS Next Day Air Early) dims, says so, and cannot be picked while the box is ticked. A return label never carries one.
